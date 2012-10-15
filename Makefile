@@ -13,12 +13,12 @@ JAR = jar
 JAVASRCS = $(wildcard $(PACKAGES:%=%/*.java))
 CLASSES = $(JAVASRCS:%.java=build/%.class)
 
-all: init $(CLASSES) $(JARNAME)
+all: init $(CLASSES) $(PROJECT).jar
 
 build:
 	mkdir -p build
 
-$(JARNAME): $(CLASSES)
+$(PROJECT).jar: $(CLASSES)
 	$(JAR) cf $(PROJECT).jar -C build . -C lib/EXTRACTED .
 	cp $(PROJECT).jar bin/
 
@@ -29,8 +29,10 @@ init: | build
 
 release: $(PROJECT).tar.gz
 
-$(PROJECT).tar.gz: all
-	tar czf $(PROJECT).tar.gz bin libexec --exclude='*/CVS'
+$(PROJECT).tar.gz: $(PROJECT).jar
+	cp $(PROJECT).jar bin/
+	tar czf $(PROJECT).tar.gz bin libexec --exclude='*/CVS' \
+		--transform 's,^,$(PROJECT)/,'
 
 clean:
 	$(RM) -rf build $(PROJECT).jar $(PROJECT).tar.gz
