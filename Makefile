@@ -1,13 +1,13 @@
+PROJECT = stork
+PACKAGES = stork stork/util stork/module
+
 CLASSPATH = '.:lib/*:lib/cog/*:build'
 JFLAGS = -g -cp $(CLASSPATH) -verbose
 JC = javac
 JAVA = java
 JAR = jar
 
-PACKAGES = stork stork/util stork/module
-JARNAME = stork.jar
-
-.PHONY: all install clean init
+.PHONY: all install clean init release
 .SUFFIXES: .java .class
 
 JAVASRCS = $(wildcard $(PACKAGES:%=%/*.java))
@@ -19,13 +19,18 @@ build:
 	mkdir -p build
 
 $(JARNAME): $(CLASSES)
-	$(JAR) cf $(JARNAME) -C build . -C lib/EXTRACTED .
-	cp stork.jar bin/
+	$(JAR) cf $(PROJECT).jar -C build . -C lib/EXTRACTED .
+	cp $(PROJECT).jar bin/
 
 build/%.class: %.java | build
 	$(JC) $(JFLAGS) -d build $<
 
 init: | build
 
+release: $(PROJECT).tar.gz
+
+$(PROJECT).tar.gz: all
+	tar czf $(PROJECT).tar.gz bin libexec --exclude='*/CVS'
+
 clean:
-	$(RM) -rf build $(JARNAME)
+	$(RM) -rf build $(PROJECT).jar $(PROJECT).tar.gz
