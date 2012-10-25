@@ -1,0 +1,2 @@
+#!/bin/sh
+java -cp stork.jar stork.StorkClient stork_q $@

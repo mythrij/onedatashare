@@ -1,0 +1,348 @@
+package stork;
+
+import stork.*;
+import stork.util.*;
+
+import java.io.*;
+import java.net.*;
+import java.util.*;
+
+public class StorkClient {
+  private Socket server_sock;
+
+  private static Map<String, StorkCommand> cmd_handlers;
+
+  // Configuration variables
+  private static StorkConfig conf = new StorkConfig();
+
+  // Some static initializations...
+  static {
+    // Initialize command handlers
+    cmd_handlers = new HashMap<String, StorkCommand>();
+    cmd_handlers.put("stork_q", new StorkQHandler());
+    cmd_handlers.put("stork_list", new StorkQHandler());
+    cmd_handlers.put("stork_submit", new StorkSubmitHandler());
+    cmd_handlers.put("stork_rm", new StorkRmHandler());
+    cmd_handlers.put("stork_info", new StorkInfoHandler());
+  }
+
+  // Client command handlers
+  // -----------------------
+  // The handle method should return a ClassAd containing the response
+  // from the server.
+  private static abstract class StorkCommand {
+    InputStream is;
+    OutputStream os;
+
+    public ResponseAd handle(String[] args, Socket sock) {
+      try {
+        is = sock.getInputStream();
+        os = sock.getOutputStream();
+
+        // Some sanity checking
+        if (is == null || os == null)
+          throw new Exception("problem with socket");
+
+        if (args.length < 1)
+          throw new Exception("too few args passed to handler");
+
+        return _handle(args);
+      } catch (Exception e) {
+        return new ResponseAd("error", e.getMessage());
+      }
+    }
+
+    abstract ResponseAd _handle(String[] args) throws IOException;
+  }
+
+  private static class StorkQHandler extends StorkCommand {
+    ResponseAd _handle(String[] args) throws IOException {
+      int received = 0, expecting = -1;
+      ClassAd ad = new ClassAd();
+      ad.insert("command", "stork_q");
+
+      // See if we're getting the whole queue or a range
+      Range range = null;
+      String status = null;
+
+      for (String s : args) {
+        if (s == args[0]) continue;
+        Range r = Range.parseRange(s);
+        if (r == null)
+          status = s;
+        else if (range != null)
+          range.swallow(r);
+        else
+          range = r;
+      }
+
+      if (range != null)
+        ad.insert("range", range.toString());
+      if (status != null)
+        ad.insert("status", status);
+
+      // Write request ad
+      os.write(ad.getBytes());
+      os.flush();
+
+      // Read and print ClassAds until response ad is found
+      while (true) {
+        ad = ClassAd.parse(is);
+
+        if (ad.error()) return new ResponseAd(ad);
+
+        // We're done once we get a response ad.
+        if (ResponseAd.is(ad)) {
+          String msg = null;
+          ResponseAd res = new ResponseAd(ad);
+
+          if (res.has("count"))
+            expecting = res.getInt("count");
+
+          // Report how many ads we received.
+          if (expecting >= 0 && received != expecting)
+            msg = "Warning: expecting "+expecting+" job ad(s), "+
+                  "but received "+received+"!";
+          else if (received > 0)
+            msg = "Received "+received+" job ad(s)";
+          else if (res.success())
+            msg = "No jobs found...";
+
+          if (msg != null)
+            System.out.print(msg+"\n\n");
+
+          return res;
+        }
+
+        // Print the ad if it wasn't a response ad.
+        System.out.print(ad+"\n\n");
+        received++;
+      }
+    }
+  }
+
+  private static class StorkRmHandler extends StorkCommand {
+    ResponseAd _handle(String[] args) throws IOException {
+      ClassAd ad = new ClassAd();
+      ad.insert("command", "stork_rm");
+
+      // Arg check
+      if (args.length != 2)
+        return new ResponseAd("error", "not enough arguments");
+
+      /// TODO Range parsing here too
+      ad.insert("range", args[1]);
+
+      // Write request ad
+      os.write(ad.getBytes());
+      os.flush();
+
+      // Read and print ClassAds until response ad is found
+      ad = ClassAd.parse(is);
+
+      if (ad == null || !ResponseAd.is(ad))
+        return new ResponseAd("error", "invalid response ad received");
+      else
+        return new ResponseAd(ad);
+    }
+  }
+
+  private static class StorkInfoHandler extends StorkCommand {
+    ResponseAd _handle(String[] args) throws IOException {
+      ClassAd ad = new ClassAd();
+      ad.insert("command", "stork_info");
+
+      // Set the type of info to get from the server
+      if (args.length > 1) {
+        ad.insert("type", args[1]);
+      }
+
+      // Write request ad
+      os.write(ad.getBytes());
+      os.flush();
+
+      // Read and print ClassAds until response ad is found
+      while (true) {
+        ad = ClassAd.parse(is);
+
+        if (ad == null)
+          return new ResponseAd("error", "couldn't parse ad from server");
+
+        if (!ad.has("response"))
+          System.out.println(ad);
+        else
+          return new ResponseAd(ad);
+      }
+    }
+  }
+
+  private static class StorkSubmitHandler extends StorkCommand {
+    // Print the submission response ad in a nice way.
+    private void print_response(ResponseAd ad) {
+      // Make sure we have a response ad.
+      if (ad == null)
+        ad = new ResponseAd("error", "couldn't parse server response");
+      else if (!ad.has("response"))
+        ad = new ResponseAd("error", "invalid response from server");
+
+      // Check if the job was successfully submitted.
+      else if (ad.success()) {
+        System.out.print("Job accepted and assigned id: ");
+        System.out.println(ad.get("job_id"));
+        System.out.println(ad);
+      }
+
+      // It wasn't successfully submitted! If we know why, explain.
+      else {
+        System.out.print("Job submission failed! Reason: ");
+        System.out.println(ad.get("message"));
+      }
+    }
+
+    // Attempt to submit a job and return a response ad.
+    private ResponseAd submit_job(ClassAd job_ad) {
+      job_ad.insert("command", "stork_submit");
+
+      // Write ad
+      try {
+        os.write(job_ad.getBytes());
+        os.flush();
+      } catch (Exception e) {
+        return new ResponseAd("error", e.getMessage());
+      }
+
+      // Get response
+      ClassAd ad = ClassAd.parse(is);
+
+      return new ResponseAd(ad);
+    }
+
+    // Submit multiple ads from a stream, return ad reporting statistics.
+    private ResponseAd submit_from_stream(InputStream in, boolean print) {
+      ClassAd ad;
+      ResponseAd res;
+      int js = 0, ja = 0;  // jobs sent and jobs accepted
+
+      while (true) {
+        ad = ClassAd.parse(in);
+
+        // Check if we've reached the end.
+        if (ad == ClassAd.EOF) break;
+
+        // Check if ad was properly formatted.
+        if (ad.error()) {
+          System.out.println("\nError: malformed input ad; nothing submitted\n");
+          continue;
+        }
+
+        if (print) System.out.println(ad);
+
+        // Submit job and check response.
+        print_response(res = submit_job(ad));
+
+        js++;
+
+        if (res.success()) ja++;
+      }
+
+      // Report number of submissions that were accepted. If none were
+      // accepted, return an error.
+      return new ResponseAd(ja > 0 ? "success" : "error",
+                            ja+" of "+js + " jobs successfully submitted");
+    }
+
+    ResponseAd _handle(String[] args) throws IOException {
+      ClassAd ad;
+      ResponseAd res;
+      Console cons;
+
+      switch (args.length) {
+        case 1:  // From stdin
+          cons = System.console();
+
+          // Check if we're running on a console first. If so, give
+          // them the fancy prompt. TODO: use readline()
+          if (cons != null) {
+            System.out.println("Begin typing ClassAd (ctrl-D to end):");
+            return submit_from_stream(System.in, false);
+          } else {
+            return submit_from_stream(System.in, true);
+          }
+        case 2:  // From file
+          FileInputStream fis = new FileInputStream(new File(args[1]));
+          return submit_from_stream(fis, true);
+        case 3:  // src_url and dest_url
+          ad = new ClassAd();
+          ad.insert("src_url", args[1]);
+          ad.insert("dest_url", args[2]);
+          print_response(res = submit_job(ad));
+          return res;
+        default:
+          return new ResponseAd("error", "wrong number of arguments");
+      }
+    }
+  }
+
+  // Class methods
+  // -------------
+  private ResponseAd send_command(String cmd, String[] args) throws Exception {
+    ResponseAd ad, res = null;
+
+    try {
+      ad = cmd_handlers.get(cmd).handle(args, server_sock);
+    } catch (Exception e) {
+      throw new Exception("Client doesn't know command: "+cmd);
+    }
+
+    // Check response ad
+    if (!ad.has("response"))
+      throw new Exception("Got invalid response from server");
+
+    // Print response ad
+    System.out.println("Done: "+ad.toDisplayString());
+
+    return ad;
+  }
+
+  // Constructor
+  // -----------
+  // TODO Remove socket logic from constructor.
+  public StorkClient(InetAddress host, int port) throws IOException {
+    if (host != null)
+      server_sock = new Socket(host, port);
+    else
+      server_sock = new Socket("127.0.0.1", port);
+  }
+
+  public StorkClient(int p) throws IOException {
+    this(null, p);
+  }
+
+  public static void main(String[] args) {
+    StorkClient client;
+    String cmd;
+
+    try {
+      // Parse config file
+      conf = new StorkConfig();
+
+      // Parse arguments
+      if (args.length < 1) {
+        System.err.println("Must give client command");
+        System.exit(1);
+      }
+
+      // Get command then recheck arguments
+      cmd = args[0];
+
+      client = new StorkClient(conf.getInt("port"));
+      ClassAd ad = client.send_command(cmd, args);
+
+      System.exit(ad.get("response").equals("success") ? 0 : 1);
+    } catch (Exception e) {
+      System.out.println("Error: "+e.getMessage());
+      e.printStackTrace();
+      System.exit(1);
+    }
+  }
+}

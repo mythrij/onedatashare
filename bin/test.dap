@@ -1,0 +1,5 @@
+[ src_url = "gsiftp://didclab-ws8/home/globus/stuff/";
+  dest_url = "gsiftp://didclab-ws9/home/globus/";
+  parallelism = 3;
+  x509_proxy = "(insert proxy contents here)";
+]

@@ -13,7 +13,7 @@ JAR = jar
 JAVASRCS = $(wildcard $(PACKAGES:%=%/*.java))
 CLASSES = $(JAVASRCS:%.java=build/%.class)
 
-all: init $(CLASSES) $(PROJECT).jar
+all: init lib/EXTRACTED $(CLASSES) $(PROJECT).jar
 
 build:
 	mkdir -p build
@@ -33,6 +33,10 @@ $(PROJECT).tar.gz: $(PROJECT).jar
 	cp $(PROJECT).jar bin/
 	tar czf $(PROJECT).tar.gz bin libexec --exclude='*/CVS' \
 		--transform 's,^,$(PROJECT)/,'
+
+# FIXME: This is a bad hack.
+lib/EXTRACTED:
+	cd lib && ./extract.sh
 
 clean:
 	$(RM) -rf build $(PROJECT).jar $(PROJECT).tar.gz
