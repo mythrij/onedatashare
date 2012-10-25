@@ -19,7 +19,7 @@ WHAT IS STORK?
   Stork uses a client-server architecture where clients submit jobs to
   a Stork server and the Stork server performs the transfer when
   resources permit. The transfer happens asynchronously to the client,
-  allowings users to go along their merry way and check on the status
+  allowing users to go along their merry way and check on the status
   of the job at their own leisure. The Stork server responds to any
   failures that may occur during transfer automatically, handling them
   in an appropriate way and informing the user if a job can't be
@@ -42,13 +42,48 @@ CLASSADS
   Even the config file is a ClassAd, albeit with comments and no
   brackets. Trust me, we really abuse them!
 
-  Don't let this scare you, but understanding ClassAds is key to using
-  Stork's advanced features. Wait! D
+  Understanding ClassAds is key to using Stork's advanced features.
+  Luckily, they're intuitive and easy to understand. Here's an example
+  ClassAd that describes a simple Stork job that will attempt the
+  transfer at most five times and will send an email to the user when
+  the job starts and completes:
 
-  More info at: <http://research.cs.wisc.edu/condor/classad/>
+  [ src_url = "ftp://example.com/file1.txt";
+    dest_url = "ftp://example.com/file2.txt";
+    max_attempts = 5; email = "user@example.com" ]
+
+  Note that each ClassAd begins with a [ and ends with a ]. Everything
+  inside is in the form of "key = value", and each key-value pair is
+  separated by a semicolon. And that's all there really is to it.
+
+  Submitting jobs to Stork as ClassAds allows you to have greater
+  control over the details of the job. While stork_submit will
+  automatically and transparently generate ClassAds based on arguments
+  passed to it on the command line, not every aspect of the job can be
+  controlled from the command line. ClassAd descriptions of jobs also
+  let you batch submit jobs from files or pass them in from other
+  programs via pipes. This allows you to automate job submission or
+  even generate jobs algorithmically.
+
+  ClassAds are also output by stork_q and stork_info, so being able to
+  read them at least is necessary to use Stork.
+
+  ClassAds are also used by transfer modules to pass messages and job
+  progress back to the Stork server, and the Stork server can pass
+  ClassAds to transfer modules that support it. They are also used
+  internally for communication between clients and the Stork server, so
+  communicating with the server from third-party clients requires
+  understanding ClassAds.
+
+  In short, ClassAds are pretty important for all but the most basic
+  usage scenarios 
+
+  More information about ClassAds, can be found here:
+
+    <http://research.cs.wisc.edu/condor/classad/>
 
 SUPPORTED PLATFORMS
-  Any modern operating system with the Java JDK
+  Any modern operating system that can run a JVM.
 
 BUILDING
   On most systems, simply run `make'! 

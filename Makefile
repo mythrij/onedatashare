@@ -1,8 +1,8 @@
 PROJECT = stork
 PACKAGES = stork stork/util stork/module
 
-CLASSPATH = '.:lib/*:lib/cog/*:build'
-JFLAGS = -g -cp $(CLASSPATH) -verbose
+CLASSPATH = '.:lib/EXTRACTED/:build'
+JFLAGS = -g -cp $(CLASSPATH) -verbose -Xlint:unchecked
 JC = javac
 JAVA = java
 JAR = jar
