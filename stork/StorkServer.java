@@ -365,8 +365,11 @@ public class StorkServer implements Runnable {
         type = type.toLowerCase();
 
       // Pick a filter depending on type. Valid types include:
-      // "pending", "done", "all", and any job status. Defaults to "pending".
-      if (type == null || type.equals("pending")) {
+      // "pending", "done", "all", and any job status. Defaults to
+      // "pending" if no range specified, "all" if it is specified.
+      if (type == null) {
+        filter = ad.has("range") ? JobFilter.all : JobFilter.pending;
+      } else if (type.equals("pending")) {
         filter = JobFilter.pending;
       } else if (type.equals("done")) {
         filter = JobFilter.done;

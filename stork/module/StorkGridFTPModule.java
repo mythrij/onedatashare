@@ -6,6 +6,7 @@ import java.util.*;
 import java.io.*;
 
 import org.globus.ftp.*;
+import org.globus.ftp.vanilla.*;
 import org.ietf.jgss.*;
 import org.gridforum.jgss.*;
 
@@ -27,7 +28,7 @@ public class StorkGridFTPModule extends TransferModule {
     info_ad.insert("accepts", "classads");
   }
 
-  // Ad sink to allow for ads from multiple sources. This lets the
+  // Ad sink to allow for ads from multiple sources.
   private static class AdSink {
     volatile boolean closed = false;
     volatile boolean more = true;
@@ -62,34 +63,217 @@ public class StorkGridFTPModule extends TransferModule {
     }
   }
 
-  // Transfer watcher
-  // ----------------
-  // Stupid workaround to the fact that jglobus doesn't support
-  // watching third party transfers.
-  private static class TransferWatcher extends Thread {
+  // A list of transfers to be done by a pair of servers.
+  private static class XferList implements Iterable<XferEntry> {
+    List<XferEntry> paths;
+    int num_done = 0, num_total = 0;
+    long bytes_done = 0, bytes_total = 0;
+
+    XferList(URI s, URI d) {
+      paths = new LinkedList<XferEntry>();
+    }
+
+    // Add a directory.
+    void add(String path) {
+      paths.add(new XferEntry(path, -1));
+    }
+
+    // Add a file with a given size.
+    void add(String path, long size) {
+      paths.add(new XferEntry(path, size));
+      if (size > 0)
+        bytes_total += size;
+      num_total++;
+    }
+
+    // Merge an XferList into this one.
+    void addAll(XferList xl) {
+      paths.addAll(xl.paths);
+      num_done += xl.num_done;
+      num_total += xl.num_total;
+      bytes_done += xl.bytes_done;
+      bytes_total += xl.bytes_total;
+    }
+
+    // Mark a transfer entry as done.
+    void done(XferEntry te) {
+      if (te.done) return;
+      te.done = true;
+      if (te.size > 0)
+        bytes_done += te.size;
+      num_done++;
+    }
+
+    public Iterator<XferEntry> iterator() {
+      return paths.iterator();
+    }
+  }
+
+  private static class XferEntry {
+    String path;
+    long size;
+    boolean done = false;
+
+    XferEntry(String p, long sz) {
+      path = p; size = sz;
+    }
+  }
+
+  // A custom extended GridFTPClient for multifile transfers.
+  private static class StorkGFTPClient extends GridFTPClient {
+    StorkGFTPClient sc, dc;
+    volatile boolean aborted = false;
+    Exception abort_exception = new Exception("transfer aborted");
+
+    StorkGFTPClient(String host, int port) throws Exception {
+      super(host, port);
+      sc = dc = this;
+    }
+
+    void setDest(StorkGFTPClient d) { dc = d; }
+    void setSrc(StorkGFTPClient s)  { sc = s; }
+
+    // Some crazy undocumented voodoo magick!
+    void setPerfFreq(int f) {
+      try {
+        Command cmd = new Command("TREV", "PERF "+f);
+        controlChannel.execute(cmd);
+      } catch (Exception e) {
+        // Well it was worth a shot...
+      }
+    }
+
+    // Call this to kill transfer.
+    public void abort() {
+      try {
+        sc.controlChannel.write(Command.ABOR); 
+        if (sc != dc)
+          dc.controlChannel.write(Command.ABOR); 
+      } catch (Exception e) {
+        // We don't care if aborting failed!
+      }
+      aborted = true;
+    }
+
+    void transfer(XferList xl, ProgressListener pl) throws Exception {
+      if (aborted)
+        throw abort_exception;
+
+      sc.checkGridFTPSupport();
+      dc.checkGridFTPSupport();
+
+      sc.gSession.matches(dc.gSession);
+
+      // First pipeline all the commands.
+      for (XferEntry x : xl) {
+        if (aborted)
+          throw abort_exception;
+
+        // We have to make a directory.
+        if (x.size == -1) {
+          Command cmd = new Command("MKD", x.path);
+          dc.controlChannel.write(cmd);
+        }
+
+        // We have to transfer a file.
+        else {
+          Command dcmd = new Command("STOR", x.path);
+          dc.controlChannel.write(dcmd);
+
+          Command scmd = new Command("RETR", x.path);
+          sc.controlChannel.write(scmd);
+        }
+      }
+
+      // Then watch the file transfers.
+      for (XferEntry x : xl) {
+        if (aborted)
+          throw abort_exception;
+        if (x.size == -1)  // Read and ignore mkdir results.
+          dc.controlChannel.read();
+        else
+          sc.transferRunSingleThread(dc.controlChannel, pl);
+        xl.done(x);
+        if (pl != null)
+          pl.fileComplete(x);
+      }
+    }
+  }
+
+  private static class ProgressListener implements MarkerListener {
     volatile boolean done = false, reallydone = false;
     ClassAd ad = new ClassAd();
-    volatile long xferred = 0, total = 0;
-    GridFTPTransfer tf;
+    int num_done = 0, num_total = 0;
+    long bytes_done = 0, bytes_total = 0;
+    long last_bytes = 0;
+    XferList list = null;
+    AdSink sink;
 
-    public TransferWatcher(GridFTPTransfer tf) {
-      this.tf = tf;
+    // Single file transfer.
+    public ProgressListener(AdSink sink, long total) {
+      this.sink = sink;
+      bytes_total = total;
+    }
 
-      // Get the file size from the source.
-      try {
-        if (tf.sc != null)
-          total = tf.sc.size(tf.su.getPath());
-        else
-          total = -1;  // TODO: Use File
+    // Multiple file transfer.
+    public ProgressListener(AdSink sink, XferList list) {
+      this.sink = sink;
+      this.list = list;
+      bytes_total = list.bytes_total;
+      num_total = list.num_total;
+    }
+
+    // When we've received a marker from the server.
+    public void markerArrived(Marker m) {
+      if (m instanceof PerfMarker) try {
+        PerfMarker pm = (PerfMarker) m;
+        long cur_bytes = pm.getStripeBytesTransferred();
+        long diff = cur_bytes - last_bytes;
+
+        System.out.println("Bytes: "+cur_bytes+", old: "+last_bytes);
+
+        last_bytes = cur_bytes;
+
+        if (diff < 0) return;  // Uh-oh!
+
+        bytes_done += diff;
+
+        // TODO: Calculate performance.
+
+        if (bytes_done > bytes_total)
+          bytes_done = bytes_total;
       } catch (Exception e) {
-        message("couldn't get size of source file");
-        total = -1;
+        // Couldn't get progress from marker...
+      } else if (m instanceof RestartMarker) {
+        // TODO: Save last restart marker
       }
+
+      updateAd();
+    }
+
+    // Called when a file is done in a multifile transfer.
+    public void fileComplete(XferEntry e) {
+      long diff = e.size - last_bytes;
+
+      if (diff >= 0)
+        bytes_done += diff;
+      if (bytes_done > bytes_total)
+        bytes_done = bytes_total;
+
+      if (e.size >= 0)  // Ignore directories (size < 0)
+        num_done++;
+      if (num_done > num_total)
+        num_done = num_total;
+
+      updateAd();
+
+      // Reset for next file
+      last_bytes = 0;
     }
 
     private void message(String m) {
       ad.insert("message", m);
-      tf.sink.mergeAd(ad);
+      sink.mergeAd(ad);
     }
 
     // Call done(false) to check, call done(true) to stop. After calling
@@ -103,29 +287,15 @@ public class StorkGridFTPModule extends TransferModule {
       return done(false);
     }
 
-    private void updateAd(long xferred) {
-      if (xferred >= 0) {
-        ad.insert("bytes_xferred", Long.toString(xferred));
-        if (total > 0)
-          ad.insert("progress", 
-              String.format("%.2f%%", 100.0*xferred/total));
-      } tf.sink.mergeAd(ad);
-    }
-
-    public void run() {
-      if (total >= 0)
-        ad.insert("bytes_total", Long.toString(total));
-
-      if (tf.dc != null) while (!done()) try {
-        long x = tf.dc.size(tf.du.getPath());
-        if (x != xferred)
-          updateAd(xferred = x);  // Only update if there's a change.
-        sleep(500);  // Wait half a second before checking again.
-      } catch (Exception e) {
-        message("couldn't get size of dest file");
-      } else while (!done()) {
-        // Get file size
-      }
+    private void updateAd() {
+      if (bytes_done >= 0)
+        ad.insert("byte_progress", bytes_done+"/"+bytes_total);
+      if (bytes_total > 0)
+        ad.insert("progress",
+                  String.format("%.2f%%", 100.0*bytes_done/bytes_total));
+      if (num_total > 0)
+        ad.insert("file_progress", num_done+"/"+num_total);
+      sink.mergeAd(ad);
     }
   };
 
@@ -135,10 +305,10 @@ public class StorkGridFTPModule extends TransferModule {
     Thread thread = null;
     ClassAd job;
     GSSCredential cred = null;
-    RetrieveOptions ro = new RetrieveOptions();
 
     FTPClient sc = null, dc = null;
     URI su = null, du = null;
+    ProgressListener pl = null;
     AdSink sink = new AdSink();
 
     volatile int rv = -1;
@@ -163,7 +333,7 @@ public class StorkGridFTPModule extends TransferModule {
     // protocol or there was a problem connecting.
     private FTPClient connect(URI u, GSSCredential cred) throws Exception {
       FTPClient cli = null;
-      GridFTPClient gcli = null;
+      StorkGFTPClient gcli = null;
 
       String p = u.getScheme();
       String host = u.getHost();
@@ -184,7 +354,7 @@ public class StorkGridFTPModule extends TransferModule {
 
       // Try to connect to the (Grid)FTP server.
       if (p.equals("gridftp") || p.equals("gsiftp") || p.equals("gftp"))
-        cli = gcli = new GridFTPClient(host, (port > 0) ? port : 2811);
+        cli = gcli = new StorkGFTPClient(host, (port > 0) ? port : 2811);
       else if (p.equals("ftp"))
         cli = new FTPClient(host, (port > 0) ? port : 21);
       else if (p.equals("file"))
@@ -206,12 +376,12 @@ public class StorkGridFTPModule extends TransferModule {
 
     // Build a transfer list recursively given a source URL. The strings
     // in the returned array should be meaningful relative to u.
-    private List<String> xfer_list(URI u, String p) throws Exception {
-      String path = u.getPath()+p;
-      boolean directory = u.getPath().endsWith("/"),
-              wildcard  = u.getPath().indexOf('*') >= 0,
+    private XferList xfer_list(String p) throws Exception {
+      String path = su.getPath()+p;
+      boolean directory = path.endsWith("/"),
+              wildcard  = path.indexOf('*') >= 0,
               recursive = directory || wildcard;
-      ArrayList<String> list = new ArrayList<String>(20);
+      XferList list = new XferList(su, du);
 
       // If there's no source client, files come from local machine.
       // TODO: Wildcards.
@@ -251,19 +421,19 @@ public class StorkGridFTPModule extends TransferModule {
       // Otherwise, it's a third party transfer. Files come from server.
       // Is there a way we can do this without making so many calls?
       MlsxEntry me = sc.mlst(path);
+      String type = me.get("type");
+      String size = me.get("size");
 
-      if (me == null)
+      if (me == null || type == null || size == null)
         return list;
 
-      System.out.println(me);
-
-      if (me.get("type").equals(me.TYPE_FILE)) {
-        list.add(p);
+      if (type.equals(me.TYPE_FILE)) {
+        list.add(p, Long.parseLong(size));
         return list;
       }
 
       // Ignore weird file types.
-      if (!me.get("type").equals(me.TYPE_DIR))
+      if (!type.equals(me.TYPE_DIR))
         return list;
 
       // TODO: This...
@@ -274,40 +444,39 @@ public class StorkGridFTPModule extends TransferModule {
       // It's a directory, we have to recurse.
       if (directory) {
         sc.setPassiveMode(true);
-        Object[] mes = sc.mlsd(u.getPath()).toArray();
-        list.add(p);  // Returned array will contain the directory.
+        Object[] mes = sc.mlsd(path).toArray();
+        if (!p.isEmpty()) list.add(p);
 
-        for (Object o : mes) {
-          if (!(o instanceof MlsxEntry))
-            continue;
-
+        for (Object o : mes) if (o instanceof MlsxEntry) {
           MlsxEntry m = (MlsxEntry) o;
           String name = m.getFileName();
+          type = me.get("type");
+          size = me.get("size");
 
           if (m.get("type").equals(m.TYPE_FILE))
-            list.add(p+name);
+            list.add(p+name, Long.parseLong(size));
           else if (!me.get("type").equals(me.TYPE_DIR))
             continue;
           else if (name.equals(".") || name.equals(".."))
             continue;
           else
-            list.addAll(xfer_list(u, p+name+"/"));
+            list.addAll(xfer_list(p+name+"/"));
         }
       }
 
       return list;
     }
 
-    public void run() {
-      String in = null;
+    public void process() throws Exception {
+      String in = null;  // Used for better error messages.
+      XferList xfer_list = null;
 
       // Make sure we have a src and dest url.
       try {
         su = new URI(job.get(in = "src_url"));
         du = new URI(job.get(in = "dest_url"));
       } catch (Exception e) {
-        set(255, "couldn't parse "+in+": "+e.getMessage());
-        return;
+        fatal("couldn't parse "+in+": "+e.getMessage());
       }
 
       // Check if we were provided a proxy. If so, load it.
@@ -320,8 +489,7 @@ public class StorkGridFTPModule extends TransferModule {
           GSSCredential.DEFAULT_LIFETIME, null,
           GSSCredential.INITIATE_AND_ACCEPT);
       } catch (Exception e) {
-        set(255, "error loading x509 proxy: "+e.getMessage());
-        return;
+        fatal("error loading x509 proxy: "+e.getMessage());
       }
 
       // Attempt to connect to hosts.
@@ -330,122 +498,122 @@ public class StorkGridFTPModule extends TransferModule {
         in = "src";  sc = connect(su, cred);
         in = "dest"; dc = connect(du, cred);
       } catch (Exception e) {
-        set(255, "couldn't connect to "+in+" server: "+e);
-        return;
+        fatal("couldn't connect to "+in+" server: "+e);
       }
 
       // If it's file-to-file, don't accept the job.
       if (sc == null || dc == null) {
-        //set(255, "no FTP or GridFTP servers specified");
-        set(255, "currently only 3rd party transfers supported");
-        return;
+        //fatal("no FTP or GridFTP servers specified");
+        fatal("currently only 3rd party transfers supported");
       }
-
-      // Start a timer to watch the file size at the destination.
-      // Stupid workaround because jglobus can't watch third party transfers.
-      TransferWatcher tw = new TransferWatcher(this);
 
       // TODO: If doing 3rd party, check if two servers can talk.
 
-      // Generate a transfer list from the source URL.
-      String[] src_list = {}, dst_list = {}, dir_list = {};
+      // Generate a transfer list from the source URL if directory,
+      // and init progress listener based on list.
+      if (su.getPath().endsWith("/")) try {
+        xfer_list = xfer_list("");
 
-      try {
-        ArrayList<String> sl = new ArrayList<String>();
-        ArrayList<String> dl = new ArrayList<String>();
-        ArrayList<String> fl = new ArrayList<String>();
+        pl = new ProgressListener(sink, xfer_list);
 
-        for (String s : xfer_list(su, "")) {
-          String dp = du.getPath()+s;
-          if (dp.endsWith("/")) {
-            fl.add(dp);
-            System.out.println("DIRECTORY: "+dp);
-          } else {
-            sl.add(su.getPath()+s);
-            dl.add(dp);
-            System.out.println("FILE: "+dp);
-          }
+        // Make sure dest_url is a directory...
+        if (!du.getPath().endsWith("/")) {
+          fatal("src is a directory, but dest is not");
+          return;
         }
 
-        src_list = sl.toArray(src_list);
-        dst_list = dl.toArray(dst_list);
-        dir_list = fl.toArray(dir_list);
+        if (sc != null) sc.changeDir(su.getPath());
+        if (dc != null) try {
+          dc.changeDir(du.getPath());
+        } catch (Exception e) {  // Path does not exist, so create.
+          dc.makeDir(du.getPath());
+          dc.changeDir(du.getPath());
+        }
       } catch (Exception e) {
-        set(255, "error generating transfer list: "+e);
-        e.printStackTrace();
-        return;
+        fatal("error generating transfer list: "+e);
+      }
+
+      // If it's not a directory, it's a file. Get its size and init
+      // the progress listener.
+      else try {
+        long size = sc.size(su.getPath());
+        pl = new ProgressListener(sink, size);
+        ((StorkGFTPClient)dc).setPerfFreq(1);
+      } catch (Exception e) {
+        System.out.println("Couldn't make progress listener for file...");
       }
 
       // Set options according to job ad
       if (job.has("parallelism")) {
-        int def_p = job.getInt("parallelism", ro.getStartingParallelism()),
-            min_p = job.getInt("min_parallelism", def_p),
-            max_p = job.getInt("max_parallelism", def_p);
+        final int def = job.getInt("parallelism", 1),
+                  min = job.getInt("min_parallelism", def),
+                  max = job.getInt("max_parallelism", def);
 
-        if (min_p > def_p || def_p > max_p) {
-          set(255, "inconsistency in parallelism constraints");
-          return;
+        if (def < 1 || min < 1 || max < 1)
+          fatal("parallelism levels must be greater than zero");
+        if (min > def || def > max)
+          fatal("inconsistency in parallelism constraints");
+
+        Options o = new Options("RETR") {
+          int a = def, b = min, c = max;
+          public String getArgument() {
+            return String.format("Parallelism=%d,%d,%d;", a, b, c);
+          }
+        };
+
+        // Try to set parallelism levels.
+        try {
+          if (sc != null) sc.setOptions(o);
+          if (dc != null) dc.setOptions(o);
+        } catch (Exception e) {
+          fatal("error setting parallelism level");
         }
-
-        ro.setStartingParallelism(def_p);
-        ro.setMinParallelism(min_p);
-        ro.setMaxParallelism(max_p);
-      } try {
-        if (sc != null) sc.setOptions(ro);
-        if (dc != null) dc.setOptions(ro);
-      } catch (Exception e) {
-        set(255, "error setting parallelism level");
-        return;
       }
 
       // Put servers into state to prepare for transfer.
       try {
-        sc.setType(Session.TYPE_IMAGE);
-        dc.setType(Session.TYPE_IMAGE);
+        in = "src";  if (sc != null) sc.setType(Session.TYPE_IMAGE);
+        in = "dest"; if (dc != null) dc.setType(Session.TYPE_IMAGE);
       } catch (Exception e) {
-        set(255, "couldn't prepare servers for transfer: "+e.getMessage());
-        e.printStackTrace();
-        return;
+        fatal("couldn't change "+in+" server mode: "+e.getMessage());
       }
 
-      // Perform transfer on everything in the list. Output ads.
-      try {
-        if (dc instanceof GridFTPClient && sc instanceof GridFTPClient) {
-          GridFTPClient gsc = (GridFTPClient) sc, gdc = (GridFTPClient) dc;
-
-          // Make dirs first...
-          //for (String s : dir_list)
-            //if (!dc.exists(s)) dc.makeDir(s);
+      // If we're doing multifile, transfer all files.
+      if (xfer_list != null) try {
+        if (dc instanceof StorkGFTPClient && sc instanceof StorkGFTPClient) {
+          StorkGFTPClient gsc = (StorkGFTPClient) sc,
+                          gdc = (StorkGFTPClient) dc;
 
           // Set to extended block mode.
           gsc.setMode(GridFTPSession.MODE_EBLOCK);
           gdc.setMode(GridFTPSession.MODE_EBLOCK);
 
-          // Create completion listener
-          final int total = dst_list.length;
-          MultipleTransferCompleteListener mtcl;
-          mtcl = new MultipleTransferCompleteListener() {
-            int i = 0;
-            public void transferComplete(MultipleTransferComplete mtc) {
-              ClassAd ad = new ClassAd();
-              ad.insert("file_progress", (++i)+"/"+total);
-              sink.mergeAd(ad);
-            }
-          };
-
           // Bulk transfer
+          gsc.setDest(gdc);
           gsc.setActive(gdc.setPassive());
-          gsc.extendedMultipleTransfer(src_list, gdc, dst_list, null, mtcl);
+          gsc.transfer(xfer_list, pl);
         }
       } catch (Exception e) {
-        set(255, "couldn't transfer: "+e.getMessage());
-        e.printStackTrace();
-        return;
+        fatal("couldn't transfer: "+e.getMessage());
       }
 
-      set(0, null);
-      tw.done(true);
-      sink.close();
+      // Otherwise it's a single file transfer.
+      else try {
+        sc.setMode(GridFTPSession.MODE_EBLOCK);
+        dc.setMode(GridFTPSession.MODE_EBLOCK);
+
+        sc.transfer(su.getPath(), dc, du.getPath(), false, pl);
+      } catch (Exception e) {
+        fatal("couldn't transfer: "+e.getMessage());
+      }
+    }
+
+    private void abort() {
+      try {
+        if (sc != null) sc.abort();
+        if (dc != null) dc.abort();
+      } catch (Exception e) { }
+
       close();
     }
 
@@ -456,12 +624,38 @@ public class StorkGridFTPModule extends TransferModule {
       } catch (Exception e) { }
     }
 
+    public void run() {
+      try {
+        process();
+        rv = 0;
+      } catch (Exception e) {
+        ClassAd ad = new ClassAd();
+        ad.insert("message", e.getMessage());
+        sink.mergeAd(ad);
+      }
+
+      // Cleanup
+      sink.close();
+      close();
+    }
+
+    public void fatal(String m) throws Exception {
+      rv = 255;
+      throw new Exception(m);
+    }
+
+    public void error(String m) throws Exception {
+      rv = 1;
+      throw new Exception(m);
+    }
+
     public void start() {
       thread = new Thread(this);
       thread.start();
     }
 
     public void stop() {
+      abort();
       sink.close();
       close();
     }
@@ -506,7 +700,7 @@ public class StorkGridFTPModule extends TransferModule {
         tf = m.transfer(args[0], args[1]);
         break;
       default:
-        System.out.println("Invalid arguments...");
+        System.out.printf("Usage: %s [src_url dest_url]\n", args[0]);
         System.exit(1);
     }
 
