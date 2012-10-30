@@ -1,2 +1,3 @@
 #!/bin/sh
-java -cp stork.jar stork.StorkClient stork_submit $@
+cd `dirname $0`
+java -Xms512m -Xmx512m -cp stork.jar stork.StorkClient stork_submit $@
