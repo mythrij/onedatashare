@@ -13,7 +13,7 @@ import org.gridforum.jgss.*;
 public class StorkGridFTPModule extends TransferModule {
   private static final ClassAd info_ad = new ClassAd();
 
-  private static final String pstr = "gsiftp,gridftp,gftp,ftp";
+  private static final String pstr = "gridftp,gftp,ftp";
   private static final String[] protocols = splitProtocols(pstr);
 
   private static final String name = "Stork GridFTP Module";
@@ -121,6 +121,7 @@ public class StorkGridFTPModule extends TransferModule {
 
   // A custom extended GridFTPClient for multifile transfers.
   private static class StorkGFTPClient extends GridFTPClient {
+    private String[] features = null;
     StorkGFTPClient sc, dc;
     volatile boolean aborted = false;
     Exception abort_exception = new Exception("transfer aborted");
@@ -142,6 +143,58 @@ public class StorkGridFTPModule extends TransferModule {
         // Well it was worth a shot...
       }
     }
+
+    // Stupid that this is private in FTPClient...
+    private class ByteDataSink implements DataSink {
+      private ByteArrayOutputStream received;
+
+      public ByteDataSink() {
+        this.received = new ByteArrayOutputStream(1000);
+      }
+
+      public void write(Buffer buffer) throws IOException {
+        this.received.write(buffer.getBuffer(), 0, buffer.getLength());
+      }
+
+      public void close() throws IOException { }
+
+      public ByteArrayOutputStream getData() {
+        return this.received;
+      }
+    }
+
+    // GridFTP extension which does recursive listings.
+    public Vector mlsr(String path) throws Exception {
+      ByteDataSink sink = new ByteDataSink();
+      Command cmd;
+
+      // Set MLSR options.
+      try {
+        controlChannel.execute(new Command("OPTS", "MLST type;size;"));
+        //controlChannel.execute(new Command("OPTS", "MLSR onerror=continue"));
+      } catch (Exception e) {
+        System.out.println("OPTS: "+e);
+      }
+
+      cmd = new Command("MLSR", path);
+      performTransfer(cmd, sink);
+
+      ByteArrayOutputStream received = sink.getData();
+
+      BufferedReader reader =
+        new BufferedReader(new StringReader(received.toString()));
+
+      System.out.println("Stuff: "+received);
+
+      Vector<MlsxEntry> list = new Vector<MlsxEntry>();
+      XferEntry entry = null;
+      String line = null;
+
+      while ((line = reader.readLine()) != null)
+        list.addElement(new MlsxEntry(line));
+      return list;
+    }
+
 
     // Call this to kill transfer.
     public void abort() {
@@ -196,7 +249,7 @@ public class StorkGridFTPModule extends TransferModule {
         xl.done(x);
         if (pl != null)
           pl.fileComplete(x);
-      }
+      } pl.transferComplete();
     }
   }
 
@@ -204,23 +257,27 @@ public class StorkGridFTPModule extends TransferModule {
     volatile boolean done = false, reallydone = false;
     ClassAd ad = new ClassAd();
     int num_done = 0, num_total = 0;
-    long bytes_done = 0, bytes_total = 0;
     long last_bytes = 0;
     XferList list = null;
     AdSink sink;
+    TransferProgress prog;
 
     // Single file transfer.
     public ProgressListener(AdSink sink, long total) {
       this.sink = sink;
-      bytes_total = total;
+      prog = new TransferProgress();
+      prog.setBytes(total);
+      prog.transferStarted();
     }
 
     // Multiple file transfer.
     public ProgressListener(AdSink sink, XferList list) {
       this.sink = sink;
       this.list = list;
-      bytes_total = list.bytes_total;
-      num_total = list.num_total;
+      prog = new TransferProgress();
+      prog.setBytes(list.bytes_total);
+      prog.setFiles(list.num_total);
+      prog.transferStarted();
     }
 
     // When we've received a marker from the server.
@@ -228,20 +285,12 @@ public class StorkGridFTPModule extends TransferModule {
       if (m instanceof PerfMarker) try {
         PerfMarker pm = (PerfMarker) m;
         long cur_bytes = pm.getStripeBytesTransferred();
-        long diff = cur_bytes - last_bytes;
-
-        System.out.println("Bytes: "+cur_bytes+", old: "+last_bytes);
+        long diff = cur_bytes-last_bytes;
 
         last_bytes = cur_bytes;
 
-        if (diff < 0) return;  // Uh-oh!
-
-        bytes_done += diff;
-
-        // TODO: Calculate performance.
-
-        if (bytes_done > bytes_total)
-          bytes_done = bytes_total;
+        if (diff >= 0)
+          prog.bytesDone(diff);
       } catch (Exception e) {
         // Couldn't get progress from marker...
       } else if (m instanceof RestartMarker) {
@@ -255,20 +304,20 @@ public class StorkGridFTPModule extends TransferModule {
     public void fileComplete(XferEntry e) {
       long diff = e.size - last_bytes;
 
-      if (diff >= 0)
-        bytes_done += diff;
-      if (bytes_done > bytes_total)
-        bytes_done = bytes_total;
-
-      if (e.size >= 0)  // Ignore directories (size < 0)
-        num_done++;
-      if (num_done > num_total)
-        num_done = num_total;
-
-      updateAd();
+      fileComplete(diff);
 
       // Reset for next file
       last_bytes = 0;
+    }
+
+    public void fileComplete(long size) {
+      if (size >= 0)
+        prog.fileDone(size);
+      updateAd();
+    }
+
+    public void transferComplete() {
+      prog.transferEnded();
     }
 
     private void message(String m) {
@@ -287,14 +336,13 @@ public class StorkGridFTPModule extends TransferModule {
       return done(false);
     }
 
-    private void updateAd() {
-      if (bytes_done >= 0)
-        ad.insert("byte_progress", bytes_done+"/"+bytes_total);
-      if (bytes_total > 0)
-        ad.insert("progress",
-                  String.format("%.2f%%", 100.0*bytes_done/bytes_total));
-      if (num_total > 0)
-        ad.insert("file_progress", num_done+"/"+num_total);
+    private void updateAd() { 
+      ad.insert("byte_progress", prog.byteProgress());
+      ad.insert("progress", prog.progress());
+      ad.insert("file_progress", prog.fileProgress());
+      ad.insert("throughput", prog.throughput(false));
+      ad.insert("avg_throughput", prog.throughput(true));
+
       sink.mergeAd(ad);
     }
   };
@@ -362,8 +410,10 @@ public class StorkGridFTPModule extends TransferModule {
       else throw new Exception("unsupported protocol: "+p);
 
       // If we're using GridFTP and got a cred, try to auth with that.
-      if (gcli != null && cred != null)
+      if (gcli != null && cred != null) {
         gcli.authenticate(cred, user);
+        //gcli.setMode(GridFTPSession.MODE_EBLOCK);
+      }
 
       // Otherwise, try username/password if given.
       else if (user != null)
@@ -439,6 +489,26 @@ public class StorkGridFTPModule extends TransferModule {
       // TODO: This...
       if (wildcard) {
         return list;
+      }
+
+      // Try to list contents with MLSR.
+      if (directory && sc instanceof StorkGFTPClient) try {
+        StorkGFTPClient ssc = (StorkGFTPClient) sc;
+        for (Object o : ssc.mlsr(path)) if (o instanceof MlsxEntry) {
+          MlsxEntry m = (MlsxEntry) o;
+          String name = m.getFileName();
+          type = me.get("type");
+          size = me.get("size");
+
+          if (m.get("type").equals(m.TYPE_FILE))
+            list.add(p+name, Long.parseLong(size));
+          else if (!me.get("type").equals(me.TYPE_DIR))
+            continue;
+          else
+            list.add(p+name+"/");
+        } return list;
+      } catch (Exception e) {
+        // Don't support MLSR. :(
       }
 
       // It's a directory, we have to recurse.
@@ -539,6 +609,16 @@ public class StorkGridFTPModule extends TransferModule {
         long size = sc.size(su.getPath());
         pl = new ProgressListener(sink, size);
         ((StorkGFTPClient)dc).setPerfFreq(1);
+
+        // Check if destination is a directory.
+        if (dc != null && du.getPath().endsWith("/")) try {
+          dc.changeDir(du.getPath());
+        } catch (Exception e) {  // Path does not exist, so create.
+          dc.makeDir(du.getPath());
+          dc.changeDir(du.getPath());
+        } finally {
+          du = du.relativize(su);
+        }
       } catch (Exception e) {
         System.out.println("Couldn't make progress listener for file...");
       }
@@ -584,7 +664,6 @@ public class StorkGridFTPModule extends TransferModule {
           StorkGFTPClient gsc = (StorkGFTPClient) sc,
                           gdc = (StorkGFTPClient) dc;
 
-          // Set to extended block mode.
           gsc.setMode(GridFTPSession.MODE_EBLOCK);
           gdc.setMode(GridFTPSession.MODE_EBLOCK);
 
@@ -603,6 +682,8 @@ public class StorkGridFTPModule extends TransferModule {
         dc.setMode(GridFTPSession.MODE_EBLOCK);
 
         sc.transfer(su.getPath(), dc, du.getPath(), false, pl);
+        pl.fileComplete(0);
+        pl.transferComplete();
       } catch (Exception e) {
         fatal("couldn't transfer: "+e.getMessage());
       }
@@ -686,7 +767,7 @@ public class StorkGridFTPModule extends TransferModule {
 
   // Tester
   // ------
-  public static void main(String args[]) {
+  public static void main2(String args[]) {
     ClassAd ad = null;
     StorkGridFTPModule m = new StorkGridFTPModule();
     StorkTransfer tf = null;
@@ -718,5 +799,70 @@ public class StorkGridFTPModule extends TransferModule {
     int rv = tf.waitFor();
 
     System.out.println("Job done with exit status "+rv);
+  }
+
+  public static void main3(String args[]) {
+    URI uri;
+    StorkGFTPClient sc;
+    int port = 2811;
+
+    try {
+      // Parse URL
+      uri = new URI(args[0]);
+
+      // Open connection
+      System.out.println("Connecting to: "+uri);
+      if (uri.getPort() > 0) port = uri.getPort();
+      sc = new StorkGFTPClient(uri.getHost(), port);
+
+      System.out.println("Reading credentials...");
+      File cred_file = new File("/tmp/x509up_u1000");
+      FileInputStream fis = new FileInputStream(cred_file);
+      byte[] cred_bytes = new byte[(int) cred_file.length()];
+      fis.read(cred_bytes);
+
+      // Authenticate
+      System.out.println("Authenticating...");
+      ExtendedGSSManager gm =
+        (ExtendedGSSManager) ExtendedGSSManager.getInstance();
+      GSSCredential cred = gm.createCredential(
+          cred_bytes, ExtendedGSSCredential.IMPEXP_OPAQUE,
+          GSSCredential.DEFAULT_LIFETIME, null,
+          GSSCredential.INITIATE_AND_ACCEPT);
+      sc.authenticate(cred);
+
+      System.out.println("Listing...");
+      sc.mlsr(uri.getPath());
+    } catch (Exception e) {
+      System.out.println("Error: "+e);
+      e.printStackTrace();
+    }
+  }
+
+  public static void main(String args[]) {
+    double thrp;  // MB/s
+    TransferProgress prog = new TransferProgress();
+
+    try {
+      thrp = Double.parseDouble(args[0]);
+    } catch (Exception e) {
+      thrp = 50;
+    }
+
+    prog.setBytes(1000000000l);
+    prog.transferStarted();
+
+    while (true) try {
+      prog.bytesDone(50*1000*100);
+      System.out.println("inst = "+prog.throughput(false));
+      System.out.println("avg  = "+prog.throughput(true));
+      System.out.println("bprg = "+prog.byteProgress());
+      System.out.println("prg  = "+prog.progress());
+      Thread.sleep(100);
+      System.out.println();
+    } catch (Exception e) {
+      e.printStackTrace();
+      return;
+    }
   }
 }

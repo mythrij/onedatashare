@@ -3,6 +3,7 @@ package stork.module;
 import stork.util.*;
 import java.util.*;
 import java.io.*;
+import java.net.URI;
 
 // A transfer module which executes as an independent process.
 
@@ -28,17 +29,25 @@ public class ExternalModule extends TransferModule {
     // TODO: Rumor has it Java doesn't guarantee processes execute in
     // parallel. Maybe have some additional checks?
     public void run() {
+      // Get arguments from ClassAd
+      String args = job.get("arguments");
+      URI src, dest;
+
       // Don't run twice!
       if (proc != null) return;
 
-      // Make sure we were passed a valid ad
-      if (!job.has("src_url") || !job.has("dest_url")) {
+      // Parse src and dest URL so they're normalized.
+      try {
+        src = new URI(job.get("src_url"));
+        dest = new URI(job.get("dest_url"));
+      } catch (Exception e) {
         rv = 255; return;
       }
 
-      proc = execute(exe.getPath(), job.get("src_url"), job.get("dest_url"));
-
-      if (proc == null) {
+      try {
+        proc = (args != null) ? execute(args+" "+src+" "+dest) :
+                                execute(src+" "+dest);
+      } catch (Exception e) {
         rv = 255; return;
       }
     }
@@ -91,9 +100,9 @@ public class ExternalModule extends TransferModule {
 
   // Execute a command and return the process handler for it.
   // TODO: Security considerations.
-  private static Process execute(String... args) {
+  private Process execute(String args) {
     try {
-      return Runtime.getRuntime().exec(args);
+      return Runtime.getRuntime().exec(exe.getPath()+" "+args);
     } catch (Exception e) {
       return null;
     }
@@ -110,7 +119,7 @@ public class ExternalModule extends TransferModule {
     if (info_ad != null)
       return info_ad;
 
-    Process p = execute(exe.getPath(), "-i");
+    Process p = execute("-i");
     ClassAd ad;
 
     // Make sure it worked first!

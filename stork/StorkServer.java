@@ -16,6 +16,8 @@ public class StorkServer implements Runnable {
   // Server state variables
   private static ServerSocket listen_sock;
 
+  private static Thread[] thread_pool;
+
   private static Map<String, StorkCommand> cmd_handlers;
   private static Map<String, TransferModule> xfer_modules;
 
@@ -31,9 +33,10 @@ public class StorkServer implements Runnable {
   private static StorkConfig conf = new StorkConfig();
 
   // The only fields allowed in a submit ad
+  // FIXME: sucks
   private static String[] submit_filter = {
     "src_url", "dest_url", "dap_type", "x509_proxy", "max_attempts",
-    "parallelism", "max_parallelism", "min_parallelism"
+    "parallelism", "max_parallelism", "min_parallelism", "arguments"
   };
 
   // States a job can be in.
@@ -186,8 +189,7 @@ public class StorkServer implements Runnable {
                        String.format("%d.%02ds", s, i/10);
     }
 
-    // Sets the status of the job and updates the ClassAd accordingly. Also
-    // stops any running job if we're leaving the processing state.
+    // Sets the status of the job and updates the ClassAd accordingly.
     public synchronized void set_status(JobStatus s) {
       status = s;
 
@@ -228,6 +230,7 @@ public class StorkServer implements Runnable {
         case processing:
           if (transfer != null) transfer.stop();
           run_duration = since(start_time);
+          transfer = null;
 
         // Fall through to set removed status.
         case scheduled:
@@ -299,6 +302,7 @@ public class StorkServer implements Runnable {
 
       if (rv == 0) {  // Job successful!
         set_status(JobStatus.complete);
+        transfer = null;
         return;
       }
 
@@ -308,6 +312,7 @@ public class StorkServer implements Runnable {
 
         set_attempts(attempts+1);
         System.out.println("Job "+job_id+" failed! Rescheduling...");
+        transfer = null;
 
         try {
           queue.put(this);
@@ -316,19 +321,22 @@ public class StorkServer implements Runnable {
         }
       } else {
         System.out.println("Job "+job_id+" failed!");
+        transfer = null;
         set_status(JobStatus.failed);
         set_attempts(attempts);
       }
     }
   }
 
-  // A thread which runs continuously and starts jobs as they're added.
-  // TODO: Replace with thread pool.
-  private class StorkQueueThread extends Thread {
+  // A thread which runs continuously and starts jobs as they're found.
+  private static class StorkQueueThread extends Thread {
     // Continually remove jobs from the queue and start them.
     public void run() {
+      System.out.println("Thread "+getId()+": starting");
+      
       while (true) try {
         StorkJob job = queue.take();
+        System.out.print("Thread "+getId()+": ");
         System.out.println("Pulled job from queue");
 
         // Some sanity checking
@@ -337,8 +345,9 @@ public class StorkServer implements Runnable {
           continue;
         }
 
-        new Thread(job).start();
+        job.run();
       } catch (Exception e) {
+        System.out.print("Thread "+getId()+": ");
         System.out.println("Something bad happened in StorkQueueThread...");
         e.printStackTrace();
       }
@@ -356,7 +365,7 @@ public class StorkServer implements Runnable {
       Iterable<StorkJob> list = all_jobs;
       EnumSet<JobStatus> filter = null;
       String type = ad.get("status");
-      Range range, nfr = null;
+      Range range, nfr = new Range();
       int count = 0;
       boolean missed = false;
 
@@ -402,9 +411,7 @@ public class StorkServer implements Runnable {
         s.flush();
       } catch (IndexOutOfBoundsException oobe) {
         missed = true;
-        if (nfr == null)
-          nfr = new Range(i);
-        else nfr.swallow(i);
+        nfr.swallow(i);
       } catch (Exception e) {
         return new ResponseAd("error", e.getMessage());
       }
@@ -412,11 +419,12 @@ public class StorkServer implements Runnable {
       // Inform user of count and any missing jobs.
       ResponseAd res = new ResponseAd("success");
 
-      if (missed && count == 0)
-        res = new ResponseAd("error", "no jobs found");
-      else if (nfr != null)
-        res = new ResponseAd("notice",
-                             "the following job ids were not found: "+nfr);
+      if (!nfr.isEmpty()) {
+        if (count == 0)
+          res.set("error", "no jobs found");
+        else
+          res.insert("not_found", nfr.toString());
+      }
 
       res.insert("count", count);
       return res;
@@ -485,24 +493,28 @@ public class StorkServer implements Runnable {
     public ResponseAd handle(OutputStream s, ClassAd ad) {
       StorkJob j;
       String reason = "removed by user";
+      Range r, cdr = new Range();
 
       if (!ad.has("range"))
         return new ResponseAd("error", "no job_id specified");
 
+      r = Range.parseRange(ad.get("range"));
+
+      if (r == null)
+        return new ResponseAd("could not parse range");
+
       if (ad.has("reason"))
         reason = reason+" ("+ad.get("reason")+")";
 
-      // Get the range of jobs to remove.
-      // TODO: Use a range, not specific dap id.
-      int job_id = Integer.parseInt(ad.get("range"));
-
       // Find ad in job list, set it as removed.
-      try {
+      for (int job_id : r) try {
         j = all_jobs.get(job_id-1);
         queue.remove(j);
         j.remove(reason);
+      } catch (IndexOutOfBoundsException oobe) {
+        cdr.swallow(job_id);
       } catch (Exception e) {
-        return new ResponseAd("error", "could not remove job with id "+job_id);
+        return new ResponseAd("error", e.getMessage());
       }
 
       return new ResponseAd("success");
@@ -510,8 +522,8 @@ public class StorkServer implements Runnable {
   }
 
   private static class StorkInfoHandler implements StorkCommand {
-    public ResponseAd handle(OutputStream s, ClassAd ad) {
-      // Send transfer module information
+    // Send transfer module information
+    ResponseAd sendModuleInfo(OutputStream s) {
       for (TransferModule tm : xfer_modules.values()) {
         try {
           s.write(tm.info_ad().getBytes());
@@ -519,9 +531,22 @@ public class StorkServer implements Runnable {
         } catch (Exception e) {
           return new ResponseAd("error", e.getMessage());
         }
-      }
+      } return new ResponseAd("success");
+    }
 
-      return new ResponseAd("success");
+    // TODO: Send server information.
+    ResponseAd sendServerInfo(OutputStream s) {
+      return new ResponseAd("error", "not yet implemented");
+    }
+
+    public ResponseAd handle(OutputStream s, ClassAd ad) {
+      String type = ad.get("type", "module");
+
+      if (type.equals("module"))
+        return sendModuleInfo(s);
+      if (type.equals("server"))
+        return sendServerInfo(s);
+      return new ResponseAd("error", "invalid type: "+type);
     }
   }
 
@@ -644,8 +669,21 @@ public class StorkServer implements Runnable {
     // Populate module list
     populate_modules();
 
-    // Start the queue reader thread
-    new StorkQueueThread().start();
+    // Initialize thread pool based on config.
+    int tnum = conf.getInt("max_jobs", -1);
+
+    if (tnum < 1) {
+      tnum = 10;
+      System.out.println("Warning: invalid value for max_jobs, "+
+                         "defaulting to "+tnum);
+    }
+
+    thread_pool = new Thread[tnum];
+    
+    for (int i = 0; i < thread_pool.length; i++) {
+      thread_pool[i] = new StorkQueueThread();
+      thread_pool[i].start();
+    }
 
     // Listen for new connections on the socket
     while (true) try {

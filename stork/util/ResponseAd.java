@@ -46,6 +46,11 @@ public class ResponseAd extends ClassAd {
     message = m;
   }
 
+  public void set(String c, String m) {
+    setResponse(c);
+    setMessage(m);
+  }
+
   // Return a string showing the response and message.
   public String toDisplayString() {
     return response + ((message != null) ? ": "+message : "");

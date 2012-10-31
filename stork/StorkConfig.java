@@ -25,7 +25,7 @@ public class StorkConfig extends ClassAd {
   // Called from constructor to set some default values used in Stork.
   private void init_defaults() {
     insert("port", 38924);
-    insert("libexec", "/home/bwross/test/jstork/libexec");  // FIXME
+    insert("libexec", "../libexec");  // FIXME
   }
 
   // Determine the location of the config file. Returns null if nothing can

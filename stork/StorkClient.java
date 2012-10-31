@@ -57,26 +57,25 @@ public class StorkClient {
 
   private static class StorkQHandler extends StorkCommand {
     ResponseAd _handle(String[] args) throws IOException {
-      int received = 0, expecting = -1;
+      int received = 0, expecting;
       ClassAd ad = new ClassAd();
-      ad.insert("command", "stork_q");
-
-      // See if we're getting the whole queue or a range
-      Range range = null;
+      Range range = new Range();
+      String not_found;
       String status = null;
 
+      ad.insert("command", "stork_q");
+
+      // Parse arguments
       for (String s : args) {
         if (s == args[0]) continue;
         Range r = Range.parseRange(s);
         if (r == null)
           status = s;
-        else if (range != null)
-          range.swallow(r);
         else
-          range = r;
+          range.swallow(r);
       }
 
-      if (range != null)
+      if (!range.isEmpty())
         ad.insert("range", range.toString());
       if (status != null)
         ad.insert("status", status);
@@ -86,38 +85,38 @@ public class StorkClient {
       os.flush();
 
       // Read and print ClassAds until response ad is found
-      while (true) {
-        ad = ClassAd.parse(is);
+      for (ad = ClassAd.parse(is); !ad.has("response"); received++) {
+        if (ad.error())
+          return new ResponseAd(ad);
 
-        if (ad.error()) return new ResponseAd(ad);
-
-        // We're done once we get a response ad.
-        if (ResponseAd.is(ad)) {
-          String msg = null;
-          ResponseAd res = new ResponseAd(ad);
-
-          if (res.has("count"))
-            expecting = res.getInt("count");
-
-          // Report how many ads we received.
-          if (expecting >= 0 && received != expecting)
-            msg = "Warning: expecting "+expecting+" job ad(s), "+
-                  "but received "+received+"!";
-          else if (received > 0)
-            msg = "Received "+received+" job ad(s)";
-          else if (res.success())
-            msg = "No jobs found...";
-
-          if (msg != null)
-            System.out.print(msg+"\n\n");
-
-          return res;
-        }
-
-        // Print the ad if it wasn't a response ad.
         System.out.print(ad+"\n\n");
-        received++;
+        ad = ClassAd.parse(is);
       }
+
+      // We're done once we get a response ad.
+      String msg = null;
+      ResponseAd res = new ResponseAd(ad);
+
+      expecting = res.getInt("count");
+      not_found = res.get("not_found");
+
+      // Report how many ads we received.
+      if (expecting >= 0 && received != expecting) {
+        msg = "Warning: expecting "+expecting+" job ad(s), "+
+              "but received "+received+"!\n";
+      } else if (received > 0) {
+        msg = "Received "+received+" job ad(s)";
+        if (not_found != null)
+          msg += ", but some jobs not found: "+not_found+"\n";
+        else
+          msg += ".\n";
+      } else if (res.success()) {
+        msg = "No jobs found...\n";
+      }
+
+      if (msg != null) System.out.println(msg);
+
+      return res;
     }
   }
 
@@ -165,7 +164,7 @@ public class StorkClient {
       while (true) {
         ad = ClassAd.parse(is);
 
-        if (ad == null)
+        if (ad.error())
           return new ResponseAd("error", "couldn't parse ad from server");
 
         if (!ad.has("response"))
@@ -291,15 +290,11 @@ public class StorkClient {
     try {
       ad = cmd_handlers.get(cmd).handle(args, server_sock);
     } catch (Exception e) {
-      throw new Exception("Client doesn't know command: "+cmd);
+      throw new Exception("Unknown command: "+cmd);
     }
 
-    // Check response ad
-    if (!ad.has("response"))
-      throw new Exception("Got invalid response from server");
-
     // Print response ad
-    System.out.println("Done: "+ad.toDisplayString());
+    System.out.println("Done. "+ad.toDisplayString());
 
     return ad;
   }
@@ -322,26 +317,33 @@ public class StorkClient {
     StorkClient client;
     String cmd;
 
+    // Parse config file
     try {
-      // Parse config file
       conf = new StorkConfig();
 
       // Parse arguments
-      if (args.length < 1) {
-        System.err.println("Must give client command");
-        System.exit(1);
-      }
+      if (args.length < 1)
+        throw new Exception("Must give client command");
 
-      // Get command then recheck arguments
+      // Get command. TODO: Recheck arguments
       cmd = args[0];
 
-      client = new StorkClient(conf.getInt("port"));
-      ClassAd ad = client.send_command(cmd, args);
+      // Connect to Stork server.
+      try {
+        client = new StorkClient(conf.getInt("port"));
+      } catch (Exception e) {
+        throw new Exception("Couldn't connect to server: "+e);
+      }
 
-      System.exit(ad.get("response").equals("success") ? 0 : 1);
+      // Send command to server.
+      try {
+        ClassAd ad = client.send_command(cmd, args);
+        System.exit(ad.get("response").equals("success") ? 0 : 1);
+      } catch (Exception e) {
+        throw new Exception("Couldn't send "+cmd+": "+e);
+      }
     } catch (Exception e) {
       System.out.println("Error: "+e.getMessage());
-      e.printStackTrace();
       System.exit(1);
     }
   }
