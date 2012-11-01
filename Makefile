@@ -2,10 +2,11 @@ PROJECT = stork
 PACKAGES = stork stork/util stork/module
 
 CLASSPATH = '.:lib/EXTRACTED/:build'
-JFLAGS = -g -cp $(CLASSPATH) -verbose -Xlint:unchecked
+JFLAGS = -J-Xms512m -J-Xmx512m -g -cp $(CLASSPATH) -verbose -Xlint:unchecked
+JARFLAGS = -J-Xms512m -J-Xmx512m
 JC = javac
 JAVA = java
-JAR = jar
+JAR = jar $(JARFLAGS)
 
 .PHONY: all install clean init release
 .SUFFIXES: .java .class
