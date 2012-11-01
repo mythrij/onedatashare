@@ -7,6 +7,6 @@
 }
 
 # Transfer the file
-/usr/local/globus-5.2.2/bin/globus-url-copy $@
+exec /usr/local/globus-5.2.2/bin/globus-url-copy $@
 
 exit $?

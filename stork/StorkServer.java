@@ -174,14 +174,14 @@ public class StorkServer implements Runnable {
     }
 
     // Given a duration in ms, return a pretty string representation.
-    private static String pretty_time(int t) {
+    private static String pretty_time(long t) {
       if (t < 0) return null;
 
-      int i = t % 1000,
-          s = (t/=1000) % 60,
-          m = (t/=60) % 60,
-          h = (t/=60) % 24,
-          d = t / 24;
+      long i = t % 1000,
+           s = (t/=1000) % 60,
+           m = (t/=60) % 60,
+           h = (t/=60) % 24,
+           d = t / 24;
 
       return (d > 0) ? String.format("%dd%02dh%02dm%02ds", d, h, m, s) :
              (h > 0) ? String.format("%dh%02dm%02ds", h, m, s) :
@@ -201,12 +201,8 @@ public class StorkServer implements Runnable {
     public synchronized void set_message(String m) {
       message = m;
 
-      if (cached_ad != null) {
-        if (m != null)
-          cached_ad.insert("message", m);
-        else
-          cached_ad.remove("message");
-      }
+      if (cached_ad != null)
+        cached_ad.insert("message", m);
     }
 
     // Set the attempts counter.
@@ -287,8 +283,7 @@ public class StorkServer implements Runnable {
         aux_ad = ad;
 
         // Check if we have message; unset if present and empty string.
-        if (aux_ad.has("message"))
-          message = aux_ad.get("message");
+        message = aux_ad.get("message", message);
         if (message != null && message.isEmpty())
           message = null;
 
@@ -406,7 +401,7 @@ public class StorkServer implements Runnable {
           continue; 
         count++;
 
-        System.out.println("Sending :"+j.getAd());
+        System.out.println("Sending: "+j.getAd());
         s.write(j.getAd().getBytes());
         s.flush();
       } catch (IndexOutOfBoundsException oobe) {
