@@ -21,6 +21,7 @@ public class ExternalModule extends TransferModule {
     long bytes_xferred = 0, bytes_total = 0;
     int rv = -1;
     Process proc = null;
+    InputStream proc_is = null;
 
     ExternalTransfer(ClassAd job) {
       this.job = job;
@@ -47,12 +48,15 @@ public class ExternalModule extends TransferModule {
       try {
         proc = (args != null) ? execute(args+" "+src+" "+dest) :
                                 execute(src+" "+dest);
+        proc_is = proc.getInputStream();
       } catch (Exception e) {
         rv = 255; return;
       }
     }
 
-    public void start() { run(); }
+    public void start() {
+      run();
+    }
 
     public void stop() {
       try {
@@ -73,10 +77,22 @@ public class ExternalModule extends TransferModule {
 
     // Get an update ad from the job.
     public ClassAd getAd() {
-      if (proc != null)
-        return ClassAd.parse(proc.getInputStream());
-      else
+      if (proc != null && proc_is != null) try {
+        ClassAd ad = ClassAd.parse(proc_is);
+
+        if (ad.error()) {
+          proc_is.close();
+          proc_is = null;
+          return null;
+        }
+        
+        return ad;
+      } catch (Exception e) {
+        ClassAd ad = new ResponseAd("error", e.getMessage());
         return null;
+      } else {
+        return null;
+      }
     }
   }
 

@@ -159,6 +159,9 @@ public class StorkServer implements Runnable {
           ad.insert("run_duration", pretty_time(run_duration));
       }
 
+      if (rv >= 0)
+        ad.insert("exit_status", rv);
+
       // Add elapsed time if processing
       if (status == JobStatus.processing)
         ad.insert("run_duration", pretty_time(since(start_time)));
@@ -325,13 +328,16 @@ public class StorkServer implements Runnable {
 
   // A thread which runs continuously and starts jobs as they're found.
   private static class StorkQueueThread extends Thread {
+    private static int next_id = 1;
+    private int id = next_id++;
+
     // Continually remove jobs from the queue and start them.
     public void run() {
-      System.out.println("Thread "+getId()+": starting");
+      System.out.println("Thread "+id+" starting...");
       
       while (true) try {
         StorkJob job = queue.take();
-        System.out.print("Thread "+getId()+": ");
+        System.out.print("Thread "+id+": ");
         System.out.println("Pulled job from queue");
 
         // Some sanity checking
@@ -342,7 +348,7 @@ public class StorkServer implements Runnable {
 
         job.run();
       } catch (Exception e) {
-        System.out.print("Thread "+getId()+": ");
+        System.out.print("Thread "+id+": ");
         System.out.println("Something bad happened in StorkQueueThread...");
         e.printStackTrace();
       }

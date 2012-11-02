@@ -6,7 +6,9 @@
   exit 0
 }
 
-# Transfer the file
-exec /usr/local/globus-5.2.2/bin/globus-url-copy $@
+message () { echo "[ message = \"$@\"; ]"; }
+  
+message "beginning transfer..."
+exec globus-url-copy $@
 
 exit $?
