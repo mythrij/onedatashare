@@ -199,21 +199,37 @@ public class StorkClient {
     }
 
     // Attempt to submit a job and return a response ad.
-    private ResponseAd submit_job(ClassAd job_ad) {
-      job_ad.insert("command", "stork_submit");
+    private ResponseAd submit_job(ClassAd ad) {
+      ad.insert("command", "stork_submit");
+
+      // Replace x509_proxy in job ad.
+      // TODO: A better way of doing this would be nice...
+      String proxy = ad.get("x509_file");
+      ad.remove("x509_file");
+
+      if (proxy != null) try {
+        File f = new File(proxy);
+        Scanner s = new Scanner(f);
+        StringBuffer sb = new StringBuffer();
+
+        while (s.hasNextLine())
+          sb.append(s.nextLine()+"\n");
+        
+        if (sb.length() > 0)
+          ad.insert("x509_proxy", sb.toString());
+      } catch (Exception e) {
+        System.out.println("Couldn't open x509_file...");
+      }
 
       // Write ad
       try {
-        os.write(job_ad.getBytes());
+        os.write(ad.getBytes());
         os.flush();
       } catch (Exception e) {
         return new ResponseAd("error", e.getMessage());
       }
 
-      // Get response
-      ClassAd ad = ClassAd.parse(is);
-
-      return new ResponseAd(ad);
+      return new ResponseAd(ClassAd.parse(is));
     }
 
     // Submit multiple ads from a stream, return ad reporting statistics.
