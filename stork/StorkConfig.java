@@ -5,12 +5,6 @@ import stork.util.*;
 
 import java.util.*;
 import java.io.*;
-import condor.classad.AttrName;
-import condor.classad.ClassAdParser;
-import condor.classad.ClassAdWriter;
-import condor.classad.Constant;
-import condor.classad.Expr;
-import condor.classad.RecordExpr;
 
 // A class to read a config file, parse command line options, and allow
 // the configuration information to be retrieved.
@@ -59,7 +53,7 @@ public class StorkConfig extends ClassAd {
       throw new Exception("STORK_CONFIG not set and couldn't "+
                           "find stork.conf in default locations");
     if (!file.canRead())
-      throw new Exception("Couldn't open config file '"+file.getName()+"'");
+      throw new Exception("couldn't open config file '"+file.getName()+"'");
 
     // Read whole file.
     while ((line = lnr.readLine()) != null) {
@@ -74,7 +68,7 @@ public class StorkConfig extends ClassAd {
       
       // Error checking.
       if (ad == null)
-        throw new Exception("Error parsing config file at line "+
+        throw new Exception("couldn't parse config file at line "+
                             lnr.getLineNumber());
 
       importAd(ad);

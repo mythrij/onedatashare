@@ -19,7 +19,7 @@ import condor.classad.*;
 // ClassAd package. The intent is to make ClassAds less cumbersome to use.
 
 public class ClassAd implements Iterable<String> {
-  private RecordExpr record;
+  protected RecordExpr record;
   private boolean error = false;
 
   // This is kind of a hacky thing. These ads are returned by parse when
@@ -99,16 +99,16 @@ public class ClassAd implements Iterable<String> {
   // Each accessor can optionally have a default value passed as a second
   // argument to be returned if no entry with the given name exists.
 
-  // Check if the ClassAd has an entry.
-  public boolean has(String s) {
-    return record.lookup(s) != null;
+  // Check if the ClassAd has all of given entries.
+  public boolean has(String... keys) {
+    return require(keys) == null;
   }
 
-  // Get an entry from the ad as a string. Defaults to null.
+  // Get an entry from the ad as a string. Default: null
   public String get(String s) {
     return get(s, null);
   } public String get(String s, String def) {
-    Expr e = record.lookup(s);
+    Expr e = getExpr(s);
 
     if (e == null)
       return def;
@@ -122,7 +122,7 @@ public class ClassAd implements Iterable<String> {
   public int getInt(String s) {
     return getInt(s, -1);
   } public int getInt(String s, int def) {
-    Expr e = record.lookup(s);
+    Expr e = getExpr(s);
 
     if (e != null) switch (e.type) {
       case Expr.INTEGER:
@@ -140,7 +140,7 @@ public class ClassAd implements Iterable<String> {
   public double getDouble(String s) {
     return getDouble(s, Double.NaN);
   } public double getDouble(String s, double def) {
-    Expr e = record.lookup(s);
+    Expr e = getExpr(s);
 
     if (e != null) switch (e.type) {
       case Expr.REAL:
@@ -158,7 +158,7 @@ public class ClassAd implements Iterable<String> {
   public boolean getBoolean(String s) {
     return getBoolean(s, false);
   } public boolean getBoolean(String s, boolean def) {
-    Expr e = record.lookup(s);
+    Expr e = getExpr(s);
     return (e != null) ? e.isTrue() : def;
   }
 
@@ -170,7 +170,7 @@ public class ClassAd implements Iterable<String> {
 
   // Methods for adding/removing entries
   // -----------------------------------
-  // Add new entries to the ClassAd. Return this ClassAd.
+  // Add new entries to the ClassAd. Trim input. Return this ClassAd.
   public ClassAd insert(String k, String v) {
     insert(k, Constant.getInstance(v));
     return this;
@@ -195,8 +195,9 @@ public class ClassAd implements Iterable<String> {
   }
 
   // Delete an entry from this ClassAd. Return this ClassAd.
-  public ClassAd remove(String k) {
-    record.removeAttribute(AttrName.fromString(k));
+  public ClassAd remove(String... keys) {
+    for (String k : keys)
+      record.removeAttribute(AttrName.fromString(k));
     return this;
   }
 
@@ -207,35 +208,59 @@ public class ClassAd implements Iterable<String> {
     return record.size();
   }
 
-  // Return a new ClassAd that is this ad and another ad merged together.
-  // Attributes in both ads will contain values from the second ad.
-  public ClassAd merge(ClassAd ad) {
-    return new ClassAd(this).importAd(ad);
+  // Apply a filter to this ad, returning a new filtered ad.
+  public ClassAd filter(String... keys) {
+    ClassAd new_ad = new ClassAd();
+
+    if (keys != null) for (String k : keys)
+      new_ad.insert(k, getExpr(k));
+    return new_ad;
+  } 
+
+  // Check for required fields, returning the name of the missing
+  // field, or null otherwise.
+  public String require(String... reqs) {
+    if (reqs != null) for (String k : reqs)
+      if (getExpr(k) == null) return k;
+    return null;
   }
 
-  public ClassAd importAd(ClassAd ad) {
+  // Return a new ClassAd that is one or more ads merged together.
+  // Merging happens in order, so resulting ad will contain the
+  // last value of a key.
+  public ClassAd merge(ClassAd... ads) {
+    return new ClassAd(this).importAd(ads);
+  }
+
+  public ClassAd importAd(ClassAd... ads) {
     // Insert attributes from second ad.
-    if (ad != null) for (String s : ad)
-      insert(s, ad.getExpr(s));
+    if (ads != null) for (ClassAd ad : ads)
+      for (String s : ad) insert(s, ad.getExpr(s));
     return this;
   }
 
-  // Return a new ClassAd based on this one with only fields contained
-  // in the filter array.
-  public ClassAd filter(String[] filter) {
-    ClassAd ad = new ClassAd();
-
-    for (String s : filter)
-      if (has(s)) ad.insert(s, getExpr(s));
-
-    return ad;
+  // Rename a field to another field. Does nothing if no key called from.
+  public void rename(String from, String to) {
+    Expr e = getExpr(from);
+    if (e != null) insert(to, e);
   }
 
-  // Return true only if an ad contains all the fields in the filter.
-  public boolean require(String[] filter) {
-    for (String s : filter)
-      if (!has(s)) return false;
-    return true;
+  // Return a ClassAd with strings trimmed and empty strings removed.
+  public ClassAd trim() {
+    ClassAd ad = new ClassAd();
+
+    for (String k : this) {
+      Expr e = getExpr(k);
+
+      if (e.type == Expr.STRING) {
+        String s = e.stringValue().trim();
+        if (!s.isEmpty()) ad.insert(k, s);
+      } else {
+        ad.insert(k, e);
+      }
+    }
+
+    return ad;
   }
 
   // Iterator for the internal record.

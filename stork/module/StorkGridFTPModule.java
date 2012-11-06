@@ -11,21 +11,28 @@ import org.ietf.jgss.*;
 import org.gridforum.jgss.*;
 
 public class StorkGridFTPModule extends TransferModule {
-  private static final ClassAd info_ad = new ClassAd();
-
-  private static final String pstr = "gridftp,gftp,ftp";
-  private static final String[] protocols = splitProtocols(pstr);
-
-  private static final String name = "Stork GridFTP Module";
-  private static final String version = "0.1";
+  private static ModuleInfoAd info_ad;
 
   static {
-    info_ad.insert("name", name);
-    info_ad.insert("version", version);
-    info_ad.insert("author", "Brandon Ross");
-    info_ad.insert("email", "bwross@buffalo.edu");
-    info_ad.insert("protocols", pstr);
-    info_ad.insert("accepts", "classads");
+    ClassAd ad = new ClassAd();
+    ad.insert("name", "Stork GridFTP Module");
+    ad.insert("version", "0.1");
+    ad.insert("author", "Brandon Ross");
+    ad.insert("email", "bwross@buffalo.edu");
+    ad.insert("description",
+              "A rudimentary module for FTP and GridFTP transfers.");
+    ad.insert("protocols", "gridftp,gftp,ftp");
+    ad.insert("accepts", "classads");
+    ad.insert("opt_params",
+              "parallelism,min_parallelism,max_parallelism,x509_proxy");
+
+    try {
+      info_ad = new ModuleInfoAd(ad);
+    } catch (Exception e) {
+      info_ad = null;
+      System.out.println("Fatal error parsing StorkGridFTPModule info ad");
+      System.exit(1);
+    }
   }
 
   // Ad sink to allow for ads from multiple sources.
@@ -171,7 +178,6 @@ public class StorkGridFTPModule extends TransferModule {
       // Set MLSR options.
       try {
         controlChannel.execute(new Command("OPTS", "MLST type;size;"));
-        //controlChannel.execute(new Command("OPTS", "MLSR onerror=continue"));
       } catch (Exception e) {
         System.out.println("OPTS: "+e);
       }
@@ -351,7 +357,7 @@ public class StorkGridFTPModule extends TransferModule {
   // --------------
   static class GridFTPTransfer implements StorkTransfer {
     Thread thread = null;
-    ClassAd job;
+    SubmitAd job;
     GSSCredential cred = null;
 
     FTPClient sc = null, dc = null;
@@ -362,7 +368,7 @@ public class StorkGridFTPModule extends TransferModule {
     volatile int rv = -1;
     volatile String message = null;
 
-    GridFTPTransfer(ClassAd job) {
+    GridFTPTransfer(SubmitAd job) {
       this.job = job;
     }
 
@@ -542,12 +548,8 @@ public class StorkGridFTPModule extends TransferModule {
       XferList xfer_list = null;
 
       // Make sure we have a src and dest url.
-      try {
-        su = new URI(job.get(in = "src_url"));
-        du = new URI(job.get(in = "dest_url"));
-      } catch (Exception e) {
-        fatal("couldn't parse "+in+": "+e.getMessage());
-      }
+      su = job.src;
+      du = job.dest;
 
       // Check if we were provided a proxy. If so, load it.
       if (job.has("x509_proxy")) try {
@@ -618,9 +620,10 @@ public class StorkGridFTPModule extends TransferModule {
           dc.changeDir(du.getPath());
         } finally {
           du = du.relativize(su);
+          System.out.println("relativized du: "+du);  // Debugging
         }
       } catch (Exception e) {
-        System.out.println("Couldn't make progress listener for file...");
+        fatal("error getting file size for source file");
       }
 
       // Set options according to job ad
@@ -756,12 +759,13 @@ public class StorkGridFTPModule extends TransferModule {
 
   // Methods
   // -------
-  public ClassAd info_ad() { return info_ad; }
-  public String[] protocols() { return protocols; }
-  public String name() { return name; }
-  public String version() { return version; }
+  public ModuleInfoAd infoAd() { return info_ad; }
 
-  public StorkTransfer transfer(ClassAd ad) {
+  public ClassAd validateAd(SubmitAd ad) throws Exception {
+    return ad.filter(info_ad.opt_params);
+  }
+
+  public StorkTransfer transfer(SubmitAd ad) {
     return new GridFTPTransfer(ad);
   }
 
@@ -772,17 +776,21 @@ public class StorkGridFTPModule extends TransferModule {
     StorkGridFTPModule m = new StorkGridFTPModule();
     StorkTransfer tf = null;
 
-    switch (args.length) {
-      case 0:
-        System.out.println("Enter a ClassAd:");
-        tf = m.transfer(ClassAd.parse(System.in));
-        break;
-      case 2:
-        tf = m.transfer(args[0], args[1]);
-        break;
-      default:
-        System.out.printf("Usage: %s [src_url dest_url]\n", args[0]);
-        System.exit(1);
+    try {
+      switch (args.length) {
+        case 0:
+          System.out.println("Enter a ClassAd:");
+          tf = m.transfer(new SubmitAd(ClassAd.parse(System.in)));
+          break;
+        case 2:
+          tf = m.transfer(args[0], args[1]);
+          break;
+        default:
+          System.out.printf("Usage: %s [src_url dest_url]\n", args[0]);
+          System.exit(1);
+      }
+    } catch (Exception e) {
+      System.out.println("Error: "+e.getMessage());
     }
 
     System.out.println("Starting...");

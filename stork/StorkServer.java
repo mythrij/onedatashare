@@ -19,7 +19,7 @@ public class StorkServer implements Runnable {
   private static Thread[] thread_pool;
 
   private static Map<String, StorkCommand> cmd_handlers;
-  private static Map<String, TransferModule> xfer_modules;
+  private static TransferModuleTable xfer_modules;
 
   private static LinkedBlockingQueue<StorkJob> queue;
   private static ArrayList<StorkJob> all_jobs;
@@ -31,13 +31,6 @@ public class StorkServer implements Runnable {
   // Configuration variables
   private boolean daemon = false;
   private static StorkConfig conf = new StorkConfig();
-
-  // The only fields allowed in a submit ad
-  // FIXME: sucks
-  private static String[] submit_filter = {
-    "src_url", "dest_url", "dap_type", "x509_proxy", "max_attempts",
-    "parallelism", "max_parallelism", "min_parallelism", "arguments"
-  };
 
   // States a job can be in.
   static enum JobStatus {
@@ -64,7 +57,7 @@ public class StorkServer implements Runnable {
     cmd_handlers.put("stork_info", new StorkInfoHandler());
 
     // Initialize transfer module set
-    xfer_modules = new HashMap<String, TransferModule>();
+    xfer_modules = new TransferModuleTable();
 
     // Initialize queues
     queue = new LinkedBlockingQueue<StorkJob>();
@@ -73,13 +66,85 @@ public class StorkServer implements Runnable {
 
   // Inner classes
   // -------------
+  // A class for looking up transfer modules by protocol and handle.
+  static class TransferModuleTable {
+    Map<String, TransferModule> by_proto, by_handle;
+
+    public TransferModuleTable() {
+      by_proto  = new HashMap<String, TransferModule>();
+      by_handle = new HashMap<String, TransferModule>();
+    }
+
+    // Add a transfer module to the table.
+    public void register(TransferModule tm) {
+      if (tm == null) {
+        System.out.println("Error: register called with null argument");
+        return;
+      }
+
+      // Check if handle is in use.
+      if (!by_handle.containsKey(tm.handle())) {
+        by_handle.put(tm.handle(), tm);
+        System.out.println(
+          "Registered module \""+tm+"\" [handle: "+tm.handle()+"]");
+      } else {
+        System.out.println(
+          "Warning: module handle "+tm.handle()+" in use, ignoring");
+        return;
+      }
+
+      // Add the protocols for this module.
+      for (String p : tm.protocols()) {
+        if (!by_proto.containsKey(p)) {
+          System.out.println("  Registering protocol: "+p);
+          by_proto.put(p, tm);
+        } else {
+          System.out.println(
+            "  Note: protocol "+p+" already registered, not registering");
+          continue;
+        }
+      }
+    }
+
+    // Get a transfer module based on source and destination protocol.
+    public TransferModule lookup(String sp, String dp) {
+      TransferModule tm = by_proto.get(sp);
+
+      // TODO: Cross-module lookup.
+      if (tm != by_proto.get(dp))
+        return null;
+      return tm;
+    }
+
+    // Get a transfer module by its handle.
+    public TransferModule lookup(String handle) {
+      return by_handle.get(handle);
+    }
+
+    // Get a set of all the modules.
+    public Collection<TransferModule> modules() {
+      return by_handle.values();
+    }
+
+    // Get a set of all the handles.
+    public Collection<String> handles() {
+      return by_handle.keySet();
+    }
+
+    // Get a set of all the supported protocols.
+    public Collection<String> protocols() {
+      return by_proto.keySet();
+    }
+  }
+
   // A representation of a job submitted to Stork. When this job is
   // run by a thread, start the transfer, and read aux_ads from it
   // until the job completes.
   // TODO: Make this less hacky with the filters and such.
   static class StorkJob implements Runnable {
     JobStatus status;
-    ClassAd job_ad, aux_ad;
+    SubmitAd job_ad;
+    ClassAd aux_ad;
     StorkTransfer transfer;
     TransferModule tm;
 
@@ -93,35 +158,10 @@ public class StorkServer implements Runnable {
     ClassAd cached_ad = null;
 
     // Create a StorkJob from a job ad.
-    // TODO: Replace with JobAd special ad.
-    public StorkJob(ClassAd ad) {
-      job_ad = new ClassAd(ad);
+    public StorkJob(SubmitAd ad) {
+      job_ad = ad;
+      tm = ad.tm;
       set_status(JobStatus.scheduled);
-
-      URI src_url, dest_url;
-      String sp, dp;
-
-      // Sanitize URLs
-      try {
-        src_url  = new URI(ad.get("src_url"));
-        dest_url = new URI(ad.get("dest_url"));
-        job_ad.insert("src_url", src_url.toString());
-        job_ad.insert("dest_url", dest_url.toString());
-      } catch (Exception e) {
-        set_status(JobStatus.failed);
-        set_message("could not parse src_url or dest_url");
-        return;
-      }
-
-      // Check if transfer module exists for job.
-      sp = src_url.getScheme();
-      dp = dest_url.getScheme();
-      tm = xfer_modules.get(sp);
-
-      if (tm == null || tm != xfer_modules.get(dp)) {
-        set_status(JobStatus.failed);
-        set_message("could not find transfer module for "+sp+" -> "+dp);
-      }
 
       // Set the submit time for the job
       submit_time = get_server_time();
@@ -137,6 +177,7 @@ public class StorkServer implements Runnable {
         ad = new ClassAd(job_ad);
 
         // Remove sensitive stuff.
+        // TODO: Better method...
         ad.remove("x509_proxy");
 
         // Merge auxilliary ad if there is one.
@@ -148,6 +189,7 @@ public class StorkServer implements Runnable {
 
         // Add other job information.
         ad.insert("status", status.toString());
+        ad.insert("module", tm.handle());
 
         if (job_id > 0)
           ad.insert("job_id", job_id);
@@ -434,38 +476,37 @@ public class StorkServer implements Runnable {
 
   private static class StorkSubmitHandler implements StorkCommand {
     public ResponseAd handle(OutputStream s, ClassAd ad) {
-      // Filter unexpected submit ad attributes.
-      ad = ad.filter(submit_filter);
+      SubmitAd sad;
 
-      // Validate ad
-      String src  = ad.get("src_url");
-      String dest = ad.get("dest_url");
-      String type = ad.get("dap_type");
-      URI src_url, dest_url;
-
-      if (src == null)
-        return new ResponseAd("error", "missing src_url");
-      if (dest == null)
-        return new ResponseAd("error", "missing dest_url");
-
-      // Parse source and dest URLs
-      // TODO: Report which URL couldn't be parsed and why
+      // Try to interpret ad as a submit ad.
       try {
-        src_url  = new URI(src);
-        dest_url = new URI(dest);
+        sad = new SubmitAd(ad);
+        TransferModule tm;
+        String handle = StorkUtil.normalize(sad.get("module"));
+
+        // See if job specially requests a module.
+        if (!handle.isEmpty()) {
+          tm = xfer_modules.lookup(handle);
+
+          if (tm == null)
+            throw new Exception("no module with name \""+handle+"\"");
+        } else {
+          // Check for transfer modules for URLs.
+          // TODO: Check for inter-module transfers later.
+          String sp = sad.src_proto, dp = sad.dest_proto;
+          tm = xfer_modules.lookup(sp, dp);
+
+          if (tm == null)
+            throw new Exception("cannot transfer "+sp+" -> "+dp);
+        }
+
+        // Make sure transfer module likes job ad.
+        sad.setModule(tm);
       } catch (Exception e) {
-        return new ResponseAd("error", "error parsing URLs");
+        return new ResponseAd("error", e.getMessage());
       }
 
-      // Check that requested protocols are supported
-      String sp = src_url.getScheme(), dp = dest_url.getScheme();
-
-      if (sp == null || !xfer_modules.containsKey(sp))
-        return new ResponseAd("error", "src_url protocol not supported");
-      if (dp == null || !xfer_modules.containsKey(dp))
-        return new ResponseAd("error", "dest_url protocol not supported");
-
-      StorkJob job = new StorkJob(ad);
+      StorkJob job = new StorkJob(sad);
 
       // Check that is ready to be processed.
       if (job.status != JobStatus.scheduled)
@@ -525,9 +566,9 @@ public class StorkServer implements Runnable {
   private static class StorkInfoHandler implements StorkCommand {
     // Send transfer module information
     ResponseAd sendModuleInfo(OutputStream s) {
-      for (TransferModule tm : xfer_modules.values()) {
+      for (TransferModule tm : xfer_modules.modules()) {
         try {
-          s.write(tm.info_ad().getBytes());
+          s.write(tm.infoAd().getBytes());
           s.flush();
         } catch (Exception e) {
           return new ResponseAd("error", e.getMessage());
@@ -616,19 +657,6 @@ public class StorkServer implements Runnable {
     } s.close();
   }
 
-  public void register_module(TransferModule tm) {
-    for (String p : tm.protocols()) {
-      // Check if already registered.
-      if (xfer_modules.containsKey(p)) {
-        System.out.println("Note: protocol "+p+" already registered, not registering");
-        continue;
-      }
-
-      System.out.println("Registering protocol: "+p+" ("+tm+")");
-      xfer_modules.put(p, tm);
-    }
-  }
-
   // Iterate over libexec directory and add transfer modules to list.
   public void populate_modules() {
     File libexec = new File(conf.get("libexec"));
@@ -639,24 +667,27 @@ public class StorkServer implements Runnable {
     }
 
     // Load built-in modules.
-    register_module(new StorkGridFTPModule());
+    // TODO: Not this... Use reflection.
+    xfer_modules.register(new StorkGridFTPModule());
 
     // Iterate over and populate external module list.
+    // TODO: Do this in parallel and detect misbehaving externals.
     for (File f : libexec.listFiles()) {
       // Skip over things that obviously aren't transfer modules.
-      if (f.isDirectory() || f.isHidden() || !f.canExecute())
+      if (!f.isFile() || f.isHidden() || !f.canExecute())
         continue;
 
-      TransferModule tm = ExternalModule.create(f);
-
-      if (tm != null)
-        register_module(tm);
+      try {
+        xfer_modules.register(new ExternalModule(f));
+      } catch (Exception e) {
+        System.out.println("Warning: "+f+": "+e.getMessage());
+        e.printStackTrace();
+      }
     }
 
     // Check if anything got added.
-    if (xfer_modules.isEmpty()) {
+    if (xfer_modules.modules().isEmpty())
       System.out.println("Warning: no transfer modules registered");
-    }
   }
 
   // Get the current Unix date in ms based on server time.
@@ -739,6 +770,7 @@ public class StorkServer implements Runnable {
       server.run();
     } catch (Exception e) {
       System.out.println("Error: "+e.getMessage());
+      e.printStackTrace();
       System.exit(1);
     }
   }
