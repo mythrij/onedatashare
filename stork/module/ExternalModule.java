@@ -31,7 +31,7 @@ public class ExternalModule extends TransferModule {
       String cmd, args = job.get("arguments", "");
       String src = job.src.toString(), dest = job.dest.toString();
 
-      cmd = String.format("%s \'%s\' \'%s\'", args, src, dest).trim();
+      cmd = String.format("%s %s %s", args, src, dest).trim();
 
       // Don't run twice!
       if (proc != null) return;
