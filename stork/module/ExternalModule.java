@@ -28,7 +28,7 @@ public class ExternalModule extends TransferModule {
     // parallel. Maybe have some additional checks?
     public void run() {
       // Get arguments from ClassAd
-      String cmd, args = job.get("arguments");
+      String cmd, args = job.get("arguments", "");
       String src = job.src.toString(), dest = job.dest.toString();
 
       cmd = String.format("%s \'%s\' \'%s\'", args, src, dest).trim();
