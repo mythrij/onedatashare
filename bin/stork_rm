@@ -1,3 +1,5 @@
 #!/bin/sh
-cd `dirname $0`
-java -Xms512m -Xmx512m -cp stork.jar stork.StorkClient stork_rm $@
+JARDIR=`dirname $0`
+CLASS=stork.StorkClient
+CMD=`basename $0`
+java "-Dstork.jardir=$JARDIR" -Xmx512m -cp "$JARDIR/stork.jar" $CLASS "$CMD" $@

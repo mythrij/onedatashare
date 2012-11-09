@@ -1,4 +1,5 @@
 #!/bin/sh
-cd `dirname $0`
-#java -Dorg.apache.commons.logging.Log=org.apache.commons.logging.impl.SimpleLog -Dorg.apache.commons.logging.simplelog.defaultlog=debug -cp .:stork.jar stork.StorkServer stork_server $@
-java -Xms512m -Xmx512m -cp stork.jar stork.StorkServer stork_server $@
+JARDIR=`dirname $0`
+CLASS=stork.StorkServer
+CMD=`basename $0`
+java "-Dstork.jardir=$JARDIR" -Xmx512m -cp "$JARDIR/stork.jar" $CLASS "$CMD" $@

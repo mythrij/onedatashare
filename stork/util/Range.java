@@ -120,6 +120,15 @@ public class Range implements Iterable<Integer> {
     return empty;
   }
 
+  // Get the size of the range.
+  public int size() {
+    if (empty)
+      return 0;
+    if (subrange == null)
+      return end-start+1+subrange.size();
+    return end-start+1;
+  }
+
   // Return a string representation of this range. This string
   // can be parsed back into a range.
   public String toString() {

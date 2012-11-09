@@ -538,7 +538,7 @@ public class StorkServer implements Runnable {
       Range r, cdr = new Range();
 
       if (!ad.has("range"))
-        return new ResponseAd("error", "no job_id specified");
+        return new ResponseAd("error", "no job_id range specified");
 
       r = Range.parseRange(ad.get("range"));
 
@@ -559,7 +559,13 @@ public class StorkServer implements Runnable {
         return new ResponseAd("error", e.getMessage());
       }
 
-      return new ResponseAd("success");
+      // See if there's anything in our "couldn't delete" range.
+      if (cdr.size() == 0)
+        return new ResponseAd("success");
+      if (cdr.size() == r.size())
+        return new ResponseAd("error", "no jobs were removed");
+      return new ResponseAd("error",
+                            "the following jobs weren't removed: "+cdr);
     }
   }
 

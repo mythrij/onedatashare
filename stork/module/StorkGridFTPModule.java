@@ -7,6 +7,7 @@ import java.io.*;
 
 import org.globus.ftp.*;
 import org.globus.ftp.vanilla.*;
+import org.globus.ftp.extended.*;
 import org.ietf.jgss.*;
 import org.gridforum.jgss.*;
 
@@ -21,7 +22,7 @@ public class StorkGridFTPModule extends TransferModule {
     ad.insert("email", "bwross@buffalo.edu");
     ad.insert("description",
               "A rudimentary module for FTP and GridFTP transfers.");
-    ad.insert("protocols", "gridftp,gftp,ftp");
+    ad.insert("protocols", "gsiftp,gridftp,ftp");
     ad.insert("accepts", "classads");
     ad.insert("opt_params",
               "parallelism,min_parallelism,max_parallelism,x509_proxy");
@@ -76,7 +77,7 @@ public class StorkGridFTPModule extends TransferModule {
     int num_done = 0, num_total = 0;
     long bytes_done = 0, bytes_total = 0;
 
-    XferList(URI s, URI d) {
+    XferList() {
       paths = new LinkedList<XferEntry>();
     }
 
@@ -117,8 +118,8 @@ public class StorkGridFTPModule extends TransferModule {
   }
 
   private static class XferEntry {
-    String path;
-    long size;
+    final String path;
+    final long size;
     boolean done = false;
 
     XferEntry(String p, long sz) {
@@ -126,102 +127,280 @@ public class StorkGridFTPModule extends TransferModule {
     }
   }
 
-  // A custom extended GridFTPClient for multifile transfers.
-  private static class StorkGFTPClient extends GridFTPClient {
-    private String[] features = null;
-    StorkGFTPClient sc, dc;
+  // A custom extended GridFTPClient that implements some undocumented
+  // operations and provides some more responsive transfer methods.
+  private static class StorkFTPClient extends GridFTPClient {
+    public boolean gridftp = false;
+    private StorkFTPClient dest = null;
+
+    private int parallelism = 1, pipelining = 50, concurrency = 1;
+
     volatile boolean aborted = false;
     Exception abort_exception = new Exception("transfer aborted");
 
-    StorkGFTPClient(String host, int port) throws Exception {
-      super(host, port);
-      sc = dc = this;
+    // Connect to a server without a credential.
+    public StorkFTPClient(URI u) throws Exception {
+      this(u, null);
     }
 
-    void setDest(StorkGFTPClient d) { dc = d; }
-    void setSrc(StorkGFTPClient s)  { sc = s; }
+    // Connect to a server based on a URL and credential.
+    public StorkFTPClient(URI u, GSSCredential cred) throws Exception {
+      super(u.getHost(), port(u.getPort(), u.getScheme()));
+
+      String ui = u.getUserInfo();
+      String user = null, pass = null;
+
+      setUsageInformation(info_ad.name, info_ad.version);
+
+      // Parse out any user information.
+      if (ui != null && !ui.isEmpty()) {
+        int i = ui.indexOf(':');
+        user = (i < 0) ? ui : ui.substring(0,i);
+        pass = (i < 0) ? "" : ui.substring(i+1);
+      }
+
+      // Try to log in if we were given a username.
+      if (cred != null)
+        authenticate(cred, user);
+      if (user != null)
+        authorize(user, pass);
+    }
+
+    // Mungy way to "default-ize" a passed port in one statement.
+    private static int port(int port, String p) throws Exception {
+      if (p == null || p.isEmpty())
+        throw new Exception("no protocol specified");
+      if (p.equals("gridftp") || p.equals("gsiftp"))
+        return (port > 0) ? port : 2811;
+      else if (p.equals("ftp"))
+        return (port > 0) ? port : 21;
+      else if (p.equals("file"))
+        return port;
+      else
+        throw new Exception("unsupported protocol: "+p);
+    }
+
+    // Set a server as this server's destination.
+    public void setDest(StorkFTPClient d) {
+      dest = d;
+    }
 
     // Some crazy undocumented voodoo magick!
     void setPerfFreq(int f) {
       try {
         Command cmd = new Command("TREV", "PERF "+f);
         controlChannel.execute(cmd);
-      } catch (Exception e) {
-        // Well it was worth a shot...
-      }
+      } catch (Exception e) { /* Well it was worth a shot... */ }
     }
 
-    // Stupid that this is private in FTPClient...
-    private class ByteDataSink implements DataSink {
-      private ByteArrayOutputStream received;
+    // A sink meant to receive MLSD lists. It contains a list of
+    // JGlobus Buffers (byte buffers with offsets) that it reads
+    // through sequentially using a BufferedReader to read lines
+    // and parse data returned by FTP and GridFTP MLSD commands.
+    private class ListSink extends Reader implements DataSink {
+      private LinkedList<Buffer> buf_list;
+      private Buffer cur_buf = null;
+      private BufferedReader br;
+      private int off = 0;
 
-      public ByteDataSink() {
-        this.received = new ByteArrayOutputStream(1000);
+      public ListSink() {
+        buf_list = new LinkedList<Buffer>();
+        br = new BufferedReader(this);
       }
 
       public void write(Buffer buffer) throws IOException {
-        this.received.write(buffer.getBuffer(), 0, buffer.getLength());
+        System.out.println("Buffer: "+new String(buffer.getBuffer()));
+        buf_list.add(buffer);
       }
 
       public void close() throws IOException { }
 
-      public ByteArrayOutputStream getData() {
-        return this.received;
+      private Buffer nextBuf() {
+        try {
+          return cur_buf = buf_list.pop();
+        } catch (Exception e) {
+          return cur_buf = null;
+        }
+      }
+
+      // Increment reader offset, getting new buffer if needed.
+      private void skip(int amt) {
+        off += amt;
+
+        // See if we need a new buffer from the list.
+        while (cur_buf != null && off >= cur_buf.getLength()) {
+          off -= cur_buf.getLength();
+          nextBuf();
+        }
+      }
+
+      // Read some bytes from the reader into a char array.
+      public int read(char[] cbuf, int co, int cl) throws IOException {
+        if (cur_buf == null && nextBuf() == null)
+          return -1;
+
+        byte[] bbuf = cur_buf.getBuffer();
+        int bl = bbuf.length - off;
+        int len = (bl < cl) ? bl : cl;
+
+        for (int i = 0; i < len; i++)
+          cbuf[co+i] = (char) bbuf[off+i];
+
+        skip(len);
+
+        // If we can write more, write more.
+        if (len < cl && cur_buf != null)
+          len += read(cbuf, co+len, cl-len);
+
+        return len;
+      }
+
+      // Read a line, updating offset.
+      private String readLine() {
+        try { return br.readLine(); }
+        catch (Exception e) { return null; }
+      }
+
+      // Get the list from the sink.
+      public XferList getList(String path) {
+        XferList xl = new XferList();
+        String line;
+
+        // Read lines from the buffer list.
+        while ((line = readLine()) != null) {
+          try {
+            MlsxEntry m = new MlsxEntry(line);
+
+            String name = m.getFileName();
+            String type = m.get("type");
+            String size = m.get("size");
+
+            if (type.equals(m.TYPE_FILE))
+              xl.add(path+name, Long.parseLong(size));
+            else if (!name.equals(".") && !name.equals(".."))
+              xl.add(path+name+"/");
+          } catch (Exception e) {
+            e.printStackTrace();
+            continue;  // Weird data I guess!
+          }
+        } return xl;
       }
     }
 
-    // GridFTP extension which does recursive listings.
-    public Vector mlsr(String path) throws Exception {
-      ByteDataSink sink = new ByteDataSink();
-      Command cmd;
+    // Recursively list directories.
+    public XferList mlsr(String path) throws Exception {
+      FTPControlChannel cc = controlChannel;
+      XferList list = new XferList();
+      boolean has_mlsr = isFeatureSupported("MLSR");
 
-      // Set MLSR options.
+      if (!path.endsWith("/")) path += "/";
+
+      LinkedList<String> dirs = new LinkedList<String>();
+      dirs.add(path);
+
       try {
-        controlChannel.execute(new Command("OPTS", "MLST type;size;"));
+        cc.execute(new Command("OPTS MLST type;size;"));
+      } catch (Exception e) { /* who cares */ }
+
+      // Early passive mode
+      cc.write(Command.PASV);
+      try {
+        Reply r = controlChannel.read();
+        String s = r.getMessage().split("[()]")[1];
+        session.serverMode = Session.SERVER_PASSIVE;
+        session.serverAddress = new HostPort(s);
+        setLocalActive();
       } catch (Exception e) {
-        System.out.println("OPTS: "+e);
+        throw new Exception("couldn't set passive mode for MLSR: "+e);
       }
 
-      cmd = new Command("MLSR", path);
-      performTransfer(cmd, sink);
+      // Keep listing and building subdirectory lists.
+      while (!dirs.isEmpty()) {
+        LinkedList<String> subdirs = new LinkedList<String>();
+        LinkedList<String> working = new LinkedList<String>();
 
-      ByteArrayOutputStream received = sink.getData();
+        System.out.println("building working list");
+        while (working.size() < pipelining && !dirs.isEmpty())
+          working.add(dirs.pop());
 
-      BufferedReader reader =
-        new BufferedReader(new StringReader(received.toString()));
+        // Pipeline commands like a champ.
+        System.out.println("piping commands");
+        for (String p : working) {
+          //cc.write(Command.PASV);
+          cc.write(new Command(has_mlsr ? "MLSR" : "MLSD", p));
+        }
 
-      System.out.println("Stuff: "+received);
+        // Read the pipelined responses like a champ.
+        System.out.println("reading piped responses");
+        for (String p : working) {
+          ListSink sink = new ListSink();
+          TransferState ts = new TransferState();
+          TransferMonitor tm;
 
-      Vector<MlsxEntry> list = new Vector<MlsxEntry>();
-      XferEntry entry = null;
-      String line = null;
+          // Interpret the pipelined PASV command.
+          /*
+          try {
+            Reply r = controlChannel.read();
+            String s = r.getMessage().split("[()]")[1];
+            session.serverMode = Session.SERVER_PASSIVE;
+            session.serverAddress = new HostPort(s);
+            setLocalActive();
+          } catch (Exception e) {
+            throw new Exception("couldn't set passive mode for MLSR: "+e);
+          }
+          */
 
-      while ((line = reader.readLine()) != null)
-        list.addElement(new MlsxEntry(line));
+          // Perform the transfer.
+          localServer.store(sink);
+
+          tm = new TransferMonitor(cc, ts, null, 50000, 2000, 1);
+          tm.setOther(tm);
+          tm.run();
+
+          if (ts.hasError()) continue;
+
+          XferList xl = sink.getList(p);
+
+          // If we did mlsr, return the list. Else, repeat.
+          if (has_mlsr)
+            return xl;
+          else for (XferEntry e : xl)
+            if (e.size == -1) subdirs.add(e.path);
+
+          list.addAll(xl);
+        }
+
+        // Get ready to repeat with new subdirs.
+        dirs.addAll(subdirs);
+      }
+
       return list;
     }
-
 
     // Call this to kill transfer.
     public void abort() {
       try {
-        sc.controlChannel.write(Command.ABOR); 
-        if (sc != dc)
-          dc.controlChannel.write(Command.ABOR); 
+        controlChannel.write(Command.ABOR); 
+        if (dest != null && dest != this)
+          dest.controlChannel.write(Command.ABOR); 
       } catch (Exception e) {
         // We don't care if aborting failed!
       }
       aborted = true;
     }
 
+    // Transfer a whole list of files.
     void transfer(XferList xl, ProgressListener pl) throws Exception {
       if (aborted)
         throw abort_exception;
 
-      sc.checkGridFTPSupport();
-      dc.checkGridFTPSupport();
+      if (dest == null)
+        throw new Exception("call setDest first");
 
-      sc.gSession.matches(dc.gSession);
+      checkGridFTPSupport();
+      dest.checkGridFTPSupport();
+
+      gSession.matches(dest.gSession);
 
       // First pipeline all the commands.
       for (XferEntry x : xl) {
@@ -231,16 +410,16 @@ public class StorkGridFTPModule extends TransferModule {
         // We have to make a directory.
         if (x.size == -1) {
           Command cmd = new Command("MKD", x.path);
-          dc.controlChannel.write(cmd);
+          dest.controlChannel.write(cmd);
         }
 
         // We have to transfer a file.
         else {
           Command dcmd = new Command("STOR", x.path);
-          dc.controlChannel.write(dcmd);
+          dest.controlChannel.write(dcmd);
 
           Command scmd = new Command("RETR", x.path);
-          sc.controlChannel.write(scmd);
+          controlChannel.write(scmd);
         }
       }
 
@@ -249,9 +428,9 @@ public class StorkGridFTPModule extends TransferModule {
         if (aborted)
           throw abort_exception;
         if (x.size == -1)  // Read and ignore mkdir results.
-          dc.controlChannel.read();
+          dest.controlChannel.read();
         else
-          sc.transferRunSingleThread(dc.controlChannel, pl);
+          transferRunSingleThread(dest.controlChannel, pl);
         xl.done(x);
         if (pl != null)
           pl.fileComplete(x);
@@ -360,7 +539,7 @@ public class StorkGridFTPModule extends TransferModule {
     SubmitAd job;
     GSSCredential cred = null;
 
-    FTPClient sc = null, dc = null;
+    StorkFTPClient sc, dc;
     URI su = null, du = null;
     ProgressListener pl = null;
     AdSink sink = new AdSink();
@@ -378,169 +557,6 @@ public class StorkGridFTPModule extends TransferModule {
       message = m;
       sink.mergeAd(new ClassAd().insert("message", m));
       if (r >= 0) sink.close();
-    }
-
-    // Try to connect to a given URL. If cred isn't null, attempt
-    // to authenticate if it's a GridFTP server. Returns a GridFTPClient
-    // or FTPClient for gridftp and ftp respectively, null if it's a
-    // file, or throws an exception if either it's an unsupported
-    // protocol or there was a problem connecting.
-    private FTPClient connect(URI u, GSSCredential cred) throws Exception {
-      FTPClient cli = null;
-      StorkGFTPClient gcli = null;
-
-      String p = u.getScheme();
-      String host = u.getHost();
-      int port = u.getPort();
-
-      String ui = u.getUserInfo();
-      String user = null, pass = null;
-
-      if (p == null)
-        throw new Exception("protocol not specified in URL");
-
-      // Parse out any user information.
-      if (ui != null && !ui.isEmpty()) {
-        int i = ui.indexOf(':');
-        user = (i < 0) ? ui : ui.substring(0,i);
-        pass = (i < 0) ? "" : ui.substring(i+1);
-      }
-
-      // Try to connect to the (Grid)FTP server.
-      if (p.equals("gridftp") || p.equals("gsiftp") || p.equals("gftp"))
-        cli = gcli = new StorkGFTPClient(host, (port > 0) ? port : 2811);
-      else if (p.equals("ftp"))
-        cli = new FTPClient(host, (port > 0) ? port : 21);
-      else if (p.equals("file"))
-        return null;
-      else throw new Exception("unsupported protocol: "+p);
-
-      // If we're using GridFTP and got a cred, try to auth with that.
-      if (gcli != null && cred != null) {
-        gcli.authenticate(cred, user);
-        //gcli.setMode(GridFTPSession.MODE_EBLOCK);
-      }
-
-      // Otherwise, try username/password if given.
-      else if (user != null)
-        cli.authorize(user, pass);
-
-      cli.setType(Session.MODE_BLOCK);
-
-      return cli;
-    } 
-
-    // Build a transfer list recursively given a source URL. The strings
-    // in the returned array should be meaningful relative to u.
-    private XferList xfer_list(String p) throws Exception {
-      String path = su.getPath()+p;
-      boolean directory = path.endsWith("/"),
-              wildcard  = path.indexOf('*') >= 0,
-              recursive = directory || wildcard;
-      XferList list = new XferList(su, du);
-
-      // If there's no source client, files come from local machine.
-      // TODO: Wildcards.
-      /*
-      if (sc == null) {
-        File file = new File(u).getAbsoluteFile();
-        File[] files = file.listFiles();
-
-        // File is not a directory, no need to recurse.
-        if (files == null) {
-          if (file.isFile())
-            return new String[] { file.getName() };
-          else  // Character device or something... ignore.
-            return new String[0];
-        }
-
-        // It's a directory, but maybe we don't want to recurse.
-        if (!recursive) return new String[0];
-
-        // Recursively build string list. Memory inefficient! :(
-        String base = file.getName()+"/";
-        strings.add(base);
-
-        for (File f : files) {
-          if (f.isFile())  // Don't recurse, it'd be a waste.
-            strings.add(base+f.getName());
-          else if (!f.isDirectory())
-            continue;
-          else for (String s : xfer_list(f.toURI()))
-            strings.add(base+s);
-        }
-
-        return (String[]) strings.toArray();
-      }
-      */
-
-      // Otherwise, it's a third party transfer. Files come from server.
-      // Is there a way we can do this without making so many calls?
-      MlsxEntry me = sc.mlst(path);
-      String type = me.get("type");
-      String size = me.get("size");
-
-      if (me == null || type == null || size == null)
-        return list;
-
-      if (type.equals(me.TYPE_FILE)) {
-        list.add(p, Long.parseLong(size));
-        return list;
-      }
-
-      // Ignore weird file types.
-      if (!type.equals(me.TYPE_DIR))
-        return list;
-
-      // TODO: This...
-      if (wildcard) {
-        return list;
-      }
-
-      // Try to list contents with MLSR.
-      if (directory && sc instanceof StorkGFTPClient) try {
-        StorkGFTPClient ssc = (StorkGFTPClient) sc;
-        for (Object o : ssc.mlsr(path)) if (o instanceof MlsxEntry) {
-          MlsxEntry m = (MlsxEntry) o;
-          String name = m.getFileName();
-          type = me.get("type");
-          size = me.get("size");
-
-          if (m.get("type").equals(m.TYPE_FILE))
-            list.add(p+name, Long.parseLong(size));
-          else if (!me.get("type").equals(me.TYPE_DIR))
-            continue;
-          else
-            list.add(p+name+"/");
-        } return list;
-      } catch (Exception e) {
-        // Don't support MLSR. :(
-      }
-
-      // It's a directory, we have to recurse.
-      if (directory) {
-        sc.setPassiveMode(true);
-        Object[] mes = sc.mlsd(path).toArray();
-        if (!p.isEmpty()) list.add(p);
-
-        for (Object o : mes) if (o instanceof MlsxEntry) {
-          MlsxEntry m = (MlsxEntry) o;
-          String name = m.getFileName();
-          type = me.get("type");
-          size = me.get("size");
-
-          if (m.get("type").equals(m.TYPE_FILE))
-            list.add(p+name, Long.parseLong(size));
-          else if (!me.get("type").equals(me.TYPE_DIR))
-            continue;
-          else if (name.equals(".") || name.equals(".."))
-            continue;
-          else
-            list.addAll(xfer_list(p+name+"/"));
-        }
-      }
-
-      return list;
     }
 
     public void process() throws Exception {
@@ -567,8 +583,8 @@ public class StorkGridFTPModule extends TransferModule {
       // Attempt to connect to hosts.
       // TODO: Differentiate between temporary errors and fatal errors.
       try {
-        in = "src";  sc = connect(su, cred);
-        in = "dest"; dc = connect(du, cred);
+        in = "src";  sc = new StorkFTPClient(su, cred);
+        in = "dest"; dc = new StorkFTPClient(du, cred);
       } catch (Exception e) {
         fatal("couldn't connect to "+in+" server: "+e);
       }
@@ -584,7 +600,7 @@ public class StorkGridFTPModule extends TransferModule {
       // Generate a transfer list from the source URL if directory,
       // and init progress listener based on list.
       if (su.getPath().endsWith("/")) try {
-        xfer_list = xfer_list("");
+        xfer_list = sc.mlsr(su.getPath());
 
         pl = new ProgressListener(sink, xfer_list);
 
@@ -610,7 +626,7 @@ public class StorkGridFTPModule extends TransferModule {
       else try {
         long size = sc.size(su.getPath());
         pl = new ProgressListener(sink, size);
-        ((StorkGFTPClient)dc).setPerfFreq(1);
+        dc.setPerfFreq(1);
 
         // Check if destination is a directory.
         if (dc != null && du.getPath().endsWith("/")) try {
@@ -663,18 +679,13 @@ public class StorkGridFTPModule extends TransferModule {
 
       // If we're doing multifile, transfer all files.
       if (xfer_list != null) try {
-        if (dc instanceof StorkGFTPClient && sc instanceof StorkGFTPClient) {
-          StorkGFTPClient gsc = (StorkGFTPClient) sc,
-                          gdc = (StorkGFTPClient) dc;
+        sc.setMode(GridFTPSession.MODE_EBLOCK);
+        dc.setMode(GridFTPSession.MODE_EBLOCK);
 
-          gsc.setMode(GridFTPSession.MODE_EBLOCK);
-          gdc.setMode(GridFTPSession.MODE_EBLOCK);
-
-          // Bulk transfer
-          gsc.setDest(gdc);
-          gsc.setActive(gdc.setPassive());
-          gsc.transfer(xfer_list, pl);
-        }
+        // Bulk transfer
+        sc.setDest(dc);
+        sc.setActive(dc.setPassive());
+        sc.transfer(xfer_list, pl);
       } catch (Exception e) {
         fatal("couldn't transfer: "+e.getMessage());
       }
@@ -809,19 +820,17 @@ public class StorkGridFTPModule extends TransferModule {
     System.out.println("Job done with exit status "+rv);
   }
 
-  public static void main3(String args[]) {
+  public static void main(String args[]) {
     URI uri;
-    StorkGFTPClient sc;
-    int port = 2811;
+    StorkFTPClient sc;
 
     try {
       // Parse URL
-      uri = new URI(args[0]);
+      uri = new URI(args[0]).normalize();
 
       // Open connection
       System.out.println("Connecting to: "+uri);
-      if (uri.getPort() > 0) port = uri.getPort();
-      sc = new StorkGFTPClient(uri.getHost(), port);
+      sc = new StorkFTPClient(uri);
 
       System.out.println("Reading credentials...");
       File cred_file = new File("/tmp/x509up_u1000");
@@ -840,14 +849,17 @@ public class StorkGridFTPModule extends TransferModule {
       sc.authenticate(cred);
 
       System.out.println("Listing...");
-      sc.mlsr(uri.getPath());
+      XferList xl = sc.mlsr(uri.getPath());
+
+      for (XferEntry e : xl)
+        System.out.println(e.path);
     } catch (Exception e) {
       System.out.println("Error: "+e);
       e.printStackTrace();
     }
   }
 
-  public static void main(String args[]) {
+  public static void main4(String args[]) {
     double thrp;  // MB/s
     TransferProgress prog = new TransferProgress();
 
