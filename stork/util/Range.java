@@ -129,6 +129,22 @@ public class Range implements Iterable<Integer> {
     return end-start+1;
   }
 
+  public int min() {
+    return start;
+  }
+
+  public int max() {
+    return (subrange == null) ? end : subrange.max();
+  }
+
+  public boolean isContiguous() {
+    return subrange == null;
+  }
+
+  public boolean isNumber() {
+    return subrange == null && start == end;
+  }
+
   // Return a string representation of this range. This string
   // can be parsed back into a range.
   public String toString() {

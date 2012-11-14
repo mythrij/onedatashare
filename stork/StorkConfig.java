@@ -10,84 +10,77 @@ import java.io.*;
 // the configuration information to be retrieved.
 
 public class StorkConfig extends ClassAd {
+  public final File file;
+
   private static String[] default_paths = {
+    System.getenv("STORK_CONFIG"),
+    System.getProperty("stork.config"),
+    System.getProperty("stork.exedir", ".")+"/stork.conf",
     "./stork.conf",
     "../stork.conf",
     "/usr/local/stork/stork.conf"
   };
 
-  // Called from constructor to set some default values used in Stork.
-  private void init_defaults() {
-    insert("port", 38924);
-    insert("libexec", "../libexec");  // FIXME
-  }
-
   // Determine the location of the config file. Returns null if nothing can
   // be found.
-  public static File default_path() {
-    File file;
-
-    // Check environment...
-    String path = System.getenv("STORK_CONFIG");
-
-    if (path != null)
-      return new File(path).getAbsoluteFile();
-
+  public static File defaultPath() {
     // Check default locations...
-    for (String s : default_paths) {
-      file = new File(s).getAbsoluteFile();
+    for (String s : default_paths) if (s != null) {
+      File file = new File(s).getAbsoluteFile();
       if (file.canRead()) return file;
-    }
-
-    return null;
+    } return null;
   }
 
-  // Parse a config file, where each line is either a comment or a
+  // Parse command line arguments, setting config values accordingly.
+  // Then parse config file, where each line is either a comment or a
   // ClassAd expression which gets merged into the config ad.
-  public void parseConfig(File file) throws Exception {
-    LineNumberReader lnr = new LineNumberReader(new FileReader(file));
-    String line;
+  public StorkConfig(String[] args) throws Exception {
+    // Initialize some defaults.
+    insert("port", 38924);
+    insert("libexec", "../libexec");
+
+    // TODO: Parse config file path from command line.
+    File file = null;
+
+    if (file == null)
+      file = defaultPath();
+
+    this.file = file;
 
     // Error checking
-    if (file == null)
-      throw new Exception("STORK_CONFIG not set and couldn't "+
-                          "find stork.conf in default locations");
-    if (!file.canRead())
-      throw new Exception("couldn't open config file '"+file.getName()+"'");
+    if (file == null) {
+      System.out.println("Warning: STORK_CONFIG not set and couldn't "+
+                         "find stork.conf in default locations");
+    } else if (!file.canRead()) {
+      System.out.println("Warning: couldn't open config file '"+file+"'");
+    } else {
+      System.out.println("Config file: "+file);
 
-    // Read whole file.
-    while ((line = lnr.readLine()) != null) {
-      // Trim whitespace.
-      line = line.trim();
+      LineNumberReader lnr = new LineNumberReader(new FileReader(file));
+      String line;
 
-      // Ignore comments and empty lines.
-      if (line.length() == 0 || line.charAt(0) == '#') continue;
+      // Read whole file.
+      while ((line = lnr.readLine()) != null) {
+        // Trim whitespace.
+        line = line.trim();
 
-      // Interpret line as a ClassAd expression.
-      ClassAd ad = parse("["+line+"]");
-      
-      // Error checking.
-      if (ad == null)
-        throw new Exception("couldn't parse config file at line "+
-                            lnr.getLineNumber());
+        // Ignore comments and empty lines.
+        if (line.length() == 0 || line.charAt(0) == '#') continue;
 
-      importAd(ad);
+        // Interpret line as a ClassAd expression.
+        ClassAd ad = parse("["+line+"]");
+
+        // Error checking.
+        if (ad.error())
+          throw new Exception("couldn't parse config file at line "+
+              lnr.getLineNumber());
+
+        importAd(ad);
+      }
     }
   }
 
-  // Parse with string path.
-  public void parseConfig(String path) throws Exception {
-    init_defaults();
-    parseConfig(new File(path));
-  }
-
-  // Parse file at default path.
-  public void parseConfig() throws Exception {
-    parseConfig(default_path());
-  }
-
-  // Constructor: initialize defaults
-  public StorkConfig() {
-    init_defaults();
+  public StorkConfig() throws Exception {
+    this(null);
   }
 }

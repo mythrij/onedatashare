@@ -30,7 +30,7 @@ public class StorkServer implements Runnable {
 
   // Configuration variables
   private boolean daemon = false;
-  private static StorkConfig conf = new StorkConfig();
+  private static StorkConfig conf;
 
   // States a job can be in.
   static enum JobStatus {
@@ -665,20 +665,15 @@ public class StorkServer implements Runnable {
 
   // Iterate over libexec directory and add transfer modules to list.
   public void populate_modules() {
-    File libexec = new File(conf.get("libexec"));
-
-    if (!libexec.isDirectory()) {
-      System.out.println("Error: libexec is not a directory!");
-      return;
-    }
+    File dir = new File(conf.file.getParentFile(), conf.get("libexec"));
 
     // Load built-in modules.
-    // TODO: Not this... Use reflection.
+    // TODO: Not this...
     xfer_modules.register(new StorkGridFTPModule());
 
     // Iterate over and populate external module list.
     // TODO: Do this in parallel and detect misbehaving externals.
-    for (File f : libexec.listFiles()) {
+    if (dir.isDirectory()) for (File f : dir.listFiles()) {
       // Skip over things that obviously aren't transfer modules.
       if (!f.isFile() || f.isHidden() || !f.canExecute())
         continue;
@@ -689,6 +684,8 @@ public class StorkServer implements Runnable {
         System.out.println("Warning: "+f+": "+e.getMessage());
         e.printStackTrace();
       }
+    } else {
+      System.out.println("Warning: libexec is not a directory!");
     }
 
     // Check if anything got added.
@@ -762,7 +759,7 @@ public class StorkServer implements Runnable {
       // Check for passed config location
 
       // Parse config file
-      conf.parseConfig();
+      conf = new StorkConfig(args);
 
       // Parse other arguments
       if (args.length > 1 && args[1].equals("-d")) {

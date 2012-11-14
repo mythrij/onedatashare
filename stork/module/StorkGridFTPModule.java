@@ -1,6 +1,7 @@
 package stork.module;
 
 import stork.util.*;
+import stork.stat.InvQuadRegression;
 import java.net.*;
 import java.util.*;
 import java.io.*;
@@ -25,7 +26,7 @@ public class StorkGridFTPModule extends TransferModule {
     ad.insert("protocols", "gsiftp,gridftp,ftp");
     ad.insert("accepts", "classads");
     ad.insert("opt_params",
-              "parallelism,min_parallelism,max_parallelism,x509_proxy");
+              "parallelism,x509_proxy");
 
     try {
       info_ad = new ModuleInfoAd(ad);
@@ -55,8 +56,7 @@ public class StorkGridFTPModule extends TransferModule {
     }
 
     public synchronized void mergeAd(ClassAd a) {
-      if (ad != null) putAd(ad.merge(a));
-      else putAd(a);
+      putAd((ad != null) ? ad.merge(a) : a);
     }
     
     // Block until an ad has come in, then clear the ad.
@@ -65,65 +65,496 @@ public class StorkGridFTPModule extends TransferModule {
         wait();
         if (closed) more = false;
         return ad;
-      } catch (Exception e) {
-        return null;
-      } return null;
+      } catch (Exception e) { }
+      return null;
     }
   }
 
-  // A list of transfers to be done by a pair of servers.
-  private static class XferList implements Iterable<XferEntry> {
-    List<XferEntry> paths;
-    int num_done = 0, num_total = 0;
-    long bytes_done = 0, bytes_total = 0;
-
-    XferList() {
-      paths = new LinkedList<XferEntry>();
-    }
-
-    // Add a directory.
-    void add(String path) {
-      paths.add(new XferEntry(path, -1));
-    }
-
-    // Add a file with a given size.
-    void add(String path, long size) {
-      paths.add(new XferEntry(path, size));
-      if (size > 0)
-        bytes_total += size;
-      num_total++;
-    }
-
-    // Merge an XferList into this one.
-    void addAll(XferList xl) {
-      paths.addAll(xl.paths);
-      num_done += xl.num_done;
-      num_total += xl.num_total;
-      bytes_done += xl.bytes_done;
-      bytes_total += xl.bytes_total;
-    }
-
-    // Mark a transfer entry as done.
-    void done(XferEntry te) {
-      if (te.done) return;
-      te.done = true;
-      if (te.size > 0)
-        bytes_done += te.size;
-      num_done++;
-    }
-
-    public Iterator<XferEntry> iterator() {
-      return paths.iterator();
-    }
-  }
-
-  private static class XferEntry {
-    final String path;
-    final long size;
+  // A tree representing a file hierarchy to be transferred.
+  static class XferTree implements Iterable<XferTree> {
+    final List<XferTree> subtrees;
+    String name;
     boolean done = false;
+    long off = 0;
+    private long size;
 
-    XferEntry(String p, long sz) {
-      path = p; size = sz;
+    // Constructor for directory.
+    XferTree(String path) {
+      subtrees = new LinkedList<XferTree>();
+      name = path;
+      size = 0;
+    }
+
+    // Constructor for file.
+    XferTree(String name, long size) {
+      subtrees = null;
+      this.name = name;
+      this.size = size;
+    }
+
+    boolean isDirectory() {
+      return subtrees != null;
+    }
+
+    boolean isFile() {
+      return subtrees == null;
+    }
+
+    void add(XferTree tree) {
+      if (isFile()) return;
+      subtrees.add(tree);
+      size += tree.size;
+    }
+
+    void add(String name, long size) {
+      add(new XferTree(name, size));
+    }
+
+    void add(String name) {
+      add(new XferTree(name));
+    }
+
+    long remaining() {
+      return (off < size) ? size-off : 0;
+    }
+
+    XferTree subtree(long size) {
+      XferTree nt = new XferTree(name);
+      long total = 0;
+
+      for (XferTree x : this) {
+        nt.add(x);
+        if (x.isFile()) total += x.remaining();
+        if (total >= size) break;
+      } return nt;
+    }
+
+    /*
+    XferTree[] split(int parts) {
+      if (parts <= 1)
+        return new XferTree[] { this };
+
+      XferTree[] a = new XferTree[parts];
+    */
+
+      
+
+    // Iterator for this thing. Returns self first, then returns
+    // children, iterating into directories recursively.
+    public Iterator<XferTree> iterator() {
+      return new Iterator<XferTree>() {
+        private XferTree me = XferTree.this;
+        private Iterator<XferTree> di  =
+          isDirectory() ? subtrees.iterator() : null;
+        private Iterator<XferTree> xi = null;
+        public boolean hasNext() {
+          return me != null || xi != null || di != null;
+        } public XferTree next() {
+          XferTree r =
+            (me != null) ? me :
+            (xi != null) ? xi.next() :
+            (di != null) ? (xi = di.next().iterator()).next() : null;
+          me = null;
+          if (xi != null && !xi.hasNext()) xi = null;
+          if (di != null && !di.hasNext()) di = null;
+          return r;
+        } public void remove() { /* maybe one day */ }
+      };
+    }
+  }
+
+  // A sink meant to receive MLSD lists. It contains a list of
+  // JGlobus Buffers (byte buffers with offsets) that it reads
+  // through sequentially using a BufferedReader to read lines
+  // and parse data returned by FTP and GridFTP MLSD commands.
+  static class ListSink extends Reader implements DataSink {
+    private LinkedList<Buffer> buf_list;
+    private Buffer cur_buf = null;
+    private BufferedReader br;
+    private int off = 0;
+
+    public ListSink() {
+      buf_list = new LinkedList<Buffer>();
+      br = new BufferedReader(this);
+    }
+
+    public void write(Buffer buffer) throws IOException {
+      buf_list.add(buffer);
+    }
+
+    public void close() throws IOException { }
+
+    private Buffer nextBuf() {
+      try {
+        return cur_buf = buf_list.pop();
+      } catch (Exception e) {
+        return cur_buf = null;
+      }
+    }
+
+    // Increment reader offset, getting new buffer if needed.
+    private void skip(int amt) {
+      off += amt;
+
+      // See if we need a new buffer from the list.
+      while (cur_buf != null && off >= cur_buf.getLength()) {
+        off -= cur_buf.getLength();
+        nextBuf();
+      }
+    }
+
+    // Read some bytes from the reader into a char array.
+    public int read(char[] cbuf, int co, int cl) throws IOException {
+      if (cur_buf == null && nextBuf() == null)
+        return -1;
+
+      byte[] bbuf = cur_buf.getBuffer();
+      int bl = bbuf.length - off;
+      int len = (bl < cl) ? bl : cl;
+
+      for (int i = 0; i < len; i++)
+        cbuf[co+i] = (char) bbuf[off+i];
+
+      skip(len);
+
+      // If we can write more, write more.
+      if (len < cl && cur_buf != null)
+        len += read(cbuf, co+len, cl-len);
+
+      return len;
+    }
+
+    // Read a line, updating offset.
+    private String readLine() {
+      try { return br.readLine(); }
+      catch (Exception e) { return null; }
+    }
+
+    // Get the list from the sink as an XferTree.
+    public XferTree getList(String path) {
+      XferTree xt = new XferTree(path);
+      String line;
+
+      // Read lines from the buffer list.
+      while ((line = readLine()) != null) {
+        try {
+          MlsxEntry m = new MlsxEntry(line);
+
+          String name = m.getFileName();
+          String type = m.get("type");
+          String size = m.get("size");
+
+          if (type.equals(m.TYPE_FILE))
+            xt.add(path+name, Long.parseLong(size));
+          else if (!name.equals(".") && !name.equals(".."))
+            xt.add(path+name);
+        } catch (Exception e) {
+          e.printStackTrace();
+          continue;  // Weird data I guess!
+        }
+      } return xt;
+    }
+  }
+
+  // Optimization  TODO: Refactor me!
+  // ------------
+  // Optimizers work by returning block structures containing portions
+  // of transfers in bytes and transfer settings for the block. When
+  // the client has transferred the block, it gives the block object with
+  // tp field filled out back to the optimizer, which the optimizer
+  // should use for statistical analysis to determine block settings.
+
+  // The class all optimizers extend.
+  static abstract class Optimizer {
+    protected long size, off = 0;
+    protected int para = 0, pipe = 0, conc = 0;
+
+    Optimizer(long size, long off) {
+      this.size = size;
+      this.off = off;
+    }
+
+    // Return a block which has this optimizers current values.
+    Block defaultBlock() {
+      Block b = new Block(off, size-off);
+      b.para = para; b.pipe = pipe; b.conc = conc;
+      return b;
+    }
+
+    abstract Block getBlock();
+    abstract void report(Block b);
+
+    boolean done() {
+      return off >= size;
+    }
+  }
+
+  static class Block {
+    long off, len;
+    int para = 0, pipe = 0, conc = 0;
+    double tp = 0;  // Throughput - filled out by caller
+
+    Block(long o, long l) {
+      off = o; len = l;
+    }
+
+    public String toString() {
+      return String.format("<off=%d, len=%d | sc=%d, tp=%.2f>", off, len, para, tp);
+    }
+  }
+
+  // An "optimizer" that just transfers the whole file in one block
+  // with whatever transfer options it's set to use.
+  static class NullOptimizer extends Optimizer {
+    NullOptimizer(long size, long off) {
+      super(size, off);
+    }
+
+    Block getBlock() {
+      return defaultBlock();
+    }
+
+    void report(Block b) {
+      off += b.len;
+    }
+  }
+
+  // Full 2nd order optimizer. Sampling starts at the parallelism
+  // minimum, and increases by powers of two (relative to the min).
+  // The sampling stops when throughput is found to have decreased
+  // sampling stops once the max parallelism is reached, taking a
+  // final sample at the maximum. Then an analysis is done, and a
+  // function describing the throughput relative to parallelism
+  // is produced and used to choose the best parallelism for the
+  // transfer.
+  static class Full2ndOptimizer extends Optimizer {
+    List<Block> samples = new ArrayList<Block>();
+    boolean warmed_up = false;
+    boolean done_sampling = false, analysis_done = false;
+    double last_tp = 0;
+    int p_base = 0, pd = 1;
+    Range p_range;
+
+    Full2ndOptimizer(long size, long off, Range p_range) {
+      super(size, off);
+      this.p_range = p_range;
+      p_base = p_range.min()-1;
+    }
+
+    Block getBlock() {
+      if (done_sampling) {
+        if (!analysis_done) doAnalysis();
+        return defaultBlock();
+      }
+
+      long sample = (long) ((size >= 5E8) ? 5E7 : size/10.0);
+
+      // Don't transfer more than what's available.
+      if (off+sample >= size)
+        sample = this.size - this.off;
+
+      // Determine if this is the last sample we want.
+      if (para >= p_range.max()) {
+        para = p_range.max();
+        done_sampling = true;
+      }
+
+      // Construct the block to transfer.
+      Block b = new Block(off, sample);
+      b.para = para;
+      return b;
+    }
+
+    void report(Block b) {
+      if (done()) return;
+
+      off += b.len;
+
+      // If that was a warm-up sample, don't change anything.
+      if (!warmed_up) {
+        System.out.println("Alright, that was a warm-up...");
+        warmed_up = true;
+      } else if (!done_sampling) {
+        // Keep the sample and calculate next parallelism.
+        System.out.println("Block: "+b);
+        samples.add(b);
+
+        pd *= 2;
+        para = p_base+pd;
+
+        if (para > p_range.max())
+          para = p_range.max();
+
+        /*  Don't do this for now...
+        if (b.tp < last_tp)
+          done_sampling = true;
+
+        last_tp = b.tp;
+        */
+      }
+    }
+
+    // Get the best parallelism from the samples.
+    int bestParallelism() {
+      double tp = 0;
+      int sc = para;
+
+      for (Block b : samples) if (b.tp > tp) {
+        tp = b.tp;
+        sc = b.para;
+      } return sc;
+    }
+
+    // Will return negative if result should be ignored.
+    double cal_err(double a, double b, double c) {
+      double sqr_sum = 0.0;
+      int n = samples.size();
+      int df = 1;
+
+      // Sum squares of differences between predicted and actual throughput
+      for (Block bl : samples) {
+        double thr = cal_thr(a, b, c, bl.para);
+        if (thr <= 0)
+          df = -1;
+        else
+          sqr_sum += (bl.tp-thr)*(bl.tp-thr);
+      }
+
+      return df * Math.sqrt(sqr_sum/n);
+    }
+
+    // Calculate the difference of two terms n2^2/thn2^2 n1^2/thn1^2 given
+    // two samples.
+    static double cal_dif(Block s1, Block s2) {
+      int n1 = s1.para, n2 = s2.para;
+      return (n1*n1/s1.tp/s1.tp - n2*n2/s2.tp/s2.tp) / (n1-n2);
+    }
+
+    static double cal_a(Block i, Block j, Block k) {
+      return (cal_dif(k, i) - cal_dif(j, i)) / (k.para - j.para);
+    }
+
+    static double cal_b(Block i, Block j, Block k, double a) {
+      return cal_dif(j, i) - (i.para + j.para) * a;
+    }
+
+    static double cal_c(Block i, Block j, Block k, double a, double b) {
+      int ni = i.para;
+      return ni*ni/i.tp/i.tp - ni*ni*a - ni*b;
+    }
+
+    // Calculate the throughput of n streams as predicted by our model.
+    static double cal_thr(double a, double b, double c, int n) {
+      if (a*n*n + b*n + c <= 0) return 0;
+      return n / Math.sqrt(a*n*n + b*n + c);
+    }
+
+    // Calculate the optimal stream count based on the prediction model.
+    static int cal_full_peak2(double a, double b, double c, Range r) {
+      int n = r.min();
+      double thr = cal_thr(a, b, c, 1);
+
+      for (int i : r) {
+        double t = cal_thr(a, b, c, i);
+        if (t < thr) return n;
+        thr = t; n = i;
+      } return r.max();
+    }
+
+    // Calculate the optimal stream count based on derivative.
+    static int cal_full_peak(double a, double b, double c, Range r) {
+      int n = (int) (-2*c/b);
+      
+      return (n > r.max()) ? r.max() :
+             (n < r.min()) ? r.min() : n;
+    }
+
+    // Perform the analysis which sets parallelism. Once the
+    // parallelism is set here, nothing else should change it.
+    private double doAnalysis2() {
+      if (samples.size() < 3) {
+        System.out.println("Not enough samples!");
+        para = bestParallelism();
+        return 0;
+      }
+
+      int i, j, k, num = samples.size();
+      double a = 0, b = 0, c = 0, err = Double.POSITIVE_INFINITY;
+      
+      // Iterate through the samples, find the "best" three.
+      for (i = 0;   i < num-2; i++)
+      for (j = i+1; j < num-1; j++)
+      for (k = j+1; k < num;   k++) {
+        Block bi = samples.get(i);
+        Block bj = samples.get(j);
+        Block bk = samples.get(k);
+
+        System.out.printf("Samples: %d %d %d\n", bi.para, bj.para, bk.para);
+        System.out.printf("         %.2f %.2f %.2f\n", bi.tp, bj.tp, bk.tp);
+
+        double a_ = cal_a(bi, bj, bk),
+               b_ = cal_b(bi, bj, bk, a_),
+               c_ = cal_c(bi, bj, bk, a_, b_),
+               err_ = cal_err(a_, b_, c_);
+        System.out.printf("Got: %.2f %.2f %.2f %.2f\n", a_, b_, c_, err_);
+
+        // If new err is better, replace old calculations.
+        if (err_ > 0 && err_ < err) {
+          err = err_; a = a_; b = b_; c = c_;
+        }
+      }
+
+      para = cal_full_peak(a, b, c, p_range);
+      analysis_done = true;
+
+      System.out.printf("ANALYSIS DONE!! Got: x/sqrt((%f)*x^2+(%f)*x+(%f)) = %d\n", a, b, c, para);
+      return err;
+    }
+
+    // Perform analysis using inverse quadratic regression.
+    private void doAnalysis() {
+      if (samples.size() < 3) {
+        System.out.println("Not enough samples!");
+        para = bestParallelism();
+        return;
+      }
+
+      // For testing, get old method's error first.
+      double err1 = doAnalysis2();
+
+      InvQuadRegression iqr = new InvQuadRegression(samples.size());
+
+      // Add transformed samples to quadratic regression.
+      for (Block s : samples) {
+        int n = s.para;
+        double th = s.tp;
+        
+        if (th < 0) {
+          System.out.println("Skipping sample: "+s);
+          continue;
+        }
+
+        iqr.add(n, 1/(th*th));
+      }
+
+      // Moment of truth...
+      double[] a = iqr.calculate();
+
+      if (a == null) {
+        System.out.println("Not enough samples!");
+        para = bestParallelism();
+        return;
+      }
+
+      para = cal_full_peak(a[0], a[1], a[2], p_range);
+      analysis_done = true;
+
+      System.out.printf("ANALYSIS DONE!! Got: x/sqrt((%f)*x^2+(%f)*x+(%f)) = %d\n", a[0], a[1], a[2], para);
+
+      // Compare errors.
+      double err2 = cal_err(a[0], a[1], a[2]);
+
+      System.out.printf("Errors: 3p = %.2f, qr = %.2f\n", err1, err2);
     }
   }
 
@@ -134,6 +565,7 @@ public class StorkGridFTPModule extends TransferModule {
     private StorkFTPClient dest = null;
 
     private int parallelism = 1, pipelining = 50, concurrency = 1;
+    private int max_parallelism = 1, min_parallelism = 1;
 
     volatile boolean aborted = false;
     Exception abort_exception = new Exception("transfer aborted");
@@ -185,6 +617,27 @@ public class StorkGridFTPModule extends TransferModule {
       dest = d;
     }
 
+    public void setParallelism(int p) {
+      p = (p < 1) ? 1 : p;
+      parallelism = p;
+      try {
+        controlChannel.execute(
+          new Command("OPTS", "RETR Parallelism="+p+","+p+","+p+";"));
+      } catch (Exception e) {
+        System.out.println("Wasn't able to set parallelism...");
+      }
+    }
+
+    public void setPipelining(int p) {
+      p = (p < 1) ? 1 : p;
+      pipelining = p;
+    }
+
+    public void setConcurrency(int c) {
+      c = (c < 1) ? 1 : c;
+      concurrency = c;
+    }
+
     // Some crazy undocumented voodoo magick!
     void setPerfFreq(int f) {
       try {
@@ -193,105 +646,37 @@ public class StorkGridFTPModule extends TransferModule {
       } catch (Exception e) { /* Well it was worth a shot... */ }
     }
 
-    // A sink meant to receive MLSD lists. It contains a list of
-    // JGlobus Buffers (byte buffers with offsets) that it reads
-    // through sequentially using a BufferedReader to read lines
-    // and parse data returned by FTP and GridFTP MLSD commands.
-    private class ListSink extends Reader implements DataSink {
-      private LinkedList<Buffer> buf_list;
-      private Buffer cur_buf = null;
-      private BufferedReader br;
-      private int off = 0;
+    // Watch a transfer as it takes place, intercepting status messages
+    // and reporting any errors. Use this for pipelined transfers.
+    public void watchTransfer(DataSink sink, MarkerListener ml)
+    throws Exception {
+      TransferState ts = new TransferState();
+      TransferMonitor tm;
+      if (sink != null) localServer.store(sink);
 
-      public ListSink() {
-        buf_list = new LinkedList<Buffer>();
-        br = new BufferedReader(this);
-      }
+      tm = new TransferMonitor(controlChannel, ts, ml, 50000, 2000, 1);
+      tm.setOther(tm);
+      tm.run();
 
-      public void write(Buffer buffer) throws IOException {
-        System.out.println("Buffer: "+new String(buffer.getBuffer()));
-        buf_list.add(buffer);
-      }
+      if (ts.hasError())
+        throw ts.getError();
+    }
 
-      public void close() throws IOException { }
-
-      private Buffer nextBuf() {
-        try {
-          return cur_buf = buf_list.pop();
-        } catch (Exception e) {
-          return cur_buf = null;
-        }
-      }
-
-      // Increment reader offset, getting new buffer if needed.
-      private void skip(int amt) {
-        off += amt;
-
-        // See if we need a new buffer from the list.
-        while (cur_buf != null && off >= cur_buf.getLength()) {
-          off -= cur_buf.getLength();
-          nextBuf();
-        }
-      }
-
-      // Read some bytes from the reader into a char array.
-      public int read(char[] cbuf, int co, int cl) throws IOException {
-        if (cur_buf == null && nextBuf() == null)
-          return -1;
-
-        byte[] bbuf = cur_buf.getBuffer();
-        int bl = bbuf.length - off;
-        int len = (bl < cl) ? bl : cl;
-
-        for (int i = 0; i < len; i++)
-          cbuf[co+i] = (char) bbuf[off+i];
-
-        skip(len);
-
-        // If we can write more, write more.
-        if (len < cl && cur_buf != null)
-          len += read(cbuf, co+len, cl-len);
-
-        return len;
-      }
-
-      // Read a line, updating offset.
-      private String readLine() {
-        try { return br.readLine(); }
-        catch (Exception e) { return null; }
-      }
-
-      // Get the list from the sink.
-      public XferList getList(String path) {
-        XferList xl = new XferList();
-        String line;
-
-        // Read lines from the buffer list.
-        while ((line = readLine()) != null) {
-          try {
-            MlsxEntry m = new MlsxEntry(line);
-
-            String name = m.getFileName();
-            String type = m.get("type");
-            String size = m.get("size");
-
-            if (type.equals(m.TYPE_FILE))
-              xl.add(path+name, Long.parseLong(size));
-            else if (!name.equals(".") && !name.equals(".."))
-              xl.add(path+name+"/");
-          } catch (Exception e) {
-            e.printStackTrace();
-            continue;  // Weird data I guess!
-          }
-        } return xl;
-      }
+    // Read and handle the response of a pipelined PASV.
+    public void getPasvReply() throws Exception {
+      Reply r = controlChannel.read();
+      String s = r.getMessage().split("[()]")[1];
+      session.serverMode = Session.SERVER_PASSIVE;
+      session.serverAddress = new HostPort(s);
+      setLocalActive();
     }
 
     // Recursively list directories.
-    public XferList mlsr(String path) throws Exception {
+    public XferTree mlsr(String path) throws Exception {
       FTPControlChannel cc = controlChannel;
-      XferList list = new XferList();
-      boolean has_mlsr = isFeatureSupported("MLSR");
+      XferTree list = new XferTree(path);
+      final String MLSR = "MLSR", MLSD = "MLSD";
+      String ls_cmd = isFeatureSupported("MLSR") ? MLSR : MLSD;
 
       if (!path.endsWith("/")) path += "/";
 
@@ -301,18 +686,6 @@ public class StorkGridFTPModule extends TransferModule {
       try {
         cc.execute(new Command("OPTS MLST type;size;"));
       } catch (Exception e) { /* who cares */ }
-
-      // Early passive mode
-      cc.write(Command.PASV);
-      try {
-        Reply r = controlChannel.read();
-        String s = r.getMessage().split("[()]")[1];
-        session.serverMode = Session.SERVER_PASSIVE;
-        session.serverAddress = new HostPort(s);
-        setLocalActive();
-      } catch (Exception e) {
-        throw new Exception("couldn't set passive mode for MLSR: "+e);
-      }
 
       // Keep listing and building subdirectory lists.
       while (!dirs.isEmpty()) {
@@ -326,48 +699,33 @@ public class StorkGridFTPModule extends TransferModule {
         // Pipeline commands like a champ.
         System.out.println("piping commands");
         for (String p : working) {
-          //cc.write(Command.PASV);
-          cc.write(new Command(has_mlsr ? "MLSR" : "MLSD", p));
+          cc.write(Command.PASV);
+          cc.write(new Command(ls_cmd, p));
         }
 
         // Read the pipelined responses like a champ.
         System.out.println("reading piped responses");
         for (String p : working) {
           ListSink sink = new ListSink();
-          TransferState ts = new TransferState();
-          TransferMonitor tm;
 
           // Interpret the pipelined PASV command.
-          /*
           try {
-            Reply r = controlChannel.read();
-            String s = r.getMessage().split("[()]")[1];
-            session.serverMode = Session.SERVER_PASSIVE;
-            session.serverAddress = new HostPort(s);
-            setLocalActive();
+            getPasvReply();
           } catch (Exception e) {
             throw new Exception("couldn't set passive mode for MLSR: "+e);
           }
-          */
 
-          // Perform the transfer.
-          localServer.store(sink);
+          watchTransfer(sink, null);
 
-          tm = new TransferMonitor(cc, ts, null, 50000, 2000, 1);
-          tm.setOther(tm);
-          tm.run();
-
-          if (ts.hasError()) continue;
-
-          XferList xl = sink.getList(p);
+          XferTree xt = sink.getList(p);
 
           // If we did mlsr, return the list. Else, repeat.
-          if (has_mlsr)
-            return xl;
-          else for (XferEntry e : xl)
-            if (e.size == -1) subdirs.add(e.path);
-
-          list.addAll(xl);
+          if (ls_cmd == MLSR)
+            return xt;
+          
+          for (XferTree e : xt)
+            if (e.isDirectory()) subdirs.add(p+"/"+e.name);
+          list.add(xt);
         }
 
         // Get ready to repeat with new subdirs.
@@ -381,8 +739,12 @@ public class StorkGridFTPModule extends TransferModule {
     public void abort() {
       try {
         controlChannel.write(Command.ABOR); 
-        if (dest != null && dest != this)
+        close();
+
+        if (dest != null && dest != this) {
           dest.controlChannel.write(Command.ABOR); 
+          dest.close();
+        }
       } catch (Exception e) {
         // We don't care if aborting failed!
       }
@@ -390,7 +752,8 @@ public class StorkGridFTPModule extends TransferModule {
     }
 
     // Transfer a whole list of files.
-    void transfer(XferList xl, ProgressListener pl) throws Exception {
+    // TODO: Refactor both transfer()s into one method.
+    void transfer(XferTree xl, ProgressListener pl) throws Exception {
       if (aborted)
         throw abort_exception;
 
@@ -403,38 +766,113 @@ public class StorkGridFTPModule extends TransferModule {
       gSession.matches(dest.gSession);
 
       // First pipeline all the commands.
-      for (XferEntry x : xl) {
+      for (XferTree x : xl) {
         if (aborted)
           throw abort_exception;
 
         // We have to make a directory.
         if (x.size == -1) {
-          Command cmd = new Command("MKD", x.path);
+          Command cmd = new Command("MKD", x.name);
           dest.controlChannel.write(cmd);
         }
 
         // We have to transfer a file.
         else {
-          Command dcmd = new Command("STOR", x.path);
+          Command dcmd = new Command("STOR", x.name);
           dest.controlChannel.write(dcmd);
 
-          Command scmd = new Command("RETR", x.path);
+          Command scmd = new Command("RETR", x.name);
           controlChannel.write(scmd);
         }
       }
 
       // Then watch the file transfers.
-      for (XferEntry x : xl) {
+      for (XferTree x : xl) {
         if (aborted)
           throw abort_exception;
         if (x.size == -1)  // Read and ignore mkdir results.
           dest.controlChannel.read();
         else
-          transferRunSingleThread(dest.controlChannel, pl);
-        xl.done(x);
+          dest.watchTransfer(null, pl);
+        //xl.done(x);
         if (pl != null)
           pl.fileComplete(x);
       } pl.transferComplete();
+    }
+
+    // Transfer a single file.
+    void transfer(SubmitAd ad, boolean opt, ProgressListener pl)
+    throws Exception {
+      Range p_range;
+      String sp = ad.src.getPath();
+      String dp = ad.dest.getPath();
+
+      if (aborted)
+        throw abort_exception;
+
+      if (dest == null)
+        throw new Exception("call setDest first");
+
+      if (sp.startsWith("/~")) sp = sp.substring(1);
+      if (dp.startsWith("/~")) dp = dp.substring(1);
+
+      checkGridFTPSupport();
+      dest.checkGridFTPSupport();
+
+      gSession.matches(dest.gSession);
+      setMode(GridFTPSession.MODE_EBLOCK);
+      dest.setMode(GridFTPSession.MODE_EBLOCK);
+
+      Optimizer optimizer;
+      long size = size(sp);
+
+      // Check min and max parallelism.
+      if (ad.has("parallelism"))
+        p_range = Range.parseRange(ad.get("parallelism"));
+      else
+        p_range = new Range(1, 64);
+
+      if (p_range == null || !p_range.isContiguous())
+        throw new Exception("parallelism must be a number or range");
+      if (p_range.min() <= 0)
+        throw new Exception("parallelism must be greater than zero");
+
+      // Initialize optimizer.
+      if (opt)
+        optimizer = new Full2ndOptimizer(size, 0, p_range);
+      else
+        optimizer = new NullOptimizer(size, 0);
+
+      optimizer.para = p_range.min();
+
+      // Begin transferring according to optimizer.
+      while (!optimizer.done()) {
+        Block b = optimizer.getBlock();
+        TransferProgress prog = new TransferProgress();
+
+        // Set parameters
+        if (b.para > 0) {
+          setParallelism(b.para);
+          if (pl != null)
+            pl.sink.mergeAd(new ClassAd().insert("parallelism", b.para));
+        }
+
+        prog.setBytes(b.len);
+        prog.transferStarted();
+
+        extendedTransfer(sp, b.off, b.len, dest, dp, b.off, pl);
+
+        prog.bytesDone(b.len);
+        prog.transferEnded();
+        b.tp = prog.throughputValue(true)/1000/1000;
+        optimizer.report(b);
+      }
+        
+      // Let the progress listener hear the good news.
+      if (pl != null) {
+        pl.fileComplete(0);
+        pl.transferComplete();
+      }
     }
   }
 
@@ -443,7 +881,7 @@ public class StorkGridFTPModule extends TransferModule {
     ClassAd ad = new ClassAd();
     int num_done = 0, num_total = 0;
     long last_bytes = 0;
-    XferList list = null;
+    XferTree list = null;
     AdSink sink;
     TransferProgress prog;
 
@@ -456,12 +894,12 @@ public class StorkGridFTPModule extends TransferModule {
     }
 
     // Multiple file transfer.
-    public ProgressListener(AdSink sink, XferList list) {
+    public ProgressListener(AdSink sink, XferTree list) {
       this.sink = sink;
       this.list = list;
       prog = new TransferProgress();
-      prog.setBytes(list.bytes_total);
-      prog.setFiles(list.num_total);
+      prog.setBytes(list.size);
+      //prog.setFiles(list.count);
       prog.transferStarted();
     }
 
@@ -486,7 +924,7 @@ public class StorkGridFTPModule extends TransferModule {
     }
 
     // Called when a file is done in a multifile transfer.
-    public void fileComplete(XferEntry e) {
+    public void fileComplete(XferTree e) {
       long diff = e.size - last_bytes;
 
       fileComplete(diff);
@@ -530,7 +968,7 @@ public class StorkGridFTPModule extends TransferModule {
 
       sink.mergeAd(ad);
     }
-  };
+  }
 
   // Transfer class
   // --------------
@@ -561,7 +999,7 @@ public class StorkGridFTPModule extends TransferModule {
 
     public void process() throws Exception {
       String in = null;  // Used for better error messages.
-      XferList xfer_list = null;
+      XferTree xfer_list = null;
 
       // Make sure we have a src and dest url.
       su = job.src;
@@ -642,33 +1080,6 @@ public class StorkGridFTPModule extends TransferModule {
         fatal("error getting file size for source file");
       }
 
-      // Set options according to job ad
-      if (job.has("parallelism")) {
-        final int def = job.getInt("parallelism", 1),
-                  min = job.getInt("min_parallelism", def),
-                  max = job.getInt("max_parallelism", def);
-
-        if (def < 1 || min < 1 || max < 1)
-          fatal("parallelism levels must be greater than zero");
-        if (min > def || def > max)
-          fatal("inconsistency in parallelism constraints");
-
-        Options o = new Options("RETR") {
-          int a = def, b = min, c = max;
-          public String getArgument() {
-            return String.format("Parallelism=%d,%d,%d;", a, b, c);
-          }
-        };
-
-        // Try to set parallelism levels.
-        try {
-          if (sc != null) sc.setOptions(o);
-          if (dc != null) dc.setOptions(o);
-        } catch (Exception e) {
-          fatal("error setting parallelism level");
-        }
-      }
-
       // Put servers into state to prepare for transfer.
       try {
         in = "src";  if (sc != null) sc.setType(Session.TYPE_IMAGE);
@@ -692,12 +1103,8 @@ public class StorkGridFTPModule extends TransferModule {
 
       // Otherwise it's a single file transfer.
       else try {
-        sc.setMode(GridFTPSession.MODE_EBLOCK);
-        dc.setMode(GridFTPSession.MODE_EBLOCK);
-
-        sc.transfer(su.getPath(), dc, du.getPath(), false, pl);
-        pl.fileComplete(0);
-        pl.transferComplete();
+        sc.setDest(dc);
+        sc.transfer(job, true, pl);
       } catch (Exception e) {
         fatal("couldn't transfer: "+e.getMessage());
       }
@@ -782,8 +1189,8 @@ public class StorkGridFTPModule extends TransferModule {
 
   // Tester
   // ------
-  public static void main2(String args[]) {
-    ClassAd ad = null;
+  public static void main(String args[]) {
+    SubmitAd ad = null;
     StorkGridFTPModule m = new StorkGridFTPModule();
     StorkTransfer tf = null;
 
@@ -791,10 +1198,13 @@ public class StorkGridFTPModule extends TransferModule {
       switch (args.length) {
         case 0:
           System.out.println("Enter a ClassAd:");
-          tf = m.transfer(new SubmitAd(ClassAd.parse(System.in)));
+          ad = new SubmitAd(ClassAd.parse(System.in));
+          break;
+        case 1:
+          ad = new SubmitAd(ClassAd.parse(new FileInputStream(args[0])));
           break;
         case 2:
-          tf = m.transfer(args[0], args[1]);
+          ad = new SubmitAd(args[0], args[1]);
           break;
         default:
           System.out.printf("Usage: %s [src_url dest_url]\n", args[0]);
@@ -804,14 +1214,35 @@ public class StorkGridFTPModule extends TransferModule {
       System.out.println("Error: "+e.getMessage());
     }
 
+    if (!ad.has("x509_proxy")) try {
+      File f = new File("/tmp/x509up_u1000");
+      Scanner s = new Scanner(f);
+      StringBuffer sb = new StringBuffer();
+
+      while (s.hasNextLine())
+        sb.append(s.nextLine()+"\n");
+
+      if (sb.length() > 0)
+        ad.insert("x509_proxy", sb.toString());
+    } catch (Exception e) {
+      System.out.println("Couldn't open x509_file...");
+    }
+
+    try {
+      ad.setModule(m);
+    } catch (Exception e) {
+      System.out.println("Error: "+e);
+    }
+
     System.out.println("Starting...");
+    tf = m.transfer(ad);
     tf.start();
 
     while (true) {
-      ad = tf.getAd();
+      ClassAd cad = tf.getAd();
 
-      if (ad != null)
-        System.out.println("Got ad: "+ad);
+      if (cad != null)
+        System.out.println("Got ad: "+cad);
       else break;
     }
 
@@ -820,7 +1251,7 @@ public class StorkGridFTPModule extends TransferModule {
     System.out.println("Job done with exit status "+rv);
   }
 
-  public static void main(String args[]) {
+  public static void main3(String args[]) {
     URI uri;
     StorkFTPClient sc;
 
@@ -849,10 +1280,10 @@ public class StorkGridFTPModule extends TransferModule {
       sc.authenticate(cred);
 
       System.out.println("Listing...");
-      XferList xl = sc.mlsr(uri.getPath());
+      XferTree xl = sc.mlsr(uri.getPath());
 
-      for (XferEntry e : xl)
-        System.out.println(e.path);
+      for (XferTree e : xl)
+        System.out.println(e.name);
     } catch (Exception e) {
       System.out.println("Error: "+e);
       e.printStackTrace();

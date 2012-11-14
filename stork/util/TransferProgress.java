@@ -62,13 +62,9 @@ public class TransferProgress {
 
     // See if we need to reset time quantum.
     if (diff > q) {
-      System.out.println("Resetting btq...");
-      System.out.println("diff/q : "+diff+"/"+q);
-      System.out.println("rlq = "+btq);
       blq = (long) (btq * q / diff);
       btq = 0;
       qr_time = now;
-      System.out.println("blq = "+blq);
     }
 
     bytes_done += bytes;

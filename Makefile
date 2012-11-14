@@ -1,5 +1,5 @@
 PROJECT = stork
-PACKAGES = stork stork/util stork/module
+PACKAGES = stork stork/util stork/module stork/stat
 
 CLASSPATH = '.:lib/EXTRACTED/:build'
 JFLAGS = -J-Xmx512m -g -cp $(CLASSPATH) -verbose -Xlint:unchecked
