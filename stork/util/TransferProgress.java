@@ -1,11 +1,16 @@
 package stork.util;
 
-// Used to track transfer progress. All times here are in ms.
+// Used to track transfer progress. Just tell this thing when some
+// bytes or a file are done and it will update its state with that
+// information and, if an AdSink is attached, publish an ad to it.
+//
+// FYI: All times here are in milliseconds!
 
 public class TransferProgress {
   private long start_time = -1, end_time = -1;
-  private long bytes_done = 0, bytes_total = 0;
-  private int  files_done = 0, files_total = 1;
+  private Progress byte_progress = new Progress();
+  private Progress file_progress = new Progress();
+  private AdSink sink = null;
 
   // Metrics used to calculate instantaneous throughput.
   private double q = 1000.0;  // Time quantum for throughput.
@@ -45,13 +50,56 @@ public class TransferProgress {
   }
 
   // Can be used to change time quantum. Minimum 1ms.
-  public void setQuantum(double t) {
+  public synchronized void setQuantum(double t) {
     q = (t < 1.0) ? 1.0 : t;
     btq = blq = 0;
   }
 
-  // Called when some number of bytes have finished transferring.
-  public void bytesDone(long bytes) {
+  // Attach an AdSink to publish progress information to.
+  public synchronized void attach(AdSink sink) {
+    this.sink = sink;
+  }
+
+  // Publish an ad to the AdSink, if there is one.
+  private synchronized void updateAd() { 
+    if (sink != null)
+      sink.mergeAd(getAd());
+  }
+
+  // Get the ClassAd representation of this transfer progress.
+  public ClassAd getAd() {
+    ClassAd ad = new ClassAd();
+    ad.insert("byte_progress", byte_progress.toString());
+    ad.insert("progress", byte_progress.toPercent());
+    ad.insert("file_progress", file_progress.toString());
+    ad.insert("throughput", throughput(false));
+    ad.insert("avg_throughput", throughput(true));
+    return ad;
+  }
+
+  // Called when a transfer starts.
+  public synchronized void transferStarted(long bytes, int files) {
+    if (start_time == -1) {
+      start_time = now();
+      byte_progress.done = file_progress.done = 0;
+      byte_progress.total = bytes;
+      file_progress.total = files;
+    updateAd();
+    }
+  }
+
+  // Called when a transfer ends.
+  public synchronized void transferEnded() {
+    if (end_time == -1) {
+      end_time = now();
+      updateAd();
+    }
+  }
+
+  // Called when some bytes/file have finished transferring.
+  public synchronized void done(long bytes) {
+    done(bytes, 0);
+  } public synchronized void done(long bytes, int files) {
     long now = now();
     long diff = 0;
 
@@ -67,31 +115,11 @@ public class TransferProgress {
       qr_time = now;
     }
 
-    bytes_done += bytes;
+    if (bytes > 0) byte_progress.add(bytes);
+    if (files > 0) file_progress.add(files);
+    updateAd();
 
-    if (bytes_done > bytes_total)
-      bytes_done = bytes_total;
-    else
-      btq += bytes;
-  }
-
-  // Called when a file has finished transferring.
-  public void fileDone(long bytes) {
-    if (++files_done > files_total)
-      files_done = files_total;
-    bytesDone(bytes);
-  }
-
-  // Called when a transfer starts.
-  public void transferStarted() {
-    if (start_time == -1)
-      start_time = now();
-  }
-
-  // Called when a transfer ends.
-  public void transferEnded() {
-    if (end_time == -1)
-      end_time = now();
+    btq += bytes;
   }
 
   // Get the throughput in bytes per second. When doing instantaneous
@@ -104,15 +132,17 @@ public class TransferProgress {
 
     if (avg) {  // Calculate average
       if (start_time == -1)
-        return 0.0;
+        return -1.0;
       if (end_time == -1)
         d = (double) (now-start_time);
       else
         d = (double) (end_time-start_time);
-      b = bytes_done;
+      if (d < 1000)  // Wait until it's been at least a second...
+        return -1.0;
+      b = byte_progress.done;
     } else {  // Calculate instantaneous
       if (qr_time == -1)
-        return 0.0;
+        return -1.0;
       d = (double) (now-qr_time);
       if (d >= 2*q)
         b = 0;
@@ -130,7 +160,7 @@ public class TransferProgress {
 
   public String throughput(boolean avg) {
     double t = throughputValue(avg);
-    return (t > 0) ? prettyThrp(t, ' ') : null;
+    return (t >= 0) ? prettyThrp(t, ' ') : null;
   }
 
   // Get the duration of the transfer in milliseconds.
@@ -148,49 +178,11 @@ public class TransferProgress {
     return (t > 0) ? prettyTime(t) : null;
   }
 
-  // Byte progress accessors...
-  public long bytesDone() {
-    return bytes_done;
+  public Progress byteProgress() {
+    return byte_progress;
   }
 
-  public long bytesTotal() {
-    return bytes_total;
-  }
-
-  public void setBytes(long t) {
-    if (t >= 0)
-      bytes_total = t;
-    if (bytes_done > bytes_total)
-      bytes_done = bytes_total;
-  }
-
-  public String byteProgress() {
-    return bytes_done+"/"+bytes_total;
-  }
-
-  public String progress() {
-    if (bytes_total == 0)
-      return null;
-    return String.format("%.2f%%", 100.0*bytes_done/bytes_total);
-  }
-
-  // File progress accessors...
-  public int filesDone() {
-    return files_done;
-  }
-
-  public int filesTotal() {
-    return files_total;
-  }
-
-  public void setFiles(int t) {
-    if (t >= 0)
-      files_total = t;
-    if (files_done > files_total)
-      files_done = files_total;
-  }
-
-  public String fileProgress() {
-    return files_done+"/"+files_total;
+  public Progress fileProgress() {
+    return file_progress;
   }
 }
