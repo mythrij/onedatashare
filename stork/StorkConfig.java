@@ -11,6 +11,7 @@ import java.io.*;
 
 public class StorkConfig extends ClassAd {
   public final File file;
+  private static StorkConfig instance = null;
 
   private static String[] default_paths = {
     System.getenv("STORK_CONFIG"),
@@ -29,6 +30,17 @@ public class StorkConfig extends ClassAd {
       File file = new File(s).getAbsoluteFile();
       if (file.canRead()) return file;
     } return null;
+  }
+
+  // Get an instance of the StorkConfig, returning null if there's an error.
+  public static StorkConfig instance() {
+    if (instance != null) {
+      return instance;
+    } try {
+      return instance = new StorkConfig();
+    } catch (Exception e) {
+      return null;
+    }
   }
 
   // Parse command line arguments, setting config values accordingly.
@@ -54,8 +66,6 @@ public class StorkConfig extends ClassAd {
     } else if (!file.canRead()) {
       System.out.println("Warning: couldn't open config file '"+file+"'");
     } else {
-      System.out.println("Config file: "+file);
-
       LineNumberReader lnr = new LineNumberReader(new FileReader(file));
       String line;
 

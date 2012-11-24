@@ -13,7 +13,7 @@ public class StorkClient {
   private static Map<String, StorkCommand> cmd_handlers;
 
   // Configuration variables
-  private static StorkConfig conf = new StorkConfig();
+  private static StorkConfig conf = null;
 
   // Some static initializations...
   static {
@@ -335,7 +335,7 @@ public class StorkClient {
 
     // Parse config file
     try {
-      conf = new StorkConfig();
+      conf = StorkConfig.instance();
 
       // Parse arguments
       if (args.length < 1)
