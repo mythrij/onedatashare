@@ -1,5 +1,4 @@
 [ src_url = "gridftp://didclab-ws8/home/globus/stuff/";
   dest_url = "gridftp://didclab-ws9/home/globus/stuff/";
-  parallelism = 3;
   x509_file = "/tmp/x509up_u1000";
 ]

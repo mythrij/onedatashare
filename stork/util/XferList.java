@@ -9,6 +9,7 @@ public class XferList implements Iterable<XferList.Entry> {
   private long size = 0;
   private int count = 0;  // Number of files (not dirs)
   public String sp, dp;
+  public final Entry root;
 
   // Create an XferList for a directory.
   public XferList(String src, String dest) {
@@ -16,13 +17,16 @@ public class XferList implements Iterable<XferList.Entry> {
     if (!dest.endsWith("/")) dest += "/";
     sp = src;
     dp = dest;
+    root = new Entry("");
   }
 
   // Create an XferList for a file.
   public XferList(String src, String dest, long size) {
     sp = src;
     dp = dest;
-    add("", size);
+    root = new Entry("", size);
+    list.add(root);
+    this.size += size;
   }
 
   // An entry (file or directory) in the list.
@@ -74,6 +78,10 @@ public class XferList implements Iterable<XferList.Entry> {
     public String dpath() {
       return XferList.this.dp + path;
     }
+
+    public String toString() {
+      return (dir ? "Directory: " : "File: ")+path()+" -> "+dpath();
+    }
   }
 
   // Add a directory to the list.
@@ -109,10 +117,13 @@ public class XferList implements Iterable<XferList.Entry> {
 
   // Remove and return the topmost entry.
   public Entry pop() {
-    Entry e = list.pop();
-    if (e != null)
+    try {
+      Entry e = list.pop();
       size -= e.size;
-    return e;
+      return e;
+    } catch (Exception e) {
+      return null;
+    }
   }
 
   // Get the progress of the list in terms of bytes.
@@ -151,14 +162,17 @@ public class XferList implements Iterable<XferList.Entry> {
       if (e.done) {
         iter.remove();
       } else if (e.dir || e.remaining() <= len) {
-        nl.list.add(e);
+        nl.list.add(new Entry(e.path, e));
         nl.size += e.remaining();
+        nl.count++;
         len -= e.remaining();
+        e.done = true;
       } else {  // Need to split file...
         e2 = new Entry(e.path, e);
         e2.len = len;
         nl.list.add(e2);
         nl.size += len;
+        nl.count++;
 
         if (e.len == -1)
           e.len = e.size;

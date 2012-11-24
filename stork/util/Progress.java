@@ -12,12 +12,12 @@ public class Progress {
   }
 
   public long remaining() {
-    return done - total;
+    return total-done;
   }
 
   public void add(long d, long t) {
     done += d; total += t;
-    if (done > 0) done = total;
+    if (done > total) done = total;
   }
 
   public void add(Progress p) {
@@ -31,7 +31,7 @@ public class Progress {
   public String toPercent() {
     if (total <= 0)
       return null;
-    return String.format("%.2f%%", (double) done / total);
+    return String.format("%.2f%%", 100.0 * done / total);
   }
 
   public String toString() {

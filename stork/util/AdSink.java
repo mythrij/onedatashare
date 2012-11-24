@@ -32,4 +32,9 @@ public class AdSink {
     } catch (Exception e) { }
     return null;
   }
+
+  // Get the ad current in the sink, or an empty ad if none.
+  public synchronized ClassAd peekAd() {
+    return (ad != null) ? ad : new ClassAd();
+  }
 }

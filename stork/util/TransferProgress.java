@@ -63,36 +63,43 @@ public class TransferProgress {
   // Publish an ad to the AdSink, if there is one.
   private synchronized void updateAd() { 
     if (sink != null)
-      sink.mergeAd(getAd());
+      sink.putAd(getAd(sink.peekAd()));
   }
 
   // Get the ClassAd representation of this transfer progress.
   public ClassAd getAd() {
-    ClassAd ad = new ClassAd();
+    return getAd(new ClassAd());
+  }
+
+  private ClassAd getAd(ClassAd ad) {
     ad.insert("byte_progress", byte_progress.toString());
     ad.insert("progress", byte_progress.toPercent());
     ad.insert("file_progress", file_progress.toString());
     ad.insert("throughput", throughput(false));
-    ad.insert("avg_throughput", throughput(true));
+    if (durationValue() >= 1000)
+      ad.insert("avg_throughput", throughput(true));
     return ad;
   }
 
   // Called when a transfer starts.
   public synchronized void transferStarted(long bytes, int files) {
-    if (start_time == -1) {
-      start_time = now();
-      byte_progress.done = file_progress.done = 0;
-      byte_progress.total = bytes;
-      file_progress.total = files;
+    start_time = now();
+    end_time = -1;
+    byte_progress.done = file_progress.done = 0;
+    byte_progress.total = bytes;
+    file_progress.total = files;
     updateAd();
-    }
   }
 
-  // Called when a transfer ends.
-  public synchronized void transferEnded() {
+  // Called when a transfer ends. If successful, assume any unreported
+  // bytes and files have finished and report them ourselves.
+  public synchronized void transferEnded(boolean success) {
     if (end_time == -1) {
       end_time = now();
-      updateAd();
+      if (success)
+        done(byte_progress.remaining(), (int) file_progress.remaining());
+      else  // done() will update ad, so only do it if we didn't call...
+        updateAd();
     }
   }
 
@@ -128,22 +135,18 @@ public class TransferProgress {
   public double throughputValue(boolean avg) {
     double d;  // Duration in ms.
     long b;  // Bytes over duration.
-    long now = now();
 
     if (avg) {  // Calculate average
       if (start_time == -1)
         return -1.0;
-      if (end_time == -1)
-        d = (double) (now-start_time);
-      else
-        d = (double) (end_time-start_time);
-      if (d < 1000)  // Wait until it's been at least a second...
-        return -1.0;
+      d = (double) durationValue();
       b = byte_progress.done;
+    } else if (end_time >= 0) {
+      return -1.0;  // If we've ended, inst thrp means nothing!
     } else {  // Calculate instantaneous
       if (qr_time == -1)
         return -1.0;
-      d = (double) (now-qr_time);
+      d = (double) (now()-qr_time);
       if (d >= 2*q)
         b = 0;
       else if (d >= q)
