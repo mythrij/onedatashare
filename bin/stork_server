@@ -1,5 +1,4 @@
 #!/bin/sh
 DIR=`dirname $0`
 CLASS=stork.StorkServer
-CMD=`basename $0`
-java "-Dstork.exedir=$DIR" -Xmx512m -cp "$DIR/stork.jar" $CLASS "$CMD" $@
+java "-Dstork.exedir=$DIR" -Xmx512m -cp "$DIR/stork.jar" $CLASS $@

@@ -29,10 +29,15 @@ init: | build
 
 release: $(PROJECT).tar.gz
 
+src-release: $(PROJECT)-src.tar.gz
+
 $(PROJECT).tar.gz: $(PROJECT).jar
 	cp $(PROJECT).jar bin/
 	tar czf $(PROJECT).tar.gz bin libexec --exclude='*/CVS' \
 		--transform 's,^,$(PROJECT)/,'
+
+$(PROJECT)-src.tar.gz: clean
+	tar czf $(PROJECT)-src.tar.gz * --exclude='*/CVS'
 
 # FIXME: This is a bad hack.
 lib/EXTRACTED:

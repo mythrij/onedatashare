@@ -12,6 +12,25 @@ import java.io.*;
 public class StorkConfig extends ClassAd {
   public final File file;
   private static StorkConfig instance = null;
+  public static final GetOpts opts = new GetOpts();
+
+  // Initialize the default command line parser.
+  static {
+    opts.add('c', "conf", "specify custom path to stork.conf").parser =
+      opts.new SimpleParser("conf", "PATH", false);
+    opts.add('p', "port", "set the port for the Stork server").parser =
+      opts.new SimpleParser("port", "PORT", false);
+    opts.add('h', "host", "set the host for the Stork server").parser =
+      opts.new SimpleParser("host", "HOST", false);
+    opts.add("help", "display this usage information");
+    opts.add('q', "quiet", "don't print anything to standard output");
+
+    opts.foot = new String[] {
+      "Stork is still undergoing testing and development, "+
+      "so please excuse the mess! If you encounter any bugs, "+
+      "please contact Brandon Ross <bwross@buffalo.edu>."
+    };
+  }
 
   private static String[] default_paths = {
     System.getenv("STORK_CONFIG"),
@@ -22,45 +41,38 @@ public class StorkConfig extends ClassAd {
     "/usr/local/stork/stork.conf"
   };
 
-  // Determine the location of the config file. Returns null if nothing can
-  // be found.
+  // Check default paths until we find a readable file. Null if none found.
   public static File defaultPath() {
-    // Check default locations...
+    File f;
     for (String s : default_paths) if (s != null) {
-      File file = new File(s).getAbsoluteFile();
-      if (file.canRead()) return file;
+      f = checkPath(s);
+      if (f != null) return f;
     } return null;
   }
 
-  // Get an instance of the StorkConfig, returning null if there's an error.
-  public static StorkConfig instance() {
-    if (instance != null) {
-      return instance;
-    } try {
-      return instance = new StorkConfig();
-    } catch (Exception e) {
-      return null;
-    }
+  // Check that path is readable and return absolutized file, else null.
+  private static File checkPath(String path) {
+    File file = new File(path).getAbsoluteFile();
+    return file.canRead() ? file : null;
   }
 
   // Parse command line arguments, setting config values accordingly.
   // Then parse config file, where each line is either a comment or a
   // ClassAd expression which gets merged into the config ad.
-  public StorkConfig(String[] args) throws Exception {
+  public StorkConfig(String path) throws Exception {
     // Initialize some defaults.
     insert("port", 38924);
     insert("libexec", "../libexec");
 
-    // TODO: Parse config file path from command line.
-    File file = null;
-
-    if (file == null)
+    if (path != null)
+      file = checkPath(path);
+    else
       file = defaultPath();
-
-    this.file = file;
 
     // Error checking
     if (file == null) {
+      if (path != null)
+        throw new Exception("Error: couldn't open '"+path+"'");
       System.out.println("Warning: STORK_CONFIG not set and couldn't "+
                          "find stork.conf in default locations");
     } else if (!file.canRead()) {

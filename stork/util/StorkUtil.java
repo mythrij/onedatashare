@@ -60,6 +60,30 @@ public class StorkUtil {
     } return sb.toString();
   }
 
+  // Wrap a paragraph to some number of characters.
+  public static String wrap(String str, int w) {
+    StringBuffer sb = new StringBuffer();
+    String line = "";
+
+    for (String s : regex_ws.split(str)) {
+      if (!line.isEmpty() && line.length()+s.length() >= w) {
+        if (sb.length() != 0) sb.append('\n');
+        sb.append(line);
+        line = s;
+      } else {
+        line = (line.isEmpty()) ? s : line+' '+s;
+      }
+    }
+
+    if (!line.isEmpty()) {
+      if (sb.length() != 0) sb.append('\n');
+      sb.append(line);
+    }
+
+    return sb.toString();
+  }
+
+
   // Path functions
   // --------------
   // Functions that operate on path strings. Like string functions, should

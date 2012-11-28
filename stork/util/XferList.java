@@ -3,6 +3,7 @@ package stork.util;
 import java.util.*;
 
 // A list of files and directories to transfer.
+// TODO: Bug fixes!
 
 public class XferList implements Iterable<XferList.Entry> {
   private LinkedList<Entry> list = new LinkedList<Entry>();
@@ -31,6 +32,7 @@ public class XferList implements Iterable<XferList.Entry> {
 
   // An entry (file or directory) in the list.
   public class Entry {
+    private XferList parent = XferList.this;
     private String path;
     public final boolean dir;
     public boolean done = false;
@@ -72,11 +74,11 @@ public class XferList implements Iterable<XferList.Entry> {
     }
 
     public String path() {
-      return XferList.this.sp + path;
+      return parent.sp + path;
     }
 
     public String dpath() {
-      return XferList.this.dp + path;
+      return parent.dp + path;
     }
 
     public String toString() {
@@ -100,6 +102,8 @@ public class XferList implements Iterable<XferList.Entry> {
   public void addAll(XferList ol) {
     size += ol.size;
     count += ol.count;
+    for (Entry e : ol.list)
+      e.parent = this;
     list.addAll(ol.list);
   }
 
@@ -152,24 +156,28 @@ public class XferList implements Iterable<XferList.Entry> {
 
     if (len == -1 || size <= len) {
       // If the request is bigger than the list, empty into new list.
+      nl.addAll(this);
       nl.list = list;
       nl.size = size;
+      nl.count = count;
       list = new LinkedList<Entry>();
-      size = 0;
+      size = count = 0;
     } else while (len > 0 && iter.hasNext()) {
       Entry e2, e = iter.next();
       
       if (e.done) {
         iter.remove();
       } else if (e.dir || e.remaining() <= len) {
-        nl.list.add(new Entry(e.path, e));
+        nl.list.add(e);
         nl.size += e.remaining();
         nl.count++;
         len -= e.remaining();
+        e.parent = nl;
         e.done = true;
       } else {  // Need to split file...
         e2 = new Entry(e.path, e);
         e2.len = len;
+        e2.parent = nl;
         nl.list.add(e2);
         nl.size += len;
         nl.count++;

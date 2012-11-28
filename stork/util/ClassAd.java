@@ -153,6 +153,24 @@ public class ClassAd implements Iterable<String> {
     } return def;
   }
 
+  // Get an entry from the ad as a long. Defaults to -1.
+  public long getLong(String s) {
+    return getLong(s, -1);
+  } public long getLong(String s, long def) {
+    Expr e = getExpr(s);
+
+    if (e != null) switch (e.type) {
+      case Expr.INTEGER:
+        return e.intValue();
+      case Expr.REAL:
+        return (long) e.realValue();
+      case Expr.STRING:
+        return Long.parseLong(e.stringValue());
+      default:
+        return Long.parseLong(e.toString());
+    } return def;
+  }
+
   // Get an entry from the ad as a boolean value. Returns true if the value
   // of the entry is "true" (case insensitive), false otherwise.
   public boolean getBoolean(String s) {
@@ -172,18 +190,23 @@ public class ClassAd implements Iterable<String> {
   // -----------------------------------
   // Add new entries to the ClassAd. Trim input. Return this ClassAd.
   public ClassAd insert(String k, String v) {
-    insert(k, Constant.getInstance(v));
-    return this;
+    return insert(k, Constant.getInstance(v));
   }
     
   public ClassAd insert(String k, int v) {
-    insert(k, Constant.getInstance(v));
-    return this;
+    return insert(k, Constant.getInstance(v));
+  }
+
+  public ClassAd insert(String k, long v) {
+    return insert(k, Long.toString(v));
   }
     
   public ClassAd insert(String k, double v) {
-    insert(k, Constant.getInstance(v));
-    return this;
+    return insert(k, Constant.getInstance(v));
+  }
+
+  public ClassAd insert(String k, boolean v) {
+    return insert(k, Constant.getInstance(v));
   }
     
   public ClassAd insert(String k, Expr v) {

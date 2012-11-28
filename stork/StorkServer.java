@@ -10,7 +10,7 @@ import java.nio.channels.*;
 import java.util.*;
 import java.util.concurrent.*;
 
-// TODO: Search FIXME and TODO!
+// TODO: Search FIXME and TODO! Also, make everything not static.
 
 public class StorkServer implements Runnable {
   // Server state variables
@@ -23,6 +23,29 @@ public class StorkServer implements Runnable {
 
   private static LinkedBlockingQueue<StorkJob> queue;
   private static ArrayList<StorkJob> all_jobs;
+
+  private static GetOpts opts = new GetOpts();
+
+  // Constuct the usage options parser.
+  private static void initOptParser() {
+    opts = new GetOpts(StorkConfig.opts);
+
+    opts.prog = "stork_server";
+    opts.args = new String[] { "[option]..." };
+    opts.desc = new String[] {
+      "The Stork server is the core of the Stork system, handling "+
+      "connections from clients and scheduling transfers. This command "+
+      "is used to start a Stork server.",
+      "Upon startup, the Stork server loads stork.conf and begins "+
+      "listening for clients."
+    };
+
+    opts.add('d', "daemonize",
+      "run the server in the background, redirecting output to a log "+
+      "file (if specified)");
+    opts.add('l', "log", "redirect output to a log file at PATH").parser =
+      opts.new SimpleParser("log", "PATH", false);
+  }
 
   // Used to determine time relative to start of server.
   private static long server_date = System.currentTimeMillis();
@@ -753,13 +776,29 @@ public class StorkServer implements Runnable {
   // Main entry point
   public static void main(String[] args) {
     StorkServer server;
+    ClassAd settings = null;
 
-    // Populate module list
+    initOptParser();
+
+    // Parse command line options.
     try {
-      // Check for passed config location
+      settings = opts.parse(args);
+    } catch (Exception e) {
+      opts.usage(e.getMessage());
+      System.exit(1);
+    }
 
+    // Check if --help was specified.
+    if (settings.has("help")) {
+      opts.usage(null);
+      System.exit(0);
+    }
+
+    System.out.println(settings);
+
+    try {
       // Parse config file
-      conf = new StorkConfig(args);
+      conf = new StorkConfig(settings.get("conf"));
 
       // Parse other arguments
       if (args.length > 1 && args[1].equals("-d")) {
@@ -772,7 +811,7 @@ public class StorkServer implements Runnable {
       server = new StorkServer(conf.getInt("port"));
       server.run();
     } catch (Exception e) {
-      System.out.println("Error: "+e.getMessage());
+      opts.usage("Error: "+e.getMessage());
       e.printStackTrace();
       System.exit(1);
     }

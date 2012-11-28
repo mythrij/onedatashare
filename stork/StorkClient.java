@@ -333,10 +333,7 @@ public class StorkClient {
     StorkClient client;
     String cmd;
 
-    // Parse config file
     try {
-      conf = StorkConfig.instance();
-
       // Parse arguments
       if (args.length < 1)
         throw new Exception("Must give client command");
@@ -344,9 +341,12 @@ public class StorkClient {
       // Get command. TODO: Recheck arguments
       cmd = args[0];
 
+      // Parse config
+      conf = new StorkConfig(null);
+
       // Connect to Stork server.
       try {
-        client = new StorkClient(conf.getInt("port"));
+        client = new StorkClient(conf.getInt("port", 57082));
       } catch (Exception e) {
         throw new Exception("Couldn't connect to server: "+e);
       }
