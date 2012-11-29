@@ -13,7 +13,7 @@ public class StorkClient {
   private static Map<String, StorkCommand> cmd_handlers;
 
   // Configuration variables
-  private static StorkConfig conf = null;
+  private ClassAd env = null;
 
   // Some static initializations...
   static {
@@ -34,7 +34,7 @@ public class StorkClient {
     InputStream is;
     OutputStream os;
 
-    public ResponseAd handle(String[] args, Socket sock) {
+    public ResponseAd handle(ClassAd env, String[] args, Socket sock) {
       try {
         is = sock.getInputStream();
         os = sock.getOutputStream();
@@ -43,44 +43,45 @@ public class StorkClient {
         if (is == null || os == null)
           throw new Exception("problem with socket");
 
-        if (args.length < 1)
-          throw new Exception("too few args passed to handler");
-
-        return _handle(args);
+        return _handle(env, args);
       } catch (Exception e) {
         return new ResponseAd("error", e.getMessage());
       }
     }
 
-    abstract ResponseAd _handle(String[] args) throws IOException;
+    abstract GetOpts parser(GetOpts base);
+    abstract ResponseAd _handle(ClassAd env, String[] args) throws Exception;
   }
 
   private static class StorkQHandler extends StorkCommand {
-    ResponseAd _handle(String[] args) throws IOException {
+    GetOpts parser(GetOpts base) {
+      GetOpts opts = new GetOpts(base);
+
+      opts.prog = "stork_q";
+      opts.args = new String[] { "[option...] [status] [job_id...]" };
+      opts.desc = new String[] {
+        "This command can be used to query a Stork server for information "+
+        "about jobs in queue.", "Specifying status allows filtering"+
+        "of results based on job status, and may be any one of the " +
+        "following values: pending (default), all, done, scheduled, "+
+        "processing, removed, failed, or complete.", "The job id, of "+
+        "which there may be more than one, may be either an integer or "+
+        "a range of the form: m[-n][,range] (e.g. 1-4,7,10-13)"
+      };
+      opts.add('c', "count", "print only the number of results");
+      opts.add('n', "limit", "retrieve at most N results").parser =
+        opts.new SimpleParser("limit", "N", false);
+      opts.add('r', "reverse", "reverse printing order (oldest first)");
+      opts.add('f', "follow",
+               "retrieve list every N seconds (default: 2)").parser =
+        opts.new SimpleParser("limit", "[N]", true);
+
+      return opts;
+    }
+
+    ResponseAd sendRequest(ClassAd ad) throws Exception {
       int received = 0, expecting;
-      ClassAd ad = new ClassAd();
-      Range range = new Range();
-      String not_found;
-      String status = null;
 
-      ad.insert("command", "stork_q");
-
-      // Parse arguments
-      for (String s : args) {
-        if (s == args[0]) continue;
-        Range r = Range.parseRange(s);
-        if (r == null)
-          status = s;
-        else
-          range.swallow(r);
-      }
-
-      if (!range.isEmpty())
-        ad.insert("range", range.toString());
-      if (status != null)
-        ad.insert("status", status);
-
-      // Write request ad
       os.write(ad.getBytes());
       os.flush();
 
@@ -98,7 +99,7 @@ public class StorkClient {
       ResponseAd res = new ResponseAd(ad);
 
       expecting = res.getInt("count");
-      not_found = res.get("not_found");
+      String not_found = res.get("not_found");
 
       // Report how many ads we received.
       if (expecting >= 0 && received != expecting) {
@@ -118,19 +119,80 @@ public class StorkClient {
 
       return res;
     }
+
+    ResponseAd _handle(ClassAd env, String[] args) throws Exception {
+      ClassAd ad = new ClassAd();
+      Range range = new Range();
+      String status = null;
+      int follow = env.getInt("follow");
+
+      ad.insert("command", "stork_q");
+
+      // Parse arguments
+      for (String s : args) {
+        Range r = Range.parseRange(s);
+        if (r == null) {
+          if (s == args[0])
+            status = s;
+          else
+            return new ResponseAd("error", "invalid argument: "+s);
+        } else {
+          range.swallow(r);
+        }
+      }
+
+      if (!range.isEmpty())
+        ad.insert("range", range.toString());
+      if (status != null)
+        ad.insert("status", status);
+
+      // If we're following, keep resending every interval.
+      // TODO: Make sure clearing is portable.
+      if (follow > 0) while (true) {
+        System.out.print("\033[H\033[2J");
+        ResponseAd r = sendRequest(ad);
+        if (!r.success()) return r;
+        Thread.sleep(follow*1000);
+      } else {
+        return sendRequest(ad);
+      }
+    }
   }
 
   private static class StorkRmHandler extends StorkCommand {
-    ResponseAd _handle(String[] args) throws IOException {
+    GetOpts parser(GetOpts base) {
+      GetOpts opts = new GetOpts(base);
+
+      opts.prog = "stork_rm";
+      opts.args = new String[] { "[option...] [job_id...]" };
+      opts.desc = new String[] {
+        "This command can be used to cancel pending or running jobs on "+
+        "a Stork server.", "The job id, of which there may be more than "+
+        "one, may be either an integer or a range of the form: "+
+        "m[-n][,range] (e.g. 1-4,7,10-13)"
+      };
+
+      return opts;
+    }
+
+    ResponseAd _handle(ClassAd env, String[] args) throws Exception {
+      Range range = new Range();
       ClassAd ad = new ClassAd();
       ad.insert("command", "stork_rm");
 
       // Arg check
-      if (args.length != 2)
+      if (args.length < 1)
         return new ResponseAd("error", "not enough arguments");
 
-      /// TODO Range parsing here too
-      ad.insert("range", args[1]);
+      // Parse arguments
+      for (String s : args) {
+        Range r = Range.parseRange(s);
+        if (r == null)
+          return new ResponseAd("error", "invalid argument: "+s);
+        range.swallow(r);
+      }
+
+      ad.insert("range", range.toString());
 
       // Write request ad
       os.write(ad.getBytes());
@@ -147,14 +209,29 @@ public class StorkClient {
   }
 
   private static class StorkInfoHandler extends StorkCommand {
-    ResponseAd _handle(String[] args) throws IOException {
+    GetOpts parser(GetOpts base) {
+      GetOpts opts = new GetOpts(base);
+
+      opts.prog = "stork_info";
+      opts.args = new String[] { "[option...] [type]" };
+      opts.desc = new String[] {
+        "This command retrieves information about the server itself, "+
+        "such as transfer modules available and server statistics.",
+        "Valid options for type: modules (default), server"
+      };
+
+      return opts;
+    }
+
+    ResponseAd _handle(ClassAd env, String[] args) throws Exception {
       ClassAd ad = new ClassAd();
       ad.insert("command", "stork_info");
 
       // Set the type of info to get from the server
-      if (args.length > 1) {
-        ad.insert("type", args[1]);
-      }
+      if (args.length > 0)
+        ad.insert("type", args[0]);
+      else
+        ad.insert("type", "module");
 
       // Write request ad
       os.write(ad.getBytes());
@@ -176,6 +253,40 @@ public class StorkClient {
   }
 
   private static class StorkSubmitHandler extends StorkCommand {
+    GetOpts parser(GetOpts base) {
+      GetOpts opts = new GetOpts(base);
+
+      opts.prog = "stork_submit";
+      opts.args = new String[] {
+        "[option...]",
+        "[option...] [job_file]",
+        "[option...] [src_url] [dest_url]"
+      };
+      opts.desc = new String[] {
+        "This command is used to submit jobs to a Stork server. ",
+
+        "If called with no arguments, prompts the user and reads job "+
+        "ads from standard input.",
+
+        "If called with one argument, assume it's a path to a file "+
+        "containing one or more job ads, which it opens and reads.",
+
+        "If called with two arguments, assumes they are a source "+
+        "and destination URL, which it parses and generates a job "+
+        "ad for.",
+
+        "After each job is submitted, stork_submit outputs the job "+
+        "id, assuming it was submitted successfully.",
+
+        "(Note about x509 proxies: stork_submit will check if "+
+        "\"x509_file\" is included in the submit ad, and, if so, "+
+        "read the proxy file, and include its contents in the job ad "+
+        "as \"x509_proxy\". This may be removed in the future.)"
+      };
+
+      return opts;
+    }
+
     // Print the submission response ad in a nice way.
     private void print_response(ResponseAd ad) {
       // Make sure we have a response ad.
@@ -266,13 +377,13 @@ public class StorkClient {
                             ja+" of "+js + " jobs successfully submitted");
     }
 
-    ResponseAd _handle(String[] args) throws IOException {
+    ResponseAd _handle(ClassAd env, String[] args) throws Exception {
       ClassAd ad;
       ResponseAd res;
       Console cons;
 
       switch (args.length) {
-        case 1:  // From stdin
+        case 0:  // From stdin
           cons = System.console();
 
           // Check if we're running on a console first. If so, give
@@ -283,13 +394,13 @@ public class StorkClient {
           } else {
             return submit_from_stream(System.in, true);
           }
-        case 2:  // From file
-          FileInputStream fis = new FileInputStream(new File(args[1]));
+        case 1:  // From file
+          FileInputStream fis = new FileInputStream(new File(args[0]));
           return submit_from_stream(fis, true);
-        case 3:  // src_url and dest_url
+        case 2:  // src_url and dest_url
           ad = new ClassAd();
-          ad.insert("src_url", args[1]);
-          ad.insert("dest_url", args[2]);
+          ad.insert("src_url", args[0]);
+          ad.insert("dest_url", args[1]);
           print_response(res = submit_job(ad));
           return res;
         default:
@@ -300,67 +411,49 @@ public class StorkClient {
 
   // Class methods
   // -------------
-  private ResponseAd send_command(String cmd, String[] args) throws Exception {
-    ResponseAd ad, res = null;
-
+  // Get a GetOpts parser for a Stork command.
+  public static GetOpts getParser(String cmd, GetOpts base) {
     try {
-      ad = cmd_handlers.get(cmd).handle(args, server_sock);
+      return cmd_handlers.get(cmd).parser(base);
     } catch (Exception e) {
-      throw new Exception("Unknown command: "+cmd);
+      return null;
+    }
+  }
+
+  // Connect to a Stork server.
+  public void connect(String host, int port) throws Exception {
+    server_sock = new Socket(host, port);
+  }
+
+  // Execute a command on the connected Stork server.
+  public void execute(String cmd, String[] args) {
+    StorkCommand scmd = cmd_handlers.get(cmd);
+    String host = env.get("host");
+    int port = env.getInt("port");
+
+    // Make sure we have a command handler by that name.
+    if (scmd == null) {
+      System.out.println("unknown command: "+cmd);
+      return;
     }
 
-    // Print response ad
-    System.out.println("Done. "+ad.toDisplayString());
-
-    return ad;
-  }
-
-  // Constructor
-  // -----------
-  // TODO Remove socket logic from constructor.
-  public StorkClient(InetAddress host, int port) throws IOException {
-    if (host != null)
-      server_sock = new Socket(host, port);
-    else
-      server_sock = new Socket("127.0.0.1", port);
-  }
-
-  public StorkClient(int p) throws IOException {
-    this(null, p);
-  }
-
-  public static void main(String[] args) {
-    StorkClient client;
-    String cmd;
-
-    try {
-      // Parse arguments
-      if (args.length < 1)
-        throw new Exception("Must give client command");
-
-      // Get command. TODO: Recheck arguments
-      cmd = args[0];
-
-      // Parse config
-      conf = new StorkConfig(null);
-
-      // Connect to Stork server.
-      try {
-        client = new StorkClient(conf.getInt("port", 57082));
-      } catch (Exception e) {
-        throw new Exception("Couldn't connect to server: "+e);
-      }
-
-      // Send command to server.
-      try {
-        ClassAd ad = client.send_command(cmd, args);
-        System.exit(ad.get("response").equals("success") ? 0 : 1);
-      } catch (Exception e) {
-        throw new Exception("Couldn't send "+cmd+": "+e);
-      }
+    // Try to do connection stuff.
+    if (server_sock == null) try {
+      connect(host, port);
     } catch (Exception e) {
-      System.out.println("Error: "+e.getMessage());
+      if (host != null)
+        System.out.println("Error: couldn't connect to "+host+":"+port);
+      else
+        System.out.println("Error: couldn't connect to localhost:"+port);
       System.exit(1);
     }
+
+    // Execute the command handler.
+    ResponseAd ad = scmd.handle(env, args, server_sock);
+    System.out.println("Done: "+ad.toDisplayString());
+  }
+
+  public StorkClient(ClassAd env) {
+    this.env = env;
   }
 }

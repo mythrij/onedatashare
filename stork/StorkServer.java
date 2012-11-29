@@ -14,7 +14,7 @@ import java.util.concurrent.*;
 
 public class StorkServer implements Runnable {
   // Server state variables
-  private static ServerSocket listen_sock;
+  private ServerSocket listen_sock = null;
 
   private static Thread[] thread_pool;
 
@@ -24,11 +24,10 @@ public class StorkServer implements Runnable {
   private static LinkedBlockingQueue<StorkJob> queue;
   private static ArrayList<StorkJob> all_jobs;
 
-  private static GetOpts opts = new GetOpts();
+  boolean connected = false;
 
-  // Constuct the usage options parser.
-  private static void initOptParser() {
-    opts = new GetOpts(StorkConfig.opts);
+  public static GetOpts getParser(GetOpts base) {
+    GetOpts opts = new GetOpts(base);
 
     opts.prog = "stork_server";
     opts.args = new String[] { "[option]..." };
@@ -36,7 +35,7 @@ public class StorkServer implements Runnable {
       "The Stork server is the core of the Stork system, handling "+
       "connections from clients and scheduling transfers. This command "+
       "is used to start a Stork server.",
-      "Upon startup, the Stork server loads stork.conf and begins "+
+      "Upon startup, the Stork server loads stork.env and begins "+
       "listening for clients."
     };
 
@@ -45,6 +44,8 @@ public class StorkServer implements Runnable {
       "file (if specified)");
     opts.add('l', "log", "redirect output to a log file at PATH").parser =
       opts.new SimpleParser("log", "PATH", false);
+
+    return opts;
   }
 
   // Used to determine time relative to start of server.
@@ -53,7 +54,7 @@ public class StorkServer implements Runnable {
 
   // Configuration variables
   private boolean daemon = false;
-  private static StorkConfig conf;
+  private static ClassAd env;
 
   // States a job can be in.
   static enum JobStatus {
@@ -321,7 +322,7 @@ public class StorkServer implements Runnable {
         return false;
 
       // Check for configured max attempts.
-      max = conf.getInt("max_attempts", 10);
+      max = env.getInt("max_attempts", 10);
       if (max > 0 && attempts >= max)
         return false;
 
@@ -688,7 +689,7 @@ public class StorkServer implements Runnable {
 
   // Iterate over libexec directory and add transfer modules to list.
   public void populate_modules() {
-    File dir = new File(conf.file.getParentFile(), conf.get("libexec"));
+    File dir = new File(env.get("libexec"));
 
     // Load built-in modules.
     // TODO: Not this...
@@ -722,13 +723,37 @@ public class StorkServer implements Runnable {
     return server_date + dtime;
   }
 
-  // Entry point for the server
+  public void connect(String host, int port) throws Exception {
+    if (host != null)
+      listen_sock = new ServerSocket(port, 0, InetAddress.getByName(host));
+    else
+      listen_sock = new ServerSocket(port);
+
+    System.out.printf("Listening on %s:%d...\n",
+                      listen_sock.getInetAddress().getHostAddress(),
+                      listen_sock.getLocalPort());
+  }
+
+  // The entry point for the server.
   public void run() {
+    String host = env.get("host");
+    int port = env.getInt("port");
+
+    // Try to do connection stuff.
+    if (listen_sock == null) try {
+      connect(host, port);
+    } catch (Exception e) {
+      if (host != null)
+        System.out.println("couldn't bind to "+host+":"+port);
+      else
+        System.out.println("couldn't bind to port "+port);
+    }
+
     // Populate module list
     populate_modules();
 
     // Initialize thread pool based on config.
-    int tnum = conf.getInt("max_jobs", -1);
+    int tnum = env.getInt("max_jobs", -1);
 
     if (tnum < 1) {
       tnum = 10;
@@ -751,69 +776,7 @@ public class StorkServer implements Runnable {
     }
   }
 
-  // Constructor
-  // -----------
-  public StorkServer(InetAddress host, int port) throws IOException {
-    // Create a listening socket
-    if (host != null)
-      listen_sock = new ServerSocket(port, 0, host);
-    else
-      listen_sock = new ServerSocket(port);
-
-    System.out.printf("Listening on %s:%d...\n",
-                      listen_sock.getInetAddress().getHostAddress(),
-                      listen_sock.getLocalPort());
-  }
-
-  public StorkServer(int p) throws IOException {
-    this(null, p);
-  }
-
-  public StorkServer() throws IOException {
-    this(null, 0);
-  }
-
-  // Main entry point
-  public static void main(String[] args) {
-    StorkServer server;
-    ClassAd settings = null;
-
-    initOptParser();
-
-    // Parse command line options.
-    try {
-      settings = opts.parse(args);
-    } catch (Exception e) {
-      opts.usage(e.getMessage());
-      System.exit(1);
-    }
-
-    // Check if --help was specified.
-    if (settings.has("help")) {
-      opts.usage(null);
-      System.exit(0);
-    }
-
-    System.out.println(settings);
-
-    try {
-      // Parse config file
-      conf = new StorkConfig(settings.get("conf"));
-
-      // Parse other arguments
-      if (args.length > 1 && args[1].equals("-d")) {
-        System.out.close();
-      }
-
-      // TODO: Load server state from old state file if one exists.
-
-      // Create instance of Stork server and run it
-      server = new StorkServer(conf.getInt("port"));
-      server.run();
-    } catch (Exception e) {
-      opts.usage("Error: "+e.getMessage());
-      e.printStackTrace();
-      System.exit(1);
-    }
+  public StorkServer(ClassAd env) {
+    this.env = env;
   }
 }

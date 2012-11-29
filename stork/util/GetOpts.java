@@ -32,7 +32,7 @@ public class GetOpts {
   }
 
   // A single option
-  public class Option {
+  public class Option implements Comparable<Option> {
     char c = 0;
     String name;
     String desc = null;
@@ -86,6 +86,10 @@ public class GetOpts {
       if (this instanceof Option)
         return hashCode() == ((Option)o).hashCode();
       return false;
+    }
+
+    public int compareTo(Option o) {
+      return name.compareTo(o.name);
     }
 
     public int hashCode() {
@@ -240,17 +244,21 @@ public class GetOpts {
 
   // Get a set of all options in the chain.
   private Set<Option> getOptions() {
-    Set<Option> os = new HashSet<Option>(by_name.values());
+    Set<Option> os = new TreeSet<Option>(by_name.values());
     if (next != null)
       os.addAll(next.getOptions());
     return os;
   }
 
-  // Pretty print the usage information.
-  public void usage() {
-    usage(null);
-  } public void usage(String msg) {
-    int wrap = 78;  // TODO: Detect screen width.
+  // Print usage information then exit.
+  public void usageAndExit(int rc, String msg) {
+    usage(msg);
+    System.exit(rc);
+  }
+
+  // Pretty print the usage information and optional message.
+  public void usage(String msg) {
+    int wrap = 78;  // TODO: Detect screen width/allow configuration.
     StringBuffer body = new StringBuffer();
     Set<Option> op_set = getOptions();
 

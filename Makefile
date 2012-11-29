@@ -1,3 +1,11 @@
+# Configuration
+# =============
+# Build information
+APPNAME = 'JStork'
+VERSION = '0.0.1 (really alpha)'
+
+
+# =============
 PROJECT = stork
 PACKAGES = stork stork/util stork/module stork/stat
 
@@ -7,13 +15,13 @@ JC = javac
 JAVA = java
 JAR = jar -J-Xmx512m
 
-.PHONY: all install clean init release
+.PHONY: all install clean dist-clean init release
 .SUFFIXES: .java .class
 
 JAVASRCS = $(wildcard $(PACKAGES:%=%/*.java))
 CLASSES = $(JAVASRCS:%.java=build/%.class)
 
-all: init lib/EXTRACTED $(CLASSES) $(PROJECT).jar
+all: init lib/EXTRACTED $(CLASSES) build/build_tag $(PROJECT).jar
 
 build:
 	mkdir -p build
@@ -36,12 +44,21 @@ $(PROJECT).tar.gz: $(PROJECT).jar
 	tar czf $(PROJECT).tar.gz bin libexec --exclude='*/CVS' \
 		--transform 's,^,$(PROJECT)/,'
 
-$(PROJECT)-src.tar.gz: clean
+$(PROJECT)-src.tar.gz: dist-clean
 	tar czf $(PROJECT)-src.tar.gz * --exclude='*/CVS'
 
 # FIXME: This is a bad hack.
 lib/EXTRACTED:
 	cd lib && ./extract.sh
 
+build/build_tag: $(CLASSES) | build
+	@echo generating build tag
+	@echo appname = $(APPNAME) >  build/build_tag
+	@echo version = $(VERSION) >> build/build_tag
+	@echo buildtime = `date`   >> build/build_tag
+
 clean:
 	$(RM) -rf build $(PROJECT).jar $(PROJECT).tar.gz
+
+dist-clean: clean
+	$(RM) -rf lib/EXTRACTED

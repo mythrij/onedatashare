@@ -33,7 +33,7 @@ public class XferList implements Iterable<XferList.Entry> {
   // An entry (file or directory) in the list.
   public class Entry {
     private XferList parent = XferList.this;
-    private String path;
+    public String path;
     public final boolean dir;
     public boolean done = false;
     public final long size;

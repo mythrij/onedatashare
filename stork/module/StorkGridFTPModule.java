@@ -41,12 +41,14 @@ public class StorkGridFTPModule extends TransferModule {
   // through sequentially using a BufferedReader to read lines
   // and parse data returned by FTP and GridFTP MLSD commands.
   static class ListSink extends Reader implements DataSink {
+    private String base;
     private LinkedList<Buffer> buf_list;
     private Buffer cur_buf = null;
     private BufferedReader br;
     private int off = 0;
 
-    public ListSink() {
+    public ListSink(String base) {
+      this.base = base;
       buf_list = new LinkedList<Buffer>();
       br = new BufferedReader(this);
     }
@@ -104,8 +106,8 @@ public class StorkGridFTPModule extends TransferModule {
     }
 
     // Get the list from the sink as an XferList.
-    public XferList getList(String path) {
-      XferList xl = new XferList(path, "");
+    public XferList getList(String dir) {
+      XferList xl = new XferList(base, "");
       String line;
 
       // Read lines from the buffer list.
@@ -118,9 +120,9 @@ public class StorkGridFTPModule extends TransferModule {
           String size = m.get("size");
 
           if (type.equals(m.TYPE_FILE))
-            xl.add(name, Long.parseLong(size));
+            xl.add(dir+name, Long.parseLong(size));
           else if (!name.equals(".") && !name.equals(".."))
-            xl.add(name);
+            xl.add(dir+name);
         } catch (Exception e) {
           e.printStackTrace();
           continue;  // Weird data I guess!
@@ -279,9 +281,10 @@ public class StorkGridFTPModule extends TransferModule {
       final String MLSR = "MLSR", MLSD = "MLSD";
       String cmd = isFeatureSupported("MLSR") ? MLSR : MLSD;
       XferList list = new XferList(path, "");
+      path = list.sp;  // This will be normalized to end with /.
 
       LinkedList<String> dirs = new LinkedList<String>();
-      dirs.add(path);
+      dirs.add("");
 
       try {
         cc.execute(new Command("OPTS MLST type;size;"));
@@ -300,17 +303,17 @@ public class StorkGridFTPModule extends TransferModule {
         // Pipeline commands like a champ.
         System.out.println("piping commands");
         for (String p : working) {
-          System.out.println(cmd+" "+p);
+          System.out.println(cmd+" "+path+p);
           swrite(Command.PASV);
-          swrite(cmd, p);
+          swrite(cmd, path+p);
         }
 
         // Read the pipelined responses like a champ.
         System.out.println("reading piped responses");
         for (String p : working) {
-          ListSink sink = new ListSink();
+          ListSink sink = new ListSink(path);
 
-          System.out.println(cmd+" "+p);
+          System.out.println(cmd+" "+path+p);
 
           // Interpret the pipelined PASV command.
           try {
@@ -334,7 +337,7 @@ public class StorkGridFTPModule extends TransferModule {
           
           // Otherwise, add subdirs and repeat.
           for (XferList.Entry e : xl)
-            if (e.dir) subdirs.add(e.path());
+            if (e.dir) subdirs.add(e.path);
           list.addAll(xl);
         }
 
