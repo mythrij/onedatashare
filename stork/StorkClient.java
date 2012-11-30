@@ -61,7 +61,7 @@ public class StorkClient {
       opts.args = new String[] { "[option...] [status] [job_id...]" };
       opts.desc = new String[] {
         "This command can be used to query a Stork server for information "+
-        "about jobs in queue.", "Specifying status allows filtering"+
+        "about jobs in queue.", "Specifying status allows filtering "+
         "of results based on job status, and may be any one of the " +
         "following values: pending (default), all, done, scheduled, "+
         "processing, removed, failed, or complete.", "The job id, of "+

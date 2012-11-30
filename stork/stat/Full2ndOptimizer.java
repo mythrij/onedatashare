@@ -184,7 +184,7 @@ public class Full2ndOptimizer extends Optimizer {
 
   // Calculate the optimal stream count based on derivative.
   static int cal_full_peak(double a, double b, double c, Range r) {
-    int n = (int) (-2*c/b);
+    int n = (int) Math.round(-2*c/b);
     
     return (n > r.max()) ? r.max() :
            (n < r.min()) ? r.min() : n;

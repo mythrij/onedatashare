@@ -345,4 +345,12 @@ public class ClassAd implements Iterable<String> {
   public ClassAd() {
     record = new RecordExpr();
   }
+
+  // These are equivalent to new ClassAd.insert().
+  public ClassAd(String k, String v)  { this(); insert(k, v); }
+  public ClassAd(String k, int v)     { this(); insert(k, v); }
+  public ClassAd(String k, long v)    { this(); insert(k, v); }
+  public ClassAd(String k, double v)  { this(); insert(k, v); }
+  public ClassAd(String k, boolean v) { this(); insert(k, v); }
+  public ClassAd(String k, Expr v)    { this(); insert(k, v); }
 }

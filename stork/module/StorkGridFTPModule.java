@@ -238,9 +238,9 @@ public class StorkGridFTPModule extends TransferModule {
 
     // Watch a transfer as it takes place, intercepting status messages
     // and reporting any errors. Use this for pipelined transfers.
-    public void watchTransfer(DataSink sink, boolean local) throws Exception {
+    void watchTransfer(DataSink sink, boolean local) throws Exception {
       TransferState ss = new TransferState(), ds = new TransferState();
-      BasicClientControlChannel oc;
+      BasicClientControlChannel cc = controlChannel, oc;
       TransferMonitor stm, dtm;
       ProgressListener pl = new ProgressListener(progress);
 
@@ -252,12 +252,21 @@ public class StorkGridFTPModule extends TransferModule {
       else
         oc = dest.controlChannel;
 
-      stm = new TransferMonitor(controlChannel, ss, null, 50000, 2000, 1);
-      dtm = new TransferMonitor(oc, ds, pl, 50000, 2000, 1);
+      stm = new TransferMonitor(cc, ss, null, 50000, 2000, 1);
+      dtm = new TransferMonitor(oc, ds, pl,   50000, 2000, 1);
 
       stm.setOther(dtm);
       dtm.setOther(stm);
-      stm.run(); dtm.run();
+
+      // Only watch the other control channel if it's not local.
+      if (!local) {
+        Thread t = new Thread(dtm);
+        t.start();
+        stm.run();
+        t.join();
+      } else {
+        stm.run();
+      }
 
       if (ss.hasError())
         throw ss.getError();
@@ -280,7 +289,7 @@ public class StorkGridFTPModule extends TransferModule {
       FTPControlChannel cc = controlChannel;
       final String MLSR = "MLSR", MLSD = "MLSD";
       String cmd = isFeatureSupported("MLSR") ? MLSR : MLSD;
-      XferList list = new XferList(path, "");
+      XferList list = new XferList(path, path);
       path = list.sp;  // This will be normalized to end with /.
 
       LinkedList<String> dirs = new LinkedList<String>();
@@ -296,36 +305,32 @@ public class StorkGridFTPModule extends TransferModule {
         LinkedList<String> subdirs = new LinkedList<String>();
         LinkedList<String> working = new LinkedList<String>();
 
-        System.out.println("building working list");
-        while (working.size() < pipelining && !dirs.isEmpty())
+        while (working.size() <= pipelining && !dirs.isEmpty())
           working.add(dirs.pop());
 
         // Pipeline commands like a champ.
-        System.out.println("piping commands");
         for (String p : working) {
-          System.out.println(cmd+" "+path+p);
           swrite(Command.PASV);
           swrite(cmd, path+p);
         }
 
         // Read the pipelined responses like a champ.
-        System.out.println("reading piped responses");
         for (String p : working) {
           ListSink sink = new ListSink(path);
-
-          System.out.println(cmd+" "+path+p);
 
           // Interpret the pipelined PASV command.
           try {
             getPasvReply();
           } catch (Exception e) {
-            throw new Exception("couldn't set passive mode for MLSR: "+e);
+            throw new Exception("couldn't set passive mode: "+e);
           }
 
-          // Try to get the listing, ignoring errors.
+          // Try to get the listing, ignoring errors unless it was root.
           try {
             watchTransfer(sink, true);
           } catch (Exception e) {
+            if (p.isEmpty())
+              throw new Exception("couldn't list: "+path);
             continue;
           }
 
@@ -389,21 +394,14 @@ public class StorkGridFTPModule extends TransferModule {
       if (dp == null || dp.isEmpty())
         throw new Exception("dest path is empty");
 
-      // If dest path is a directory, append file name.
-      if (dp.endsWith("/"))
-        dp += StorkUtil.basename(sp);
-
       System.out.println("Transferring: "+sp+" -> "+dp);
 
       // See if we're doing a directory transfer and need to build
       // a directory list.
-      if (sp.endsWith("/")) try {
+      if (sp.endsWith("/")) {
         xl = mlsr(sp);
         xl.dp = dp;
-      } catch (Exception e) {
-        throw new Exception("couldn't get listing for: "+sp);
       } else try {  // Otherwise it's just one file.
-        System.out.println("size = "+size(sp));
         xl = new XferList(sp, dp, size(sp));
       } catch (Exception e) {
         xl = new XferList(sp, dp, -1);
@@ -436,15 +434,15 @@ public class StorkGridFTPModule extends TransferModule {
         sink.mergeAd(new ClassAd().insert("optimizer", "none"));
       }
 
-      // mkdir the destination path for this list if it's a directory.
-      if (xl.root.dir) {
-        sendPipedXfer(xl.root);
-        recvPipedXferResp(xl.root);
-      }
-
       // Connect source and destination server.
       HostPort hp = dest.setPassive();
       setActive(hp);
+
+      // mkdir dest directory.
+      try {
+        sendPipedXfer(xl.root);
+        recvPipedXferResp(xl.root);
+      } catch (Exception e) { /* who cares */ }
 
       // Let the progress monitor know we're starting.
       progress.transferStarted(xl.size(), xl.count());
@@ -461,7 +459,7 @@ public class StorkGridFTPModule extends TransferModule {
         if (p > 0) {
           setParallelism(p);
           if (sink != null)
-            sink.mergeAd(new ClassAd().insert("parallelism", p));
+            sink.mergeAd(new ClassAd("parallelism", p));
         }
 
         if (len >= 0)
@@ -543,7 +541,11 @@ public class StorkGridFTPModule extends TransferModule {
         if (e.len < 0 && e.off > 0) {
           dread(); sread();  // Read and ignore REST.
         } watchTransfer(null, false);
+
+        if (e.len < 0 || e.off + e.len == e.size)
+          progress.done(0, 1);
       }
+
     }
 
     // TODO: Develop some kind of pipelining mechanism.
@@ -556,9 +558,9 @@ public class StorkGridFTPModule extends TransferModule {
         int p = pipelining;
         List<XferList.Entry> wl = new LinkedList<XferList.Entry>();
 
-        // Pipeline p commands at a time, unless pipelining is zero,
+        // Pipeline p commands at a time, unless pipelining is -1,
         // in which case we have infinite pipelining.
-        while (pipelining < 1 || p-- > 0) {
+        while (pipelining < 0 || p-- >= 0) {
           XferList.Entry x = xl.pop();
 
           if (x == null)
@@ -571,7 +573,6 @@ public class StorkGridFTPModule extends TransferModule {
         // Read responses to piped commands.
         for (XferList.Entry e : wl) {
           recvPipedXferResp(e);
-          progress.done(0, 1);
           e.done = true;
         }
       }
@@ -594,6 +595,8 @@ public class StorkGridFTPModule extends TransferModule {
         PerfMarker pm = (PerfMarker) m;
         long cur_bytes = pm.getStripeBytesTransferred();
         long diff = cur_bytes-last_bytes;
+
+        System.out.println("Got bytes: "+diff);
 
         last_bytes = cur_bytes;
         prog.done(diff);
@@ -696,8 +699,8 @@ public class StorkGridFTPModule extends TransferModule {
 
     private void close() {
       try {
-        if (sc != null) sc.close();
-        if (dc != null) dc.close();
+        if (sc != null) sc.close(true);
+        if (dc != null) dc.close(true);
       } catch (Exception e) { }
     }
 
@@ -706,7 +709,6 @@ public class StorkGridFTPModule extends TransferModule {
         process();
         rv = 0;
       } catch (Exception e) {
-        e.printStackTrace();
         ClassAd ad = new ClassAd();
         ad.insert("message", e.getMessage());
         sink.mergeAd(ad);
@@ -714,7 +716,7 @@ public class StorkGridFTPModule extends TransferModule {
 
       // Cleanup
       sink.close();
-      close();
+      //close();
     }
 
     public void fatal(String m) throws Exception {
@@ -817,6 +819,9 @@ public class StorkGridFTPModule extends TransferModule {
     while (true) {
       ClassAd cad = tf.getAd();
 
+      Runtime runtime = Runtime.getRuntime();
+      System.out.println(runtime.freeMemory()+" free");
+
       if (cad != null)
         System.out.println("Got ad: "+cad);
       else break;
@@ -864,5 +869,39 @@ public class StorkGridFTPModule extends TransferModule {
       System.out.println("Error: "+e);
       e.printStackTrace();
     }
+  }
+
+  public static void main3(String[] args) {
+    final TransferProgress tp = new TransferProgress();
+
+    //tp.transferStarted(1000000000, 1);
+
+    new Thread(new Runnable() {
+      public void run() {
+        try {
+          double j = 0;
+          for (double q = 0; q <= 1000; q = q+10) {
+            double t = 500+j*(Math.random()-.5);
+            double b = q*t;
+            tp.done((long) b, 0);
+            Thread.sleep((int) t);
+          }
+          System.out.println("Going to down...");
+          Thread.sleep(1000);
+          for (double q = 1000; q >= 0; q = q-10) {
+            double t = 500+j*(Math.random()-.5);
+            double b = q*t;
+            tp.done((long) b, 0);
+            Thread.sleep((int) t);
+          }
+          System.out.println("Going to 0...");
+        } catch (Exception e) { }
+      }
+    }).start();
+
+    while (true) try {
+      System.out.println(tp.getAd());
+      Thread.sleep(350);
+    } catch (Exception e) { }
   }
 }

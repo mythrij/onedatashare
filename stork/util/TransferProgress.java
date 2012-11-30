@@ -13,8 +13,8 @@ public class TransferProgress {
   private AdSink sink = null;
 
   // Metrics used to calculate instantaneous throughput.
-  private double q = 1000.0;  // Time quantum for throughput.
-  private long qr_time = -1;  // Time the quantum was last reset.
+  private double q = 500.0; // Time quantum for throughput.
+  private long lst = -1;  // last sample time
   private long btq = 0;  // bytes this quantum
   private long blq = 0;  // bytes last quantum
 
@@ -76,7 +76,7 @@ public class TransferProgress {
     ad.insert("progress", byte_progress.toPercent());
     ad.insert("file_progress", file_progress.toString());
     ad.insert("throughput", throughput(false));
-    if (durationValue() >= 1000)
+    if (duration() >= 1000)
       ad.insert("avg_throughput", throughput(true));
     return ad;
   }
@@ -108,25 +108,25 @@ public class TransferProgress {
     done(bytes, 0);
   } public synchronized void done(long bytes, int files) {
     long now = now();
-    long diff = 0;
+    long d = now-lst;
 
-    if (qr_time == -1)
-      qr_time = now;
-    else
-      diff = now-qr_time;
-
-    // See if we need to reset time quantum.
-    if (diff > q) {
-      blq = (long) (btq * q / diff);
-      btq = 0;
-      qr_time = now;
-    }
+    // See how to calculate bytes this quantum.
+    if (lst == -1) {
+      btq = bytes;
+    } else if (d >= 2*q) {
+      blq = btq = (long) (bytes*(q/d));
+    } else if (d >= q) {
+      blq = (long) (bytes*(1-q/d) + btq*(2-d/q));
+      btq = (long) (bytes*(q/d));
+    } else {
+      blq = (long) (blq*(1-d/q) + btq*(d/q));
+      btq = (long) (btq*(1-d/q) + bytes);
+    } lst = now;
 
     if (bytes > 0) byte_progress.add(bytes);
     if (files > 0) file_progress.add(files);
-    updateAd();
 
-    btq += bytes;
+    updateAd();
   }
 
   // Get the throughput in bytes per second. When doing instantaneous
@@ -139,20 +139,21 @@ public class TransferProgress {
     if (avg) {  // Calculate average
       if (start_time == -1)
         return -1.0;
-      d = (double) durationValue();
+      d = (double) duration();
       b = byte_progress.done;
     } else if (end_time >= 0) {
       return -1.0;  // If we've ended, inst thrp means nothing!
     } else {  // Calculate instantaneous
-      if (qr_time == -1)
+      if (lst == -1)
         return -1.0;
-      d = (double) (now()-qr_time);
+      d = (double) (now()-lst);
       if (d >= 2*q)
-        b = 0;
+        return 0.0;
       else if (d >= q)
+        //b = (long) (btq*(1-(d-q)/q));
         b = btq;
       else
-        b = (long) (blq*((q-d)/q) + btq);
+        b = (long) (btq*(d/q) + blq*(1-d/q));
       d = q;
     }
 
@@ -167,18 +168,12 @@ public class TransferProgress {
   }
 
   // Get the duration of the transfer in milliseconds.
-  public long durationValue() {
+  public long duration() {
     if (start_time == -1)
       return 0;
     if (end_time == -1)
       return now()-start_time;
     return end_time-start_time;
-  }
-
-  // Get the duration as a string.
-  public String duration() {
-    long t = durationValue();
-    return (t > 0) ? prettyTime(t) : null;
   }
 
   public Progress byteProgress() {

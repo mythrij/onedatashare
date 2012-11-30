@@ -23,11 +23,10 @@ public class XferList implements Iterable<XferList.Entry> {
 
   // Create an XferList for a file.
   public XferList(String src, String dest, long size) {
-    sp = src;
-    dp = dest;
-    root = new Entry("", size);
-    list.add(root);
-    this.size += size;
+    sp = StorkUtil.dirname(src);
+    dp = StorkUtil.dirname(dest);
+    add(StorkUtil.basename(src), size);
+    root = new Entry("");
   }
 
   // An entry (file or directory) in the list.

@@ -28,13 +28,13 @@ public class AdSink {
     if (more) try {
       wait();
       if (closed) more = false;
-      return ad;
+      return new ClassAd(ad);
     } catch (Exception e) { }
     return null;
   }
 
   // Get the ad current in the sink, or an empty ad if none.
   public synchronized ClassAd peekAd() {
-    return (ad != null) ? ad : new ClassAd();
+    return (ad != null) ? new ClassAd(ad) : new ClassAd();
   }
 }
