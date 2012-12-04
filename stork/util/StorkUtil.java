@@ -38,17 +38,17 @@ public class StorkUtil {
   }
 
   // Collapse a string array back into a CSV string.
-  public static String joinCSV(String... sa) {
+  public static String joinCSV(Object... sa) {
     return joinWith(", ", sa);
   }
 
   // Join a string with spaces.
-  public static String join(String... sa) {
+  public static String join(Object... sa) {
     return joinWith(" ", sa);
   }
 
   // Join a string array with a delimiter.
-  public static String joinWith(String del, String... sa) {
+  public static String joinWith(String del, Object... sa) {
     StringBuffer sb = new StringBuffer();
     
     if (del == null) del = "";
