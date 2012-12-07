@@ -25,8 +25,9 @@ public class AdSink {
 
   // Block until an ad has come in, then clear the ad.
   public synchronized ClassAd getAd() {
-    if (more) try {
+    if (!closed && more) try {
       wait();
+      if (ad == null) return null;
       if (closed) more = false;
       return new ClassAd(ad);
     } catch (Exception e) { }
