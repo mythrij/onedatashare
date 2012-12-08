@@ -2,6 +2,7 @@ package stork.util;
 
 import java.util.*;
 import java.util.regex.*;
+import java.io.*;
 
 // A bunch of static utility functions, how fun!
 
@@ -112,5 +113,43 @@ public class StorkUtil {
     int i = path.lastIndexOf('/');
 
     return (i == -1) ? "" : path.substring(0, i);
+  }
+
+  // File system functions
+  // ---------------------
+  // Functions to get information about the local file system.
+  
+  // Get an XferList a local path. If it's a directory, does a
+  // recursive listing.
+  public static XferList list(String path) throws Exception {
+    File file = new File(path);
+
+    if (!file.isDirectory())
+      return new XferList(path, path, file.length());
+    
+    XferList list = new XferList(path, path);
+    LinkedList<String> wl = new LinkedList<String>();
+    wl.add("");
+
+    // The working list will contain path names of directories relative
+    // to the root path passed to this function.
+    while (!wl.isEmpty()) {
+      String s = wl.pop();
+      for (File f : new File(path, s).listFiles()) {
+        if (f.isDirectory()) {
+          wl.add(s+f.getName());
+          list.add(s+f.getName());
+        } else {
+          list.add(s+f.getName(), f.length());
+        }
+      }
+    }
+
+    return list;
+  }
+
+  // Get the size of a file.
+  public static long size(String path) throws Exception {
+    return new File(path).length();
   }
 }

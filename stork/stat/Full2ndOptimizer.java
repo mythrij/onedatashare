@@ -43,7 +43,11 @@ public class Full2ndOptimizer extends Optimizer {
     }
   }
 
-  public Full2ndOptimizer(long size, Range range) {
+  public String name() {
+    return "full_2nd";
+  }
+
+  public void initialize(long size, Range range) {
     this.size = size;
     p_range = range;
     para = range.min();

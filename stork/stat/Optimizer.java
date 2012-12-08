@@ -30,5 +30,11 @@ public class Optimizer {
   public void report(ClassAd ad) { }
 
   // Used to initialize the optimizer's starting settings.
-  public void initialize(ClassAd ad) { }
+  //public void initialize(ClassAd ad) { }
+  public void initialize(long size, Range range) { }
+
+  // Get the name of the optimizer.
+  public String name() {
+    return "none";
+  }
 } 
