@@ -10,7 +10,7 @@ import java.util.*;
 public class StorkClient {
   private Socket server_sock;
 
-  private static Map<String, StorkCommand> cmd_handlers;
+  private static Map<String, Class> cmd_handlers;
 
   // Configuration variables
   private ClassAd env = null;
@@ -18,42 +18,55 @@ public class StorkClient {
   // Some static initializations...
   static {
     // Initialize command handlers
-    cmd_handlers = new HashMap<String, StorkCommand>();
-    cmd_handlers.put("stork_q", new StorkQHandler());
-    cmd_handlers.put("stork_list", new StorkQHandler());
-    cmd_handlers.put("stork_submit", new StorkSubmitHandler());
-    cmd_handlers.put("stork_rm", new StorkRmHandler());
-    cmd_handlers.put("stork_info", new StorkInfoHandler());
+    cmd_handlers = new HashMap<String, Class>();
+    cmd_handlers.put("stork_q", StorkQHandler.class);
+    cmd_handlers.put("stork_list", StorkQHandler.class);
+    cmd_handlers.put("stork_status", StorkQHandler.class);
+    cmd_handlers.put("stork_submit", StorkSubmitHandler.class);
+    cmd_handlers.put("stork_rm", StorkRmHandler.class);
+    cmd_handlers.put("stork_info", StorkInfoHandler.class);
   }
 
   // Client command handlers
   // -----------------------
   // The handle method should return a ClassAd containing the response
-  // from the server.
-  private static abstract class StorkCommand {
-    InputStream is;
-    OutputStream os;
+  // from the server. To extend this class, one should override the abstract
+  // handle method, not the final one (obviously that would be impossible).
+  static abstract class StorkCommand {
+    Socket sock = null;
+    InputStream is = null;
+    OutputStream os = null;
+    ClassAd env = null;
+    String[] args = null;
 
-    public ResponseAd handle(ClassAd env, String[] args, Socket sock) {
+    final void init(ClassAd env, String[] args) {
+      this.env = env;
+      this.args = args;
+    }
+
+    final ResponseAd handle(Socket sock) {
       try {
+        this.sock = sock;
         is = sock.getInputStream();
         os = sock.getOutputStream();
 
         // Some sanity checking
+        if (env == null || args == null)
+          throw new Error("handler was not initialized");
         if (is == null || os == null)
           throw new Exception("problem with socket");
 
-        return _handle(env, args);
+        return handle();
       } catch (Exception e) {
         return new ResponseAd("error", e.getMessage());
       }
     }
 
     abstract GetOpts parser(GetOpts base);
-    abstract ResponseAd _handle(ClassAd env, String[] args) throws Exception;
+    abstract ResponseAd handle() throws Exception;
   }
 
-  private static class StorkQHandler extends StorkCommand {
+  static class StorkQHandler extends StorkCommand {
     GetOpts parser(GetOpts base) {
       GetOpts opts = new GetOpts(base);
 
@@ -120,7 +133,7 @@ public class StorkClient {
       return res;
     }
 
-    ResponseAd _handle(ClassAd env, String[] args) throws Exception {
+    ResponseAd handle() throws Exception {
       ClassAd ad = new ClassAd();
       Range range = new Range();
       String status = null;
@@ -159,7 +172,7 @@ public class StorkClient {
     }
   }
 
-  private static class StorkRmHandler extends StorkCommand {
+  static class StorkRmHandler extends StorkCommand {
     GetOpts parser(GetOpts base) {
       GetOpts opts = new GetOpts(base);
 
@@ -175,7 +188,7 @@ public class StorkClient {
       return opts;
     }
 
-    ResponseAd _handle(ClassAd env, String[] args) throws Exception {
+    ResponseAd handle() throws Exception {
       Range range = new Range();
       ClassAd ad = new ClassAd();
       ad.insert("command", "stork_rm");
@@ -208,7 +221,7 @@ public class StorkClient {
     }
   }
 
-  private static class StorkInfoHandler extends StorkCommand {
+  static class StorkInfoHandler extends StorkCommand {
     GetOpts parser(GetOpts base) {
       GetOpts opts = new GetOpts(base);
 
@@ -223,7 +236,7 @@ public class StorkClient {
       return opts;
     }
 
-    ResponseAd _handle(ClassAd env, String[] args) throws Exception {
+    ResponseAd handle() throws Exception {
       ClassAd ad = new ClassAd();
       ad.insert("command", "stork_info");
 
@@ -252,7 +265,7 @@ public class StorkClient {
     }
   }
 
-  private static class StorkSubmitHandler extends StorkCommand {
+  static class StorkSubmitHandler extends StorkCommand {
     GetOpts parser(GetOpts base) {
       GetOpts opts = new GetOpts(base);
 
@@ -377,7 +390,7 @@ public class StorkClient {
                             ja+" of "+js + " jobs successfully submitted");
     }
 
-    ResponseAd _handle(ClassAd env, String[] args) throws Exception {
+    ResponseAd handle() throws Exception {
       ClassAd ad;
       ResponseAd res;
       Console cons;
@@ -398,9 +411,7 @@ public class StorkClient {
           FileInputStream fis = new FileInputStream(new File(args[0]));
           return submit_from_stream(fis, true);
         case 2:  // src_url and dest_url
-          ad = new ClassAd();
-          ad.insert("src_url", args[0]);
-          ad.insert("dest_url", args[1]);
+          ad = new SubmitAd(args[0], args[1]);
           print_response(res = submit_job(ad));
           return res;
         default:
@@ -411,10 +422,19 @@ public class StorkClient {
 
   // Class methods
   // -------------
+  // Get a command handler by command name or null if none.
+  public static StorkCommand handler(String cmd) {
+    try {
+      return (StorkCommand) cmd_handlers.get(cmd).newInstance();
+    } catch (Exception e) {
+      return null;
+    }
+  }
+
   // Get a GetOpts parser for a Stork command.
   public static GetOpts getParser(String cmd, GetOpts base) {
     try {
-      return cmd_handlers.get(cmd).parser(base);
+      return handler(cmd).parser(base);
     } catch (Exception e) {
       return null;
     }
@@ -427,7 +447,7 @@ public class StorkClient {
 
   // Execute a command on the connected Stork server.
   public void execute(String cmd, String[] args) {
-    StorkCommand scmd = cmd_handlers.get(cmd);
+    StorkCommand scmd = handler(cmd);
     String host = env.get("host");
     int port = env.getInt("port");
 
@@ -436,6 +456,8 @@ public class StorkClient {
       System.out.println("unknown command: "+cmd);
       return;
     }
+
+    scmd.init(env, args);
 
     // Try to do connection stuff.
     if (server_sock == null) try {
@@ -449,7 +471,7 @@ public class StorkClient {
     }
 
     // Execute the command handler.
-    ResponseAd ad = scmd.handle(env, args, server_sock);
+    ResponseAd ad = scmd.handle(server_sock);
     System.out.println("Done: "+ad.toDisplayString());
   }
 

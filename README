@@ -1,6 +1,5 @@
 WHAT'S THIS?
-
-  The Stork README file. Aptly named, you should take its advice!
+  The Stork README file. Aptly named; you should read it!
 
   NOTE: This file, like Stork, is still in beta, and a lot of the
   features mentioned herein are not implemented (though will be soon).
@@ -8,13 +7,16 @@ WHAT'S THIS?
   If there is a * at the beginning of a line, it means something in
   that line has not been implemented yet.
 
-  Maintainers/Contributors: Two spaces at the beginning of each line
-  under a header, NO TABS, line should wrap at 72 characters, per my
-  arbitrary decree.
+  Maintainers/Contributors: In this file, two spaces at the beginning
+  of each line under a header, NO TABS, line should wrap at 72 (here) >
+  characters, per arbitrary decree.
+
+TABLE OF CONTENTS
+  TODO: This, and numbering.
 
 WHAT IS STORK?
   Stork is a data transfer scheduler that provides a common interface
-  to different file transfer protocols
+  to different file transfer protocols.
 
   Stork uses a client-server architecture where clients submit jobs to
   a Stork server and the Stork server performs the transfer when
@@ -25,14 +27,70 @@ WHAT IS STORK?
   in an appropriate way and informing the user if a job can't be
   completed.
 
-  Stork plug-ins can be created to add support for novel file transfer
-  protocols very easily (wit any programming language, too) using a
+  Stork plug-ins can be created to add support for new file transfer
+  protocols very easily (with any programming language, too) using a
   simple external executable interface. If additional performance or
   integration with the Stork server is desired, plug-ins can also be
-  written in Java and extend the built-in TransferModule class.
+  written in Java and extend the built-in TransferModule class,
+  eliminating the communication overhead of piping ClassAds between
+  Stork and the transfer module.
+
+SUPPORTED PLATFORMS
+  Any modern operating system that can run a JVM.
+
+BUILDING
+  On most systems, simply run `make'! 
+
+COMMANDS
+  stork_server - Used to start (or stop) a Stork server.
+
+  stork_q - List all the jobs in the Stork queue along with information
+    about them, such as their status and progress. Can be used to find
+    information about specific jobs by passing a job id. Can also be
+    used to filter jobs by their status.
+
+  stork_submit - Submit a job to a Stork server. Can be passed a source
+    and destination URL, or a ClassAd descriptor of the job.
+
+  stork_rm - Remove or terminate a submitted job or set of jobs.
+
+  stork_info - Display configuration information about the server. Can
+    also be used to find information about transfer modules.
+
+  More information can be found by running `<command> --help'.
+
+CONFIGURING
+  The Stork configuration file (stork.conf) can be used to change
+  settings for the server and client tools. The search order for the
+  configuration file is as follows:
+
+   1) STORK_CONFIG environment variable
+   2) ~/.stork.conf
+   3) /etc/stork.conf
+   4) (install dir)/stork.conf
+   5) /usr/local/stork/stork.conf
+   6) stork.conf in currect directory
+
+  Even if the file can't be found automatically, every valid config
+  variable has a "sane" default value. The Stork server will issue a
+  warning on startup if a config file cannot be found.
+
+  TODO: Document configuration variables here.
+
+HOW TO USE
+  Start a Stork server, unless you plan on using an existing server.
+  Submit a job to the server using stork_submit. Upon submission, the
+  job will be assigned a job id which stork_submit will output. Run
+  `stork_q all' to view all jobs and look for the job you submitted.
+  You can use `stork_rm' to cancel the job. You can run `stork_info' to
+  see additional information about a server, such as what protocols it
+  supports.
+
+  Every Stork command honors the --help option, which will cause it to
+  display usage information. Run, e.g., `stork_submit --help' to see
+  detailed information on how to use stork_submit.
 
 CLASSADS
-
   Stork makes extensive use of the ClassAd language -- a data
   representation format developed by the Condor Team at UW-Madison.
   ClassAds are human-readable, easy to parse, and even easier to
@@ -48,8 +106,8 @@ CLASSADS
   transfer at most five times and will send an email to the user when
   the job starts and completes:
 
-  [ src_url = "ftp://example.com/file1.txt";
-    dest_url = "ftp://example.com/file2.txt";
+  [ src  = "ftp://example.com/file1.txt";
+    dest = "ftp://example.com/file2.txt";
     max_attempts = 5; email = "user@example.com" ]
 
   Note that each ClassAd begins with a [ and ends with a ]. Everything
@@ -76,53 +134,17 @@ CLASSADS
   understanding ClassAds.
 
   In short, ClassAds are pretty important for all but the most basic
-  usage scenarios 
+  usage scenarios. Luckily they're pretty intuitive.
 
-  More information about ClassAds, can be found here:
+  More information about ClassAds can be found here:
 
     <http://research.cs.wisc.edu/condor/classad/>
 
-SUPPORTED PLATFORMS
-  Any modern operating system that can run a JVM.
-
-BUILDING
-  On most systems, simply run `make'! 
-
-COMMANDS
-  stork_server - Used to start (or stop) a Stork server.
-
-  stork_q - List all the jobs in the Stork queue along with information
-    about them, such as their status and progress. Can be used to find
-    information about specific jobs by passing a job id. Can also be
-    used to filter jobs by their status.
-
-  stork_submit - Submit a job to a Stork server. Can be passed a source
-    and destination URL, or a ClassAd descriptor of the job.
-
-  stork_rm - Remove or terminate a submitted job or set of jobs.
-
-  stork_info - Display configuration information about the server. Can
-    also be used to find information about transfer modules.
-
-CONFIGURING
-  The Stork configuration file (stork.conf) can be used to change
-  settings for the server and client tools. The search order for the
-  configuration file is as follows:
-
-   1) STORK_CONFIG environment variable
-   2) ~/.stork.conf
-   3) /etc/stork.conf
-   4) (install dir)/stork.conf
-   5) /usr/local/stork/stork.conf
-   6) stork.conf in currect directory
-
-  Even if the file can't be found automatically, every valid config
-  
-
-HOW TO USE
-  Start a Stork server, unless you plan on using an existing server.
-  Submit a job to the server using stork_submit. If it's a simple 
-
 API
   All communication in Stork is done in ClassAds. To communicate with
-  a 
+  a Stork server using a custom client, one simply needs to establish
+  a TCP connection to the Stork server's command port, and write a
+  ClassAd containing command = "<command_name>" and any other arguments
+* the server expects. The arguments a command handler expects in this
+* ad can be found in the commands above StorkCommand subclass
+* definitions in StorkServer.java.

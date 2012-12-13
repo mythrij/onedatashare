@@ -399,9 +399,9 @@ public class StorkGridFTPModule extends TransferModule {
       if (oc.local)
         oc.facade.setActive(hp);
       else if (oc.fc.isIPv6())
-        oc.execute(new Command("EPRT", hp.toFtpCmdArgument()));
+        oc.execute("EPRT", hp.toFtpCmdArgument());
       else
-        oc.execute(new Command("PORT", hp.toFtpCmdArgument()));
+        oc.execute("PORT", hp.toFtpCmdArgument());
       dc_ready = true;
     }
 

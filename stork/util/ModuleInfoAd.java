@@ -60,7 +60,7 @@ public class ModuleInfoAd extends ClassAd {
     protocols = StorkUtil.splitCSV(get("protocols"));
     if (protocols.length == 0)
       throw new Exception("no supported protocols listed");
-    insert("protocols", StorkUtil.joinCSV(protocols));
+    insert("protocols", StorkUtil.joinCSV((Object[]) protocols));
 
     handle = StorkUtil.normalize(get("handle", name));
     if (handle.isEmpty())
@@ -80,9 +80,9 @@ public class ModuleInfoAd extends ClassAd {
     } insert("accepts", accepts);
 
     opt_params = StorkUtil.splitCSV(get("opt_params"));
-    insert("opt_params", StorkUtil.joinCSV(opt_params));
+    insert("opt_params", StorkUtil.joinCSV((Object[]) opt_params));
 
     req_params = StorkUtil.splitCSV(get("req_params"));
-    insert("req_params", StorkUtil.joinCSV(req_params));
+    insert("req_params", StorkUtil.joinCSV((Object[]) req_params));
   }
 }

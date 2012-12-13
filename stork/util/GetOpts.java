@@ -272,7 +272,7 @@ public class GetOpts {
       String rest = "\n    or "+prog+' ';
       body.append(first);
       if (args != null)
-        body.append(StorkUtil.joinWith(rest, args));
+        body.append(StorkUtil.joinWith(rest, (Object[]) args));
     }
 
     if (desc != null) {

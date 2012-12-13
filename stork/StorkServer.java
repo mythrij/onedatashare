@@ -18,7 +18,7 @@ public class StorkServer implements Runnable {
 
   private static Thread[] thread_pool;
 
-  private static Map<String, StorkCommand> cmd_handlers;
+  private static Map<String, Class> cmd_handlers;
   private static TransferModuleTable xfer_modules;
 
   private static LinkedBlockingQueue<StorkJob> queue;
@@ -49,6 +49,7 @@ public class StorkServer implements Runnable {
   }
 
   // Used to determine time relative to start of server.
+  // TODO: Not this...
   private static long server_date = System.currentTimeMillis();
   private static long server_mt_base = System.nanoTime() / (long)1E6;
 
@@ -73,12 +74,13 @@ public class StorkServer implements Runnable {
   // Some static initializations...
   static {
     // Initialize command handlers
-    cmd_handlers = new HashMap<String, StorkCommand>();
-    cmd_handlers.put("stork_q", new StorkQHandler());
-    cmd_handlers.put("stork_list", new StorkQHandler());
-    cmd_handlers.put("stork_submit", new StorkSubmitHandler());
-    cmd_handlers.put("stork_rm", new StorkRmHandler());
-    cmd_handlers.put("stork_info", new StorkInfoHandler());
+    cmd_handlers = new HashMap<String, Class>();
+    cmd_handlers.put("stork_q", StorkQHandler.class);
+    cmd_handlers.put("stork_list", StorkQHandler.class);
+    cmd_handlers.put("stork_status", StorkQHandler.class);
+    cmd_handlers.put("stork_submit", StorkSubmitHandler.class);
+    cmd_handlers.put("stork_rm", StorkRmHandler.class);
+    cmd_handlers.put("stork_info", StorkInfoHandler.class);
 
     // Initialize transfer module set
     xfer_modules = new TransferModuleTable();
@@ -422,11 +424,11 @@ public class StorkServer implements Runnable {
   }
 
   // Stork command handlers should implement this interface
-  private static interface StorkCommand {
+  static interface StorkCommand {
     public ResponseAd handle(OutputStream s, ClassAd ad);
   }
 
-  private static class StorkQHandler implements StorkCommand {
+  static class StorkQHandler implements StorkCommand {
     public ResponseAd handle(OutputStream s, ClassAd ad) {
       // The list with ultimately read result from.
       Iterable<StorkJob> list = all_jobs;
@@ -498,7 +500,7 @@ public class StorkServer implements Runnable {
     }
   }
 
-  private static class StorkSubmitHandler implements StorkCommand {
+  static class StorkSubmitHandler implements StorkCommand {
     public ResponseAd handle(OutputStream s, ClassAd ad) {
       SubmitAd sad;
 
@@ -555,7 +557,7 @@ public class StorkServer implements Runnable {
     }
   }
 
-  private static class StorkRmHandler implements StorkCommand {
+  static class StorkRmHandler implements StorkCommand {
     public ResponseAd handle(OutputStream s, ClassAd ad) {
       StorkJob j;
       String reason = "removed by user";
@@ -593,7 +595,7 @@ public class StorkServer implements Runnable {
     }
   }
 
-  private static class StorkInfoHandler implements StorkCommand {
+  static class StorkInfoHandler implements StorkCommand {
     // Send transfer module information
     ResponseAd sendModuleInfo(OutputStream s) {
       for (TransferModule tm : xfer_modules.modules()) {
@@ -624,6 +626,15 @@ public class StorkServer implements Runnable {
 
   // Class methods
   // -------------
+  // Get an instance of a command handler by name.
+  public static StorkCommand handler(String cmd) {
+    try {
+      return (StorkCommand) cmd_handlers.get(cmd).newInstance();
+    } catch (Exception e) {
+      return null;
+    }
+  }
+
   // TODO Replace with handler thread to prevent DoS attacks
   private void handle_client(Socket s) throws IOException {
     InputStream is;
@@ -669,7 +680,7 @@ public class StorkServer implements Runnable {
       ad.remove("command");
 
       // Look up handler for command
-      StorkCommand cmd_handler = cmd_handlers.get(cmd);
+      StorkCommand cmd_handler = handler(cmd);
 
       if (cmd_handler != null)
         res = cmd_handler.handle(os, ad);
