@@ -635,7 +635,8 @@ public class StorkServer implements Runnable {
     }
   }
 
-  // TODO Replace with handler thread to prevent DoS attacks
+  // TODO Replace with handler thread to prevent DoS attacks and
+  // allow concurrent handling.
   private void handle_client(Socket s) throws IOException {
     InputStream is;
     OutputStream os;

@@ -45,8 +45,10 @@ public class GetOpts {
     // Get the usage parameters string sans description for this option.
     public String params() {
       String s = (c != 0) ? "  -"+c+", " : "      ";
-      String arg = (parser != null) ? "="+parser.arg() : "";
-      return s+"--"+name+arg;
+      String a = parser == null    ? "" :
+                 parser.optional() ? "[="+parser.arg()+"]" :
+                                     "="+parser.arg();
+      return s+"--"+name+a;
     }
 
     // Convert to a string with usage and description, with appropriate

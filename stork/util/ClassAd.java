@@ -124,15 +124,19 @@ public class ClassAd implements Iterable<String> {
   } public int getInt(String s, int def) {
     Expr e = getExpr(s);
 
-    if (e != null) switch (e.type) {
-      case Expr.INTEGER:
-        return e.intValue();
-      case Expr.REAL:
-        return (int) e.realValue();
-      case Expr.STRING:
-        return Integer.parseInt(e.stringValue());
-      default:
-        return Integer.parseInt(e.toString());
+    if (e != null) try {
+      switch (e.type) {
+        case Expr.INTEGER:
+          return e.intValue();
+        case Expr.REAL:
+          return (int) e.realValue();
+        case Expr.STRING:
+          return Integer.parseInt(e.stringValue());
+        default:
+          return Integer.parseInt(e.toString());
+      }
+    } catch (Exception ex) {
+      /* Parse error, fall through... */
     } return def;
   }
 
@@ -142,14 +146,18 @@ public class ClassAd implements Iterable<String> {
   } public double getDouble(String s, double def) {
     Expr e = getExpr(s);
 
-    if (e != null) switch (e.type) {
-      case Expr.REAL:
-      case Expr.INTEGER:
-        return e.realValue();
-      case Expr.STRING:
-        return Double.parseDouble(e.stringValue());
-      default:
-        return Double.parseDouble(e.toString());
+    if (e != null) try {
+      switch (e.type) {
+        case Expr.REAL:
+        case Expr.INTEGER:
+          return e.realValue();
+        case Expr.STRING:
+          return Double.parseDouble(e.stringValue());
+        default:
+          return Double.parseDouble(e.toString());
+      } 
+    } catch (Exception ex) {
+      /* Parse error, fall through... */
     } return def;
   }
 

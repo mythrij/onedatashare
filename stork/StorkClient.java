@@ -85,9 +85,9 @@ public class StorkClient {
       opts.add('n', "limit", "retrieve at most N results").parser =
         opts.new SimpleParser("limit", "N", false);
       opts.add('r', "reverse", "reverse printing order (oldest first)");
-      opts.add('f', "follow",
-               "retrieve list every N seconds (default: 2)").parser =
-        opts.new SimpleParser("limit", "[N]", true);
+      opts.add('w', "watch",
+               "retrieve list every T seconds (default 2)").parser =
+        opts.new SimpleParser("watch", "T", true);
 
       return opts;
     }
@@ -135,9 +135,13 @@ public class StorkClient {
 
     ResponseAd handle() throws Exception {
       ClassAd ad = new ClassAd();
+      ResponseAd res;
       Range range = new Range();
       String status = null;
-      int follow = env.getInt("follow");
+      int watch = -1;
+
+      if (env.has("watch"))
+        watch = env.getInt("watch", 2);
 
       ad.insert("command", "stork_q");
 
@@ -159,16 +163,21 @@ public class StorkClient {
       if (status != null)
         ad.insert("status", status);
 
-      // If we're following, keep resending every interval.
+      // If we're watching, keep resending every interval.
       // TODO: Make sure clearing is portable.
-      if (follow > 0) while (true) {
+      if (watch > 0) while (true) {
         System.out.print("\033[H\033[2J");
-        ResponseAd r = sendRequest(ad);
-        if (!r.success()) return r;
-        Thread.sleep(follow*1000);
+        System.out.print("Querying every "+watch+" sec...\n\n");
+        res = sendRequest(ad);
+
+        if (!res.success()) break;
+
+        try {
+          Thread.sleep(watch*1000);
+        } catch (Exception e) { break; }
       } else {
-        return sendRequest(ad);
-      }
+        res = sendRequest(ad);
+      } return res;
     }
   }
 
