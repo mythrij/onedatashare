@@ -52,10 +52,10 @@ public class FullCOptimizer extends Optimizer {
       return new Block().toClassAd();
     }
 
-    long sample = (long) ((size >= 5E8) ? 5E7 : size/10.0);
+    long sample = (long) ((size >= 5E8 || size <= 0) ? 5E7 : size/10.0);
 
     // Don't transfer more than what's available.
-    if (off+sample >= size)
+    if (off+sample >= size && size > 0)
       sample = -1;
 
     // Determine if this is the last sample we want.
@@ -90,7 +90,7 @@ public class FullCOptimizer extends Optimizer {
     if (!warmed_up) {
       System.out.println("Alright, that was a warm-up...");
       warmed_up = true;
-    } else if (!done_sampling) {
+    } else {
       // Keep the sample and calculate next parallelism.
       System.out.println("Block: "+b);
       samples.add(b);

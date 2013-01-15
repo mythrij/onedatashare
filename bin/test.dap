@@ -1,4 +1,6 @@
-[ src_url = "gridftp://didclab-ws8:2812/home/globus/5G";
-  dest_url = "gridftp://didclab-ws9/home/globus/5G";
+[ src = "gridftp://didclab-ws9:5000/home/globus/5G";
+  dest = "gridftp://didclab-ws9:5001/home/globus/5G";
+  optimization = "full_2nd";
+  parallelism = "5-20";
   x509_file = "/tmp/x509up_u1000";
 ]

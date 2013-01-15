@@ -49,6 +49,7 @@ public class ClassAd implements Iterable<String> {
   // Parse a ClassAd from an InputStream. Consumes whitespace until a
   // non-whitespace character is found. Returns null if it can't read or
   // the ad can't be parsed.
+  // TODO: Bug check this.
   public static ClassAd parse(InputStream is) {
     try {
       boolean escape = false;

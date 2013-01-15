@@ -46,6 +46,8 @@ public class StorkUtil {
   // Join a string with spaces.
   public static String join(Object... sa) {
     return joinWith(" ", sa);
+  } public static String J(Object... sa) {  // Small name for import.
+    return join(sa);
   }
 
   // Join a string array with a delimiter.

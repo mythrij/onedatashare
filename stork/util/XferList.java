@@ -25,11 +25,13 @@ public class XferList implements Iterable<XferList.Entry> {
   public XferList(String src, String dest, long size) {
     sp = StorkUtil.dirname(src);
     dp = StorkUtil.dirname(dest);
+    if (size == 0) size = -1;  // FIXME XXX THIS IS A HACK, REMOVE ME
     add(StorkUtil.basename(src), size);
     root = new Entry("");
   }
 
   // An entry (file or directory) in the list.
+  // FIXME Single-file transfers using same source and dest file!
   public class Entry {
     private XferList parent = XferList.this;
     public String path;
@@ -230,8 +232,9 @@ public class XferList implements Iterable<XferList.Entry> {
 
     System.out.println("steal("+len+")");
 
-    if (len == -1 || (ol.size > 0 && len >= ol.size)) {
+    if (len <= 0 || len >= ol.size) {
       // Take the whole list.
+      System.out.println("Taking whole list");
       addAll(ol); ol.list.clear();
       ol.size = 0; ol.count = 0;
     } else while (len > 0 && iter.hasNext()) {
@@ -239,19 +242,24 @@ public class XferList implements Iterable<XferList.Entry> {
       long es = e.remaining();
 
       if (e.done) {
+        System.out.println("Taking (done): "+e);
         iter.remove();
         continue;
       } else if (e.dir) {
         // Don't do anything special.
+        System.out.println("Could take dir: "+e);
       } else if (es < 0 || es > len) {
         // Take a part of the entry.
+        System.out.println("Taking part: "+e);
         e = e.split(len);
       } else {
         // Take the whole entry.
+        System.out.println("Taking whole: "+e);
         iter.remove();
       }
 
       add(e);
+      len -= e.remaining();
 
       if (!recal)
         recal = ol.recalculate(e, false);

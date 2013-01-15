@@ -327,7 +327,7 @@ public class StorkClient {
       // It wasn't successfully submitted! If we know why, explain.
       else {
         System.out.print("Job submission failed! Reason: ");
-        System.out.println(ad.get("message"));
+        System.out.println(ad.get("message", "(unspecified)"));
       }
     }
 
@@ -366,7 +366,7 @@ public class StorkClient {
     }
 
     // Submit multiple ads from a stream, return ad reporting statistics.
-    private ResponseAd submit_from_stream(InputStream in, boolean print) {
+    private ResponseAd submit_from_stream(final InputStream in, boolean print) {
       ClassAd ad;
       ResponseAd res;
       int js = 0, ja = 0;  // jobs sent and jobs accepted

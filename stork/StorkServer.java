@@ -759,6 +759,7 @@ public class StorkServer implements Runnable {
         System.out.println("couldn't bind to "+host+":"+port);
       else
         System.out.println("couldn't bind to port "+port);
+      return;
     }
 
     // Populate module list
