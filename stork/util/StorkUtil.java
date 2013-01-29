@@ -16,6 +16,28 @@ public class StorkUtil {
 
   private StorkUtil() { /* I sure can't be instantiated. */ }
 
+  // Static imports
+  // --------------
+  // Static methods with small names meant to be statically imported
+  // into classes
+  public static class Static {
+    // Join objects into a string.
+    public static String J(Object... sa) {
+      return join(sa);
+    }
+
+    // Join objects into a string and return as a new exception.
+    public static Exception E(Object... o) {
+      return new Exception(join(o));
+    }
+
+    // Print debugging output.
+    public static void D(Object... o) {
+      System.out.println(join(o));
+    }
+  }
+
+
   // String functions
   // ----------------
   // All of these functions should take null and treat it like "".
@@ -46,9 +68,7 @@ public class StorkUtil {
   // Join a string with spaces.
   public static String join(Object... sa) {
     return joinWith(" ", sa);
-  } public static String J(Object... sa) {  // Small name for import.
-    return join(sa);
-  }
+  } 
 
   // Join a string array with a delimiter.
   public static String joinWith(String del, Object... sa) {

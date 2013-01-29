@@ -122,7 +122,7 @@ public class FullCOptimizer extends Optimizer {
     } return sc;
   }
 
-  // try different exponential 1 3 9 27 81 243 729
+  // TODO: Clean this up.
   void doAnalysis() {
     int j,k,l,m,s;
     int n1,n2,n3,n4,optn1,optn2,optn3,optn4;

@@ -1,7 +1,7 @@
 package stork.module;
 
 import stork.util.*;
-import static stork.util.StorkUtil.J;
+import static stork.util.StorkUtil.Static.*;
 import stork.stat.*;
 import java.net.*;
 import java.util.*;
@@ -84,80 +84,48 @@ public class StorkGridFTPModule extends TransferModule {
   // JGlobus Buffers (byte buffers with offsets) that it reads
   // through sequentially using a BufferedReader to read lines
   // and parse data returned by FTP and GridFTP MLSD commands.
-  static class ListSink extends Reader implements DataSink {
-    private String base;
-    private LinkedList<Buffer> buf_list;
-    private Buffer cur_buf = null;
-    private BufferedReader br;
+  static class ListSink implements DataSink {
+    private XferList list;
     private int off = 0;
+    private Reader reader;
+    private StringBuffer sb;
+    private List<String> newdirs;
 
-    public ListSink(String base) {
-      this.base = base;
-      buf_list = new LinkedList<Buffer>();
-      br = new BufferedReader(this);
+    public ListSink(XferList list) throws Exception {
+      sb = new StringBuffer();
+      newdirs = new LinkedList<String>();
+      this.list = list;
     }
 
-    public void write(Buffer buffer) throws IOException {
-      buf_list.add(buffer);
+    // Write a byte array of MLSD output to the sink.
+    public synchronized void write(byte[] buf) {
+      sb.append(new String(buf));
+    }
+
+    // Write a JGlobus buffer to the sink.
+    public synchronized void write(Buffer buffer) throws IOException {
+      write(buffer.getBuffer());
     }
 
     public void close() throws IOException { }
 
-    private Buffer nextBuf() {
-      try {
-        return cur_buf = buf_list.pop();
-      } catch (Exception e) {
-        return cur_buf = null;
-      }
+    // Get newly added directories.
+    public synchronized List<String> getNewDirs() {
+      return newdirs;
     }
 
-    // Increment reader offset, getting new buffer if needed.
-    private void skip(int amt) {
-      off += amt;
-
-      // See if we need a new buffer from the list.
-      while (cur_buf != null && off >= cur_buf.getLength()) {
-        off -= cur_buf.getLength();
-        nextBuf();
-      }
-    }
-
-    // Read some bytes from the reader into a char array.
-    public int read(char[] cbuf, int co, int cl) throws IOException {
-      if (cur_buf == null && nextBuf() == null)
-        return -1;
-
-      byte[] bbuf = cur_buf.getBuffer();
-      int bl = bbuf.length - off;
-      int len = (bl < cl) ? bl : cl;
-
-      for (int i = 0; i < len; i++)
-        cbuf[co+i] = (char) bbuf[off+i];
-
-      skip(len);
-
-      // If we can write more, write more.
-      if (len < cl && cur_buf != null)
-        len += read(cbuf, co+len, cl-len);
-
-      return len;
-    }
-
-    // Read a line, updating offset.
-    private String readLine() {
-      try  {
-        String s = br.readLine();
-        return s;
-      } catch (Exception e) { return null; }
-    }
-
-    // Get the list from the sink as an XferList.
-    public XferList getList(String dir) {
-      XferList xl = new XferList(base, "");
+    // Call this with the path after each listing completes. After
+    // condensing, check newdirs for newly added directories.
+    // FIXME: Maybe this isn't the best way to do this...
+    public synchronized void condenseList(String dir) throws Exception {
       String line;
 
+      newdirs.clear();
+      StringReader sr = new StringReader(sb.toString());
+      BufferedReader br = new BufferedReader(sr);
+
       // Read lines from the buffer list.
-      while ((line = readLine()) != null) {
+      while ((line = br.readLine()) != null) {
         try {
           MlsxEntry m = new MlsxEntry(line);
 
@@ -166,14 +134,17 @@ public class StorkGridFTPModule extends TransferModule {
           String size = m.get("size");
 
           if (type.equals(m.TYPE_FILE))
-            xl.add(dir+name, Long.parseLong(size));
+            list.add(dir+name, Long.parseLong(size));
           else if (!name.equals(".") && !name.equals(".."))
-            xl.add(dir+name);
+            newdirs.add(list.add(dir+name).path);
         } catch (Exception e) {
           e.printStackTrace();
           continue;  // Weird data I guess!
         }
-      } return xl;
+      }
+
+      // Clear stuff for the next listing.
+      sb = new StringBuffer();
     }
   }
 
@@ -185,10 +156,11 @@ public class StorkGridFTPModule extends TransferModule {
     public final FTPServerFacade facade;
     public final FTPControlChannel fc;
     public final BasicClientControlChannel cc;
+    private Set<String> features = null;
+    private boolean cmd_done = false;
 
     public ControlChannel(FTPURI u) throws Exception {
       port = u.port;
-      default_handler = new FTPHandler();
 
       if (u.file)
         throw new Error("making remote connection to invalid URL");
@@ -201,17 +173,19 @@ public class StorkGridFTPModule extends TransferModule {
         cc = fc = gc = new GridFTPControlChannel(u.host, u.port);
         gc.open();
 
-        if (u.cred != null) {
+        if (u.cred != null) try {
           gc.authenticate(u.cred, u.user);
+        } catch (Exception e) {
+          throw E("could not authenticate (certificate issue?)");
         } else {
           String user = (u.user == null) ? "anonymous" : u.user;
           Reply r = exchange("USER "+user);
           if (Reply.isPositiveIntermediate(r)) try {
             execute("PASS "+u.pass);
           } catch (Exception e) {
-            throw new Exception("bad password");
+            throw E("bad password");
           } else if (!Reply.isPositiveCompletion(r)) {
-            throw new Exception("bad username");
+            throw E("bad username");
           }
         }
 
@@ -226,17 +200,15 @@ public class StorkGridFTPModule extends TransferModule {
         if (Reply.isPositiveIntermediate(r)) try {
           execute("PASS "+u.pass);
         } catch (Exception e) {
-          throw new Exception("bad password");
+          throw E("bad password");
         } else if (!Reply.isPositiveCompletion(r)) {
-          throw new Exception("bad username");
+          throw E("bad username");
         }
       }
     }
 
     // Make a local control channel connection to a remote control channel.
     public ControlChannel(ControlChannel rc) throws Exception {
-      default_handler = new FTPHandler();
-
       if (rc.local)
         throw new Error("making local facade for local channel");
       local = true;
@@ -265,84 +237,75 @@ public class StorkGridFTPModule extends TransferModule {
       }
     }
 
-    // Our default handler for sending/reading pipelined commands.
-    class FTPHandler extends Handler {
-      // Pipe a command whose reply will be read later.
-      public void handleWrite(String cmd) throws Exception {
-        if (local) return;
-        System.out.println("Write ("+port+"): "+cmd);
-        fc.write(new Command(cmd));
+    // Checks if a command is supported by the channel.
+    public boolean supports(String... query) throws Exception {
+      if (local) return false;
+      
+      // If we haven't cached the features, do so.
+      if (features == null) {
+        String r = execute("FEAT").getMessage();
+        features = new HashSet<String>();
+        boolean first = true;
+
+        // Read lines from responses
+        for (String s : r.split("[\r\n]+")) if (!first) {
+          s = s.trim().split(" ")[0];
+          if (s.startsWith("211")) break;
+          if (!s.isEmpty()) features.add(s);
+        } else first = false;
       }
 
-      // Read the reply of a piped command.
-      public void handleReply() throws Exception {
-        Reply r;
-        int c;
-        do {
-          r = cc.read();
-          addReply(r);
-          c = r.getCode() / 100;
-        } while (c == 1 || c == 3);
+      // Check if all features are supported.
+      for (String f : query)
+        if (!features.contains(f)) return false;
+      return true;
+    }
+
+    // Write a command to the control channel.
+    public void handleWrite(String cmd) throws Exception {
+      if (local) return;
+      System.out.println("Write ("+port+"): "+cmd);
+      fc.write(new Command(cmd));
+    }
+
+    // Read replies from the control channel.
+    public Reply handleReply() throws Exception {
+      while (true) {
+        Reply r = cc.read();
+        addReply(r);
+        int c = r.getCode() / 100;
+        if (c != 1 && c != 3) return r;
       }
     }
 
     // Special handler for doing file transfers.
-    class XferHandler extends FTPHandler implements Runnable {
-      boolean local = ControlChannel.this.local;
-      TransferProgress progress;
-      XferHandler other;
-      volatile Exception error = null;
+    class XferHandler extends Handler {
+      ProgressListener pl = null;
 
       public XferHandler(TransferProgress p) {
-        this.progress = p;
-        other = this;
+        if (p != null) pl = new ProgressListener(p);
       }
 
-      public void pair(XferHandler h) {
-        this.other = h;
-        h.other = this;
-      }
-
-      public void run() {
-        try {
-          handleReply();
-        } catch (Exception e) {
-          error = e;
-        }
-      }
-
-      public void handleReply() throws Exception {
-        Thread t = null;
-
-        // Run the other if it's local.
-        if (other != this && other.local)
-          (t = new Thread(other)).start();
-
+      public synchronized Reply handleReply() throws Exception {
         Reply r = cc.read();
-        ProgressListener p = null;
-
-        if (progress != null)
-          p = new ProgressListener(progress);
-
-        if (other.error != null)
-          throw other.error;
 
         if (!Reply.isPositivePreliminary(r)) {
-          error = new Exception("failed to start");
-        } while (other.error == null) switch ((r = cc.read()).getCode()) {
+          throw E("transfer failed to start");
+        } while (true) switch ((r = cc.read()).getCode()) {
           case 111:  // Restart marker
             break;   // Just ignore for now...
           case 112:  // Progress marker
-            if (p != null)
-              p.markerArrived(new PerfMarker(r.getMessage()));
+            if (pl != null)
+              pl.markerArrived(new PerfMarker(r.getMessage()));
+            D("Got marker:", r);
+            if (pl == null)
+              D("But no progress listener...");
             break;
           case 226:  // Transfer complete!
-            System.out.println("Transfer completed!");
-            if (t != null) t.join();
-            return;
+            return r;
           default:
-            error = new Exception("unexpected reply: "+r.getCode());
-        } throw other.error;  // We'd have returned otherwise...
+            throw E("unexpected reply: "+r.getCode());
+        }
       }
     }
 
@@ -350,7 +313,7 @@ public class StorkGridFTPModule extends TransferModule {
     public Reply execute(String cmd) throws Exception {
       Reply r = exchange(cmd);
       if (!Reply.isPositiveCompletion(r))
-        throw new Exception("bad reply: "+r);
+        throw E("bad reply: "+r);
       return r;
     }
 
@@ -373,17 +336,19 @@ public class StorkGridFTPModule extends TransferModule {
     }
 
     // Change the mode of this channel.
+    // TODO: Detect unsupported modes.
     public void mode(char m) throws Exception {
       if (local)
         facade.setTransferMode(modeIntValue(m));
-      else execute("MODE "+m);
+      else write("MODE "+m, true);
     }
 
     // Change the data type of this channel.
+    // TODO: Detect unsupported types.
     public void type(char t) throws Exception {
       if (local)
         facade.setTransferType(typeIntValue(t));
-      else execute("TYPE "+t);
+      else write("TYPE "+t, true);
     }
   }
 
@@ -412,7 +377,7 @@ public class StorkGridFTPModule extends TransferModule {
       if (su == null || du == null) {
         throw new Error("ChannelPair called with null args");
       } if (su.file && du.file) {
-        throw new Exception("file-to-file not supported");
+        throw E("file-to-file not supported");
       } else if (su.file) {
         rc = dc = new ControlChannel(du);
         oc = sc = new ControlChannel(rc);
@@ -451,8 +416,8 @@ public class StorkGridFTPModule extends TransferModule {
     // Pipe a PASV command to remote channel and set local channel active.
     public void pipePassive() throws Exception {
       String cmd = rc.fc.isIPv6() ? "EPSV" : "PASV";
-      rc.write(cmd, rc.new FTPHandler() {
-        public void handleReply() throws Exception {
+      rc.write(cmd, rc.new Handler() {
+        public Reply handleReply() throws Exception {
           Reply r = rc.cc.read();
           String s = r.getMessage().split("[()]")[1];
           HostPort hp = new HostPort(s);
@@ -464,6 +429,7 @@ public class StorkGridFTPModule extends TransferModule {
           else
             oc.execute("PORT "+hp.toFtpCmdArgument());
           dc_ready = true;
+          return r;
         }
       });
     }
@@ -474,7 +440,7 @@ public class StorkGridFTPModule extends TransferModule {
         type = t; sc.type(t); dc.type(t);
       } if (m > 0 && mode != m) {
         mode = m; sc.mode(m); dc.mode(m);
-      }
+      } sync();
     }
 
     // Set the parallelism for this pair.
@@ -532,7 +498,7 @@ public class StorkGridFTPModule extends TransferModule {
         pipeMkdir(e.dpath(), true);
       } else {
         ControlChannel.XferHandler hs = sc.new XferHandler(p);
-        ControlChannel.XferHandler hd = dc.new XferHandler(null);
+        ControlChannel.XferHandler hd = dc.new XferHandler(p);
 
         String path = e.path(), dpath = e.dpath();
         long off = e.off, len = e.len;
@@ -562,13 +528,6 @@ public class StorkGridFTPModule extends TransferModule {
         }
       }
     }
-
-    // Get a paired transfer handler for this channel pair.
-    ControlChannel.XferHandler xferHandler(TransferProgress p) {
-      ControlChannel.XferHandler h1 = rc.new XferHandler(p);
-      h1.pair(oc.new XferHandler(p));
-      return h1;
-    }
   }
 
   // Wraps a URI and a credential into one object and makes sure the URI
@@ -597,7 +556,7 @@ public class StorkGridFTPModule extends TransferModule {
 
       // Check protocol and determine port.
       if (proto == null || proto.isEmpty()) {
-        throw new Exception("no protocol specified");
+        throw E("no protocol specified");
       } if ("gridftp".equals(proto) || "gsiftp".equals(proto)) {
         port = (p > 0) ? p : 2811;
         gridftp = true; ftp = false; file = false;
@@ -608,7 +567,7 @@ public class StorkGridFTPModule extends TransferModule {
         port = -1;
         gridftp = false; ftp = false; file = true;
       } else {
-        throw new Exception("unsupported protocol: "+proto);
+        throw E("unsupported protocol: "+proto);
       }
 
       // Determine username and password.
@@ -644,7 +603,7 @@ public class StorkGridFTPModule extends TransferModule {
       cc = new ChannelPair(su, du);
       ccs = new LinkedList<ChannelPair>();
       ccs.add(cc);
-      setPipelining(10);
+      setPipelining(0);
     }
 
     // Set the progress listener for this client's transfers.
@@ -669,7 +628,7 @@ public class StorkGridFTPModule extends TransferModule {
 
     public void setParallelismRange(int lo, int hi) throws Exception {
       if (lo < 1 || hi < 1)
-        throw new Exception("parallelism must be a positive value");
+        throw E("parallelism must be a positive value");
       para_range = new Range(lo, hi);
     }
 
@@ -710,12 +669,10 @@ public class StorkGridFTPModule extends TransferModule {
       cc.close();
     }
 
-    // Recursively list directories.
+    // Recursively list directories. TODO: MLSC support.
     public XferList mlsr(String _path) throws Exception {
       final String MLSR = "MLSR ", MLSD = "MLSD ";
-      //String cmd = isFeatureSupported("MLSR") ? MLSR : MLSD;
-      final String cmd = MLSD;
-      final XferList list = new XferList(su.path, du.path);
+      final XferList list = new XferList(_path, "");
       final String path = list.sp;  // This will end with /.
 
       // Check if we need to do a local listing.
@@ -723,11 +680,15 @@ public class StorkGridFTPModule extends TransferModule {
         return StorkUtil.list(path);
 
       final ChannelPair cc = new ChannelPair(this.cc.sc);
+      final String cmd = MLSD;//cc.rc.supports("MLSR") ? MLSR : MLSD;
 
       final LinkedList<String> dirs = new LinkedList<String>();
       dirs.add("");
 
       cc.rc.write("OPTS MLST type;size;", true);
+
+      // Create a sink which will write results into the list.
+      final ListSink sink = new ListSink(list);
 
       // Keep listing and building subdirectory lists.
       while (!dirs.isEmpty()) {
@@ -737,20 +698,16 @@ public class StorkGridFTPModule extends TransferModule {
           // Set the server to passive mode to retrieve the list.
           cc.pipePassive();
 
-          // Send the command to list the path with a handler that will
-          // build the list and add it to our big list.
-          cc.rc.write(cmd+path+p, cc.rc.new XferHandler(null) {
-            public void handleReply() throws Exception {
-              pair(cc.oc.new XferHandler(null));
-              ListSink sink = new ListSink(path);
+          // Register a special handler and send list command.
+          cc.dc.write(cmd+path+p, true, cc.dc.new XferHandler(null) {
+            public Reply handleReply() throws Exception {
               cc.oc.facade.store(sink);
-              super.handleReply();
-              XferList xl = sink.getList(p);
+              Reply r = super.handleReply();
 
-              if (cmd != MLSR) for (XferList.Entry e : xl)
-                if (e.dir) dirs.add(e.path);
-              System.out.println("dirs: "+dirs);
-              list.addAll(xl);
+              sink.condenseList(p);
+              if (cmd != MLSR)
+                dirs.addAll(sink.getNewDirs());
+              return r;
             }
           });
         } while (!dirs.isEmpty());
@@ -766,7 +723,7 @@ public class StorkGridFTPModule extends TransferModule {
         return StorkUtil.size(path);
       Reply r = cc.sc.exchange("SIZE "+path);
       if (!Reply.isPositiveCompletion(r))
-        throw new Exception("file does not exist: "+path);
+        throw E("file does not exist: "+path);
       return Long.parseLong(r.getMessage());
     }
 
@@ -781,7 +738,7 @@ public class StorkGridFTPModule extends TransferModule {
     // aborted and destination has been properly set.
     void checkTransfer() throws Exception {
       if (aborted)
-        throw new Exception("transfer aborted");
+        throw E("transfer aborted");
     }
 
     // Do a transfer based on paths.
@@ -792,9 +749,9 @@ public class StorkGridFTPModule extends TransferModule {
 
       // Some quick sanity checking.
       if (sp == null || sp.isEmpty())
-        throw new Exception("src path is empty");
+        throw E("src path is empty");
       if (dp == null || dp.isEmpty())
-        throw new Exception("dest path is empty");
+        throw E("dest path is empty");
 
       System.out.println("Transferring: "+sp+" -> "+dp);
 
@@ -839,7 +796,11 @@ public class StorkGridFTPModule extends TransferModule {
       System.out.println("Setting passive mode...");
       cc.pipePassive();
 
+      // Make sure we were able to set passive mode.
+      cc.rc.read();
+
       // mkdir dest directory.
+      D("Piping root transfer...");
       cc.pipeXfer(xl.root, null);
 
       // Let the progress monitor know we're starting.
@@ -1046,9 +1007,9 @@ public class StorkGridFTPModule extends TransferModule {
       if (job.has("parallelism")) {
         Range p = Range.parseRange(job.get("parallelism"));
         if (p == null || !p.isContiguous())
-          throw new Exception("parallelism must be a number or range");
+          throw E("parallelism must be a number or range");
         if (p.min() <= 0)
-          throw new Exception("parallelism must be greater than zero");
+          throw E("parallelism must be greater than zero");
         client.setParallelismRange(p.min(), p.max());
       } else {
         client.setParallelism(4);
@@ -1112,12 +1073,12 @@ public class StorkGridFTPModule extends TransferModule {
 
     public void fatal(String m) throws Exception {
       rv = 255;
-      throw new Exception(m);
+      throw E(m);
     }
 
     public void error(String m) throws Exception {
       rv = 1;
-      throw new Exception(m);
+      throw E(m);
     }
 
     public void start() {

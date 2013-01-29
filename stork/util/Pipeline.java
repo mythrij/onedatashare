@@ -16,8 +16,8 @@ import java.util.*;
 // be canceled (if supported).
 
 public abstract class Pipeline<C,R> extends Thread {
-  private final LinkedList<PipedCommand> pipe, sent;
-  private final LinkedList<R> done;
+  private final LinkedList<PipedCommand> sent;
+  private final LinkedList<Wrapper> done;
   private int level;
   private PipedCommand current_cmd = null;
   protected Handler default_handler = null;
@@ -25,9 +25,8 @@ public abstract class Pipeline<C,R> extends Thread {
 
   // Constructor
   public Pipeline(int l) {
-    pipe = new LinkedList<PipedCommand>();
     sent = new LinkedList<PipedCommand>();
-    done = new LinkedList<R>();
+    done = new LinkedList<Wrapper>();
     setPipelining(l);
     setDaemon(true);
     start();
@@ -38,12 +37,17 @@ public abstract class Pipeline<C,R> extends Thread {
   // Internal representation of a command passed to the pipeliner.
   private class PipedCommand {
     C cmd;
+    Handler hnd;
     boolean ignore;
-    Handler handler;
 
     PipedCommand(C c, boolean i, Handler h) {
-      cmd = c; ignore = i;
-      handler = (h != null) ? h : default_handler;
+      cmd = c; ignore = i; hnd = h;
+    }
+
+    // If we're ignoring, keep handling till command is done.
+    synchronized R handle() throws Exception {
+      R r = (hnd != null) ? hnd.handleReply() : handleReply();
+      return ignore ? null : r;
     }
 
     public String toString() {
@@ -51,14 +55,26 @@ public abstract class Pipeline<C,R> extends Thread {
     }
   }
 
-  // Interface for special command handler. Handlers, if present,
-  // are run after a command is acknowledged.
-  public abstract class Handler {
-    // Overwrite this in subclasses to change write behavior.
-    public abstract void handleWrite(C c) throws Exception;
+  // A wrapper for replies so exceptions can propagate correctly.
+  private class Wrapper {
+    R r = null; Exception e = null;
+    Wrapper(R re, Exception ex) { r = re; e = ex; }
+  }
 
-    // Overwrite this in subclasses to change read behavior.
-    public abstract void handleReply() throws Exception;
+  // Implement write behavior in subclasses.
+  public abstract void handleWrite(C c) throws Exception;
+
+  // Implement read behavior in subclasses. Return null when last reply
+  // has been read to indicate command is complete. If an exception is
+  // thrown, the assumption is the command failed and is complete.
+  //
+  // The "return null" method is a little hackish. Is there a better way?
+  public abstract R handleReply() throws Exception;
+
+  // Subclass this to implement a custom handler that will be executed
+  // instead of handleReply().
+  public abstract class Handler {
+    public abstract R handleReply() throws Exception;
   }
 
   // Set the number of commands that are allowed to be piped without
@@ -69,77 +85,50 @@ public abstract class Pipeline<C,R> extends Thread {
 
   // Should be run as a thread. Reads replies from sent commands with the
   // read handler then adds them to the done queue.
-  public void run() {
+  public synchronized void run() {
     while (!dead) try {
-      run2();
-    } catch (Exception e) { /* Who cares... */ }
-  }
-
-  // Does the actual work of run().
-  private synchronized void run2() throws Exception {
-    getReply();
-    while (!dead && send());
-  }
-
-  // Read a command from the pipe, send it, and add it to the sent queue.
-  // Returns false if there's nothing to be sent.
-  private synchronized boolean send() throws Exception {
-    if (pipe.isEmpty()) return false;
-    if (level > 0 && sent.size() >= level) return false;
-    PipedCommand p = pipe.pop();
-
-    try {
-      p.handler.handleWrite(p.cmd);
+      while (!dead && sent.isEmpty()) wait();
+      if (!dead) try {
+        R r = sent.pop().handle();
+        if (r != null) addReply(r);
+      } catch (Exception e) {
+        addReply(e);
+      } notifyAll();
     } catch (Exception e) {
-      System.out.println("Send handler failed: "+p.cmd);
-      e.printStackTrace();
+      // wait() interrupted, ignore...
     }
-
-    sent.add(p);
-    notifyAll();
-    return true;
   }
 
-  // Run the reply handler for the next command in the sent queue.
-  private synchronized void getReply() throws Exception {
-    while (!dead && sent.isEmpty()) wait();
-    if (dead) return;
-    current_cmd = sent.pop();
-
-    try {
-      current_cmd.handler.handleReply();
-    } catch (Exception e) {
-      e.printStackTrace();
-    }
-
-    notifyAll();
-  }
-
-  // Add a reply to the done list.
-  public synchronized void addReply(R r) {
-    if (current_cmd.ignore) return;
-    done.add(r);
-    notifyAll();
+  // Add a reply or exception to the done list.
+  protected synchronized void addReply(R r) {
+    done.add(new Wrapper(r, null));
+  } protected synchronized void addReply(Exception e) {
+    done.add(new Wrapper(null, e));
   }
 
   // Write a command to the queue to be piped. If ignore is specified, the
   // command's result will not be posted to the done queue.
-  public synchronized void write(C c, boolean i, Handler h) throws Exception {
-    pipe.add(new PipedCommand(c, i, h));
-    while (send());  // Send all
-  } public synchronized void write(C c, Handler handler) throws Exception {
-    write(c, false, handler);
-  } public synchronized void write(C c, boolean ignore) throws Exception {
+  public synchronized void write(C c, boolean i, Handler h)
+  throws Exception {
+    while (level > 0 && sent.size() >= level) wait();
+    handleWrite(c);
+    PipedCommand cmd = new PipedCommand(c, i, h);
+    sent.add(cmd); notifyAll();
+  } public void write(C c, Handler h) throws Exception {
+    write(c, false, h);
+  } public void write(C c, boolean ignore) throws Exception {
     write(c, ignore, null);
-  } public synchronized void write(C c) throws Exception {
+  } public void write(C c) throws Exception {
     write(c, false);
   }
 
-  // Pop a reply from the done queue.
+  // Pop a reply from the done queue. If it was an exception, throw.
   public synchronized R read() throws Exception {
     while (done.isEmpty()) wait();
-    R r = done.pop();
-    return r;
+    Wrapper r = done.pop();
+    notifyAll();
+    if (r.e != null) throw r.e;
+    return r.r;
   }
 
   // Flush the whole pipe, then execute command.
@@ -151,8 +140,8 @@ public abstract class Pipeline<C,R> extends Thread {
 
   // Wait until every command is done.
   public synchronized void flush(boolean done_too) throws Exception {
-    while (!pipe.isEmpty() || !sent.isEmpty()) wait();
-    if (done_too) done.clear();
+    while (!sent.isEmpty()) wait();
+    if (done_too) while (!done.isEmpty()) read();  // Might throw.
   } public synchronized void flush() throws Exception {
     flush(false);
   }

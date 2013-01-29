@@ -117,20 +117,21 @@ public class XferList implements Iterable<XferList.Entry> {
   }
 
   // Add a directory to the list.
-  public synchronized void add(String path) {
-    add(new Entry(path));
+  public synchronized Entry add(String path) {
+    return add(new Entry(path));
   }
 
   // Add a file to the list.
-  public synchronized void add(String path, long size) {
-    add(new Entry(path, size));
+  public synchronized Entry add(String path, long size) {
+    return add(new Entry(path, size));
   }
 
   // Add an entry to the list.
-  public synchronized void add(Entry e) {
+  public synchronized Entry add(Entry e) {
     e.parent = this;
     list.add(e);
     recalculate(e, true);
+    return e;
   }
 
   // Add another XferList's entries under this XferList.
@@ -230,11 +231,8 @@ public class XferList implements Iterable<XferList.Entry> {
     boolean recal = false;  // Whether we need to fully recalc list.
     Iterator<Entry> iter = ol.iterator();
 
-    System.out.println("steal("+len+")");
-
     if (len <= 0 || len >= ol.size) {
       // Take the whole list.
-      System.out.println("Taking whole list");
       addAll(ol); ol.list.clear();
       ol.size = 0; ol.count = 0;
     } else while (len > 0 && iter.hasNext()) {
@@ -242,19 +240,15 @@ public class XferList implements Iterable<XferList.Entry> {
       long es = e.remaining();
 
       if (e.done) {
-        System.out.println("Taking (done): "+e);
         iter.remove();
         continue;
       } else if (e.dir) {
         // Don't do anything special.
-        System.out.println("Could take dir: "+e);
       } else if (es < 0 || es > len) {
         // Take a part of the entry.
-        System.out.println("Taking part: "+e);
         e = e.split(len);
       } else {
         // Take the whole entry.
-        System.out.println("Taking whole: "+e);
         iter.remove();
       }
 

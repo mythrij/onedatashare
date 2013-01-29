@@ -14,6 +14,8 @@ public class StorkMain {
   public static final ClassAd def_env = new ClassAd();
   public static final GetOpts opts = new GetOpts();
 
+  public static final int DEFAULT_PORT = 57024;
+
   // Try to get the version and build time from the build tag.
   public static String version() {
     String app = "JStork", ver = "", bts = "unknown";
@@ -25,7 +27,6 @@ public class StorkMain {
       bts = props.getProperty("buildtime", bts);
     } catch (Exception e) {
       /* Who cares... */
-      System.out.println("COULDN'T LOAD IT: "+e);
     } finally {
       return StorkUtil.join(app, ver, '('+bts+')');
     }
@@ -33,7 +34,7 @@ public class StorkMain {
 
   static {
     // Initialize the default environment.
-    def_env.insert("port", 57024);
+    def_env.insert("port", DEFAULT_PORT);
     def_env.insert("libexec", "../libexec/");
 
     // Initialize the default command line parser.
