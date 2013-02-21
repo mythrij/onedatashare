@@ -27,7 +27,7 @@ public class ExternalModule extends TransferModule {
     // TODO: Rumor has it Java doesn't guarantee processes execute in
     // parallel. Maybe have some additional checks?
     public void run() {
-      // Get arguments from ClassAd
+      // Get arguments from Ad
       String cmd, args = job.get("arguments", "");
       String src = job.src.toString(), dest = job.dest.toString();
 
@@ -67,19 +67,15 @@ public class ExternalModule extends TransferModule {
     }
 
     // Get an update ad from the job.
-    public ClassAd getAd() {
+    public Ad getAd() {
       if (proc != null && proc_is != null) try {
-        ClassAd ad = ClassAd.parse(proc_is);
-
-        if (ad.error()) {
-          proc_is.close();
-          proc_is = null;
-          return null;
-        }
-        
-        return ad;
+        return Ad.parse(proc_is);
       } catch (Exception e) {
-        ClassAd ad = new ResponseAd("error", e.getMessage());
+        Ad ad = new ResponseAd("error", e.getMessage());
+        try {
+          proc_is.close();
+        } catch (Exception ex) { }
+        proc_is = null;
         return null;
       } else {
         return null;
@@ -116,7 +112,7 @@ public class ExternalModule extends TransferModule {
 
     // Attempt to read ad.
     try {
-      ClassAd ad = ClassAd.parse(p.getInputStream());
+      Ad ad = Ad.parse(p.getInputStream());
       info_ad = new ModuleInfoAd(ad);
     } catch (Exception e) {
       throw new Exception("couldn't parse module info ad");
@@ -130,10 +126,10 @@ public class ExternalModule extends TransferModule {
 
   // Validate a job ad and a new ad with only the fields expected
   // by this transfer module.
-  public ClassAd validateAd(SubmitAd ad) throws Exception {
-    ClassAd ad1 = ad.filter("arguments");
-    ClassAd ad2 = ad.filter(info_ad.opt_params);
-    ClassAd ad3 = ad.filter(info_ad.req_params);
+  public Ad validateAd(SubmitAd ad) throws Exception {
+    Ad ad1 = ad.filter("arguments");
+    Ad ad2 = ad.filter(info_ad.opt_params);
+    Ad ad3 = ad.filter(info_ad.req_params);
     ad3.require(info_ad.req_params);
     return ad1.merge(ad2, ad3);
   }

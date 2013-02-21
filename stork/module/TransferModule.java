@@ -8,7 +8,7 @@ import java.net.URI;
 public abstract class TransferModule {
   public abstract ModuleInfoAd infoAd();
 
-  public abstract ClassAd validateAd(SubmitAd ad) throws Exception;
+  public abstract Ad validateAd(SubmitAd ad) throws Exception;
 
   public String handle() {
     return infoAd().handle;
@@ -20,7 +20,7 @@ public abstract class TransferModule {
 
   public abstract StorkTransfer transfer(SubmitAd ad);
 
-  // Generate a new ClassAd from given URLs and use that.
+  // Generate a new Ad from given URLs and use that.
   public StorkTransfer transfer(String src, String dest) throws Exception {
     return transfer(new SubmitAd(src, dest));
   }

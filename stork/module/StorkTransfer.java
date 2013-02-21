@@ -4,5 +4,5 @@ public interface StorkTransfer extends Runnable {
   public void start();
   public void stop();
   public int waitFor();
-  public stork.util.ClassAd getAd();
+  public stork.util.Ad getAd();
 }

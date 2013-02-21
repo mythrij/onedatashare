@@ -32,8 +32,8 @@ WHAT IS STORK?
   simple external executable interface. If additional performance or
   integration with the Stork server is desired, plug-ins can also be
   written in Java and extend the built-in TransferModule class,
-  eliminating the communication overhead of piping ClassAds between
-  Stork and the transfer module.
+  eliminating the communication overhead of piping serialized LiteAds
+  between Stork and the transfer module.
 
 SUPPORTED PLATFORMS
   Any modern operating system that can run a JVM.
@@ -50,7 +50,7 @@ COMMANDS
     used to filter jobs by their status.
 
   stork_submit - Submit a job to a Stork server. Can be passed a source
-    and destination URL, or a ClassAd descriptor of the job.
+    and destination URL, or a LiteAd descriptor of the job.
 
   stork_rm - Remove or terminate a submitted job or set of jobs.
 
@@ -75,7 +75,7 @@ CONFIGURING
   variable has a "sane" default value. The Stork server will issue a
   warning on startup if a config file cannot be found.
 
-  TODO: Document configuration variables here.
+* TODO: Document configuration variables here.
 
 HOW TO USE
   Start a Stork server, unless you plan on using an existing server.
@@ -90,61 +90,64 @@ HOW TO USE
   display usage information. Run, e.g., `stork_submit --help' to see
   detailed information on how to use stork_submit.
 
-CLASSADS
-  Stork makes extensive use of the ClassAd language -- a data
-  representation format developed by the Condor Team at UW-Madison.
-  ClassAds are human-readable, easy to parse, and even easier to
-  generate. All communication in Stork is done in ClassAds. Clients and
-  servers speak ClassAds, transfer modules output their progress via
-  ClassAds, and jobs are submitted to the Stork server as ClassAds.
-  Even the config file is a ClassAd, albeit with comments and no
-  brackets. Trust me, we really abuse them!
+LITEADS
+  Stork makes extensive use of a data representation language we've
+  called LiteAd. LiteAds are based on (really, a subset of) a data
+  representation language called ClassAd, developed by the Condor Team
+  at UW-Madison. LiteAds, like ClassAds, are human-readable, easy to
+  parse, and even easier to generate. All interprocess communication in
+  Stork is done with "ads" written in the LiteAds language. Clients and
+  servers speak in ads, transfer modules output their progress as ads,
+  and jobs are submitted to the Stork server as ads. Even the config
+  file is an ad. Trust me, we really abuse them!
 
-  Understanding ClassAds is key to using Stork's advanced features.
+  Understanding LiteAds is key to using Stork's advanced features.
   Luckily, they're intuitive and easy to understand. Here's an example
-  ClassAd that describes a simple Stork job that will attempt the
-  transfer at most five times and will send an email to the user when
-  the job starts and completes:
+  ad that describes a simple Stork job that will attempt the transfer
+  at most five times and will send an email to the user when the job
+  starts and completes:
 
   [ src  = "ftp://example.com/file1.txt";
     dest = "ftp://example.com/file2.txt";
     max_attempts = 5; email = "user@example.com" ]
 
-  Note that each ClassAd begins with a [ and ends with a ]. Everything
+  Note that each ad begins with a [ and ends with a ]. Everything
   inside is in the form of "key = value", and each key-value pair is
   separated by a semicolon. And that's all there really is to it.
 
-  Submitting jobs to Stork as ClassAds allows you to have greater
-  control over the details of the job. While stork_submit will
-  automatically and transparently generate ClassAds based on arguments
-  passed to it on the command line, not every aspect of the job can be
-  controlled from the command line. ClassAd descriptions of jobs also
-  let you batch submit jobs from files or pass them in from other
-  programs via pipes. This allows you to automate job submission or
-  even generate jobs algorithmically.
+  Submitting jobs to Stork as an ad allows you to have greater control
+  over the details of the job. While stork_submit will automatically
+  and transparently generate ads based on arguments passed to it on the
+  command line, not every aspect of the job can be controlled with
+  command line arguments. Ad descriptions of jobs also let you batch
+  submit jobs from files or pass them in from other programs via pipes.
+  This allows you to automate job submission or even generate jobs
+  algorithmically.
 
-  ClassAds are also output by stork_q and stork_info, so being able to
-  read them at least is necessary to use Stork.
+  Ads are also output by stork_q and stork_info, so being able to
+  read them at least is necessary to use Stork on the command line.
 
-  ClassAds are also used by transfer modules to pass messages and job
+  Ads are also used by transfer modules to pass messages and job
   progress back to the Stork server, and the Stork server can pass
-  ClassAds to transfer modules that support it. They are also used
+  ads to transfer modules that support it. They are also used
   internally for communication between clients and the Stork server, so
   communicating with the server from third-party clients requires
-  understanding ClassAds.
+  understanding LiteAds.
 
-  In short, ClassAds are pretty important for all but the most basic
-  usage scenarios. Luckily they're pretty intuitive.
+  In short, understanding how to write ads in the LiteAd language is
+  pretty important for all but the most basic usage scenarios. The
+  exact syntax of the language can be found in stork/util/Ad.java.
 
-  More information about ClassAds can be found here:
+  More information about ClassAd, the language LiteAd is a derivative
+  of, can be found here:
 
     <http://research.cs.wisc.edu/condor/classad/>
 
 API
-  All communication in Stork is done in ClassAds. To communicate with
+  All communication in Stork is done in ads. To communicate with
   a Stork server using a custom client, one simply needs to establish
   a TCP connection to the Stork server's command port, and write a
-  ClassAd containing command = "<command_name>" and any other arguments
+  an ad containing command = "<command_name>" and any other arguments
 * the server expects. The arguments a command handler expects in this
 * ad can be found in the commands above StorkCommand subclass
 * definitions in StorkServer.java.

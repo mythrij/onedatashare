@@ -2,18 +2,18 @@ package stork.util;
 
 import stork.util.*;
 
-// A special ClassAd which contains a response code which can be
+// A special Ad which contains a response code which can be
 // either "error", "success", or "notice". It can also optionally
 // contain a message or other fields.
 
-public class ResponseAd extends ClassAd {
+public class ResponseAd extends Ad {
   public static final String
     ERROR = "Error", SUCCESS = "Success", NOTICE = "Notice";
   private String response = ERROR;
   private String message = null;
 
-  // Test if a ClassAd is a response ad.
-  public static boolean is(ClassAd ad) {
+  // Test if a Ad is a response ad.
+  public static boolean is(Ad ad) {
     return ad.has("response");
   }
 
@@ -35,14 +35,14 @@ public class ResponseAd extends ClassAd {
       response = NOTICE;
     else
       response = ERROR;
-    insert("response", response);
+    put("response", response);
   }
 
   public void setMessage(String m) {
     if (m == null)
       remove("message");
     else
-      insert("message", m);
+      put("message", m);
     message = m;
   }
 
@@ -66,8 +66,8 @@ public class ResponseAd extends ClassAd {
     this(code, null);
   }
 
-  public ResponseAd(ClassAd ad) {
-    this.importAd(ad);
+  public ResponseAd(Ad ad) {
+    this.merge(ad);
     if (ad instanceof ResponseAd) return;
     setResponse(ad.get("response"));
     setMessage(ad.get("message"));

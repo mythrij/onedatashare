@@ -5,7 +5,7 @@ package stork.util;
 public class AdSink {
   volatile boolean closed = false;
   volatile boolean more = true;
-  volatile ClassAd ad = null;
+  volatile Ad ad = null;
 
   public synchronized void close() {
     closed = true;
@@ -13,29 +13,29 @@ public class AdSink {
     notifyAll();
   }
 
-  public synchronized void putAd(ClassAd ad) {
+  public synchronized void putAd(Ad ad) {
     if (closed) return;
     this.ad = ad;
     notifyAll();
   }
 
-  public synchronized void mergeAd(ClassAd a) {
+  public synchronized void mergeAd(Ad a) {
     putAd((ad != null) ? ad.merge(a) : a);
   }
 
   // Block until an ad has come in, then clear the ad.
-  public synchronized ClassAd getAd() {
+  public synchronized Ad getAd() {
     if (!closed && more) try {
       wait();
       if (ad == null) return null;
       if (closed) more = false;
-      return new ClassAd(ad);
+      return new Ad(ad);
     } catch (Exception e) { }
     return null;
   }
 
   // Get the ad current in the sink, or an empty ad if none.
-  public synchronized ClassAd peekAd() {
-    return (ad != null) ? new ClassAd(ad) : new ClassAd();
+  public synchronized Ad peekAd() {
+    return (ad != null) ? new Ad(ad) : new Ad();
   }
 }

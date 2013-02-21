@@ -22,7 +22,7 @@ import stork.util.*;
 //                module allows in its job ads.
 //   req_params - Like opt_params, but the module requires these.
 
-public class ModuleInfoAd extends ClassAd {
+public class ModuleInfoAd extends Ad {
   public final String name, full_name, handle, author, version,
                       description, accepts;
   public final String[] protocols, opt_params, req_params;
@@ -38,15 +38,15 @@ public class ModuleInfoAd extends ClassAd {
 
   // Insert into ad, automatically trimming. If v is null or
   // empty when trimmed, removes key from ad.
-  public ClassAd insert(String k, String v) {
+  public Ad put(Object k, String v) {
     if (v != null && (v = v.trim()).isEmpty())
       v = null;
-    return super.insert(k, v);
+    return super.put(k, v);
   }
 
   // Because we trim the ad at the beginning, all strings in this
   // ad are guaranteed to be trimmed and not empty. TODO: Sanitization.
-  public ModuleInfoAd(ClassAd ad) throws Exception {
+  public ModuleInfoAd(Ad ad) throws Exception {
     super(ad.filter(fields).trim());
 
     // Check for required protocols.
@@ -60,12 +60,12 @@ public class ModuleInfoAd extends ClassAd {
     protocols = StorkUtil.splitCSV(get("protocols"));
     if (protocols.length == 0)
       throw new Exception("no supported protocols listed");
-    insert("protocols", StorkUtil.joinCSV((Object[]) protocols));
+    put("protocols", StorkUtil.joinCSV((Object[]) protocols));
 
     handle = StorkUtil.normalize(get("handle", name));
     if (handle.isEmpty())
       throw new Exception("invalid handle: "+handle);
-    insert("handle", handle);
+    put("handle", handle);
 
     version = get("version", "");
     full_name = (name+" "+version).trim();
@@ -77,12 +77,12 @@ public class ModuleInfoAd extends ClassAd {
       if (s == null)
         throw new Exception("invalid value for \"accepts\": "+accepts);
       if (s.equals(accepts)) break;
-    } insert("accepts", accepts);
+    } put("accepts", accepts);
 
     opt_params = StorkUtil.splitCSV(get("opt_params"));
-    insert("opt_params", StorkUtil.joinCSV((Object[]) opt_params));
+    put("opt_params", StorkUtil.joinCSV((Object[]) opt_params));
 
     req_params = StorkUtil.splitCSV(get("req_params"));
-    insert("req_params", StorkUtil.joinCSV((Object[]) req_params));
+    put("req_params", StorkUtil.joinCSV((Object[]) req_params));
   }
 }

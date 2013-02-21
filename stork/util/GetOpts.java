@@ -106,10 +106,10 @@ public class GetOpts {
   public abstract class Parser {
     public String arg() { return ""; }  // Optional usage info.
     public boolean optional() { return false; }
-    public abstract ClassAd parse(String s) throws Exception;
+    public abstract Ad parse(String s) throws Exception;
   }
 
-  // Just return a ClassAd with the passed argument in it.
+  // Just return a Ad with the passed argument in it.
   public class SimpleParser extends Parser {
     String name, arg;
     boolean optional;
@@ -118,11 +118,11 @@ public class GetOpts {
     }
     public String arg() { return arg; }
     public boolean optional() { return optional; }
-    public ClassAd parse(String s) throws Exception {
+    public Ad parse(String s) throws Exception {
       if (s != null)
-        return new ClassAd().insert(name, s);
+        return new Ad().put(name, s);
       if (optional)
-        return new ClassAd().insert(name, true);
+        return new Ad().put(name, true);
       throw new Error(name+" requires an argument!!");
     }
   }
@@ -161,14 +161,14 @@ public class GetOpts {
     next = n;
   }
 
-  // Parse command line arguments, returning a ClassAd with the information
+  // Parse command line arguments, returning a Ad with the information
   // parsed from the argument array, throwing an error if there's a problem.
-  public ClassAd parse(String[] args) throws Exception {
+  public Ad parse(String[] args) throws Exception {
     int i, j, n = args.length;
     String s, a = null;
     String[] sa;
     char[] c;
-    ClassAd ad = new ClassAd();
+    Ad ad = new Ad();
     Option o = null;
     Parser p = null;
 
@@ -189,11 +189,11 @@ public class GetOpts {
           throw new Exception("duplicate option: '"+s+"'");
         p = o.parser;
         if (p == null)
-          ad.insert(s, true);
+          ad.put(s, true);
         else if (a == null && !p.optional())
           throw new Exception("argument required for '"+s+"'");
         else
-          ad.importAd(p.parse(a));
+          ad.merge(p.parse(a));
         if (sa.length <= 1 && i+1 < n)  // We consumed an arg.
           i++;
       } else if (args[i].startsWith("-")) {  // Short.
@@ -209,11 +209,11 @@ public class GetOpts {
           a = (j+1 < c.length) ? args[i].substring(j+1) :
               (i+1 < n) ? args[i+1] : null;
           if (p == null)
-            ad.insert(s, true);
+            ad.put(s, true);
           else if (a == null && !p.optional())
             throw new Exception("argument required for '"+c[j]+"'");
           else
-            ad.importAd(p.parse(a));
+            ad.merge(p.parse(a));
           if (j+1 >= c.length && i+1 < n)  // We consumed an arg.
             i++;
         }

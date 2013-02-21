@@ -25,12 +25,12 @@ public class FullCOptimizer extends Optimizer {
       this.size = size;
     }
 
-    public ClassAd toClassAd() {
-      ClassAd ad = new ClassAd();
+    public Ad toAd() {
+      Ad ad = new Ad();
       if (size >= 0)
-        ad.insert("size", size);
+        ad.put("size", size);
       if (para >= 0)
-        ad.insert("parallelism", para);
+        ad.put("parallelism", para);
       return ad;
     }
   }
@@ -46,10 +46,10 @@ public class FullCOptimizer extends Optimizer {
     p_base = para-1;
   }
 
-  public ClassAd sample() {
+  public Ad sample() {
     if (done_sampling) {
       if (!analysis_done) doAnalysis();
-      return new Block().toClassAd();
+      return new Block().toAd();
     }
 
     long sample = (long) ((size >= 5E8 || size <= 0) ? 5E7 : size/10.0);
@@ -66,10 +66,10 @@ public class FullCOptimizer extends Optimizer {
 
     // Construct the block to transfer.
     Block b = new Block(sample);
-    return b.toClassAd();
+    return b.toAd();
   }
 
-  public void report(ClassAd ad) {
+  public void report(Ad ad) {
     Block b = new Block();
 
     System.out.println("Reported ad: "+ad);

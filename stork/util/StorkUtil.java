@@ -26,6 +26,11 @@ public class StorkUtil {
       return join(sa);
     }
 
+    // Join objects into a string with delimiter.
+    public static String JW(String d, Object... sa) {
+      return joinWith(d, sa);
+    }
+
     // Join objects into a string and return as a new exception.
     public static Exception E(Object... o) {
       return new Exception(join(o));

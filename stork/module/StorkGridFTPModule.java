@@ -17,22 +17,23 @@ public class StorkGridFTPModule extends TransferModule {
   private static ModuleInfoAd info_ad;
 
   static {
-    ClassAd ad = new ClassAd();
-    ad.insert("name", "Stork GridFTP Module");
-    ad.insert("version", "0.1");
-    ad.insert("author", "Brandon Ross");
-    ad.insert("email", "bwross@buffalo.edu");
-    ad.insert("description",
+    Ad ad = new Ad();
+    ad.put("name", "Stork GridFTP Module");
+    ad.put("version", "0.1");
+    ad.put("author", "Brandon Ross");
+    ad.put("email", "bwross@buffalo.edu");
+    ad.put("description",
               "A rudimentary module for FTP and GridFTP transfers.");
-    ad.insert("protocols", "gsiftp,gridftp,ftp");
-    ad.insert("accepts", "classads");
-    ad.insert("opt_params", "parallelism,x509_proxy,optimizer");
+    ad.put("protocols", "gsiftp,gridftp,ftp");
+    ad.put("accepts", "classads");
+    ad.put("opt_params", "parallelism,x509_proxy,optimizer");
 
     try {
       info_ad = new ModuleInfoAd(ad);
     } catch (Exception e) {
       info_ad = null;
       System.out.println("Fatal error parsing StorkGridFTPModule info ad");
+      e.printStackTrace();
       System.exit(1);
     }
   }
@@ -790,7 +791,7 @@ public class StorkGridFTPModule extends TransferModule {
       } else {
         System.out.println("File size < 1M, not optimizing...");
         optimizer = new Optimizer();
-      } sink.mergeAd(new ClassAd("optimizer", optimizer.name()));
+      } sink.mergeAd(new Ad("optimizer", optimizer.name()));
 
       // Connect source and destination server.
       System.out.println("Setting passive mode...");
@@ -808,7 +809,7 @@ public class StorkGridFTPModule extends TransferModule {
       
       // Begin transferring according to optimizer.
       while (!xl.isEmpty()) {
-        ClassAd b = optimizer.sample(), update;
+        Ad b = optimizer.sample(), update;
         TransferProgress prog = new TransferProgress();
         int s = b.getInt("pipelining");
         int p = b.getInt("parallelism");
@@ -833,7 +834,7 @@ public class StorkGridFTPModule extends TransferModule {
             cc = cc.duplicate();
           } else setParallelism(p);
         } else {
-          update.insert("parallelism", parallelism);
+          update.put("parallelism", parallelism);
         }
 
         if (c > 0) setConcurrency(c);
@@ -854,7 +855,7 @@ public class StorkGridFTPModule extends TransferModule {
         transferList(xs);
         prog.transferEnded(true);
 
-        b.insert("throughput", prog.throughputValue(true)/1E6);
+        b.put("throughput", prog.throughputValue(true)/1E6);
         optimizer.report(b);
       }
 
@@ -1061,8 +1062,8 @@ public class StorkGridFTPModule extends TransferModule {
         rv = 0;
       } catch (Exception e) {
         e.printStackTrace();
-        ClassAd ad = new ClassAd();
-        ad.insert("message", e.getMessage());
+        Ad ad = new Ad();
+        ad.put("message", e.getMessage());
         sink.mergeAd(ad);
       }
 
@@ -1100,7 +1101,7 @@ public class StorkGridFTPModule extends TransferModule {
       return (rv >= 0) ? rv : 255;
     }
 
-    public ClassAd getAd() {
+    public Ad getAd() {
       return sink.getAd();
     }
   }
@@ -1109,7 +1110,7 @@ public class StorkGridFTPModule extends TransferModule {
   // -------
   public ModuleInfoAd infoAd() { return info_ad; }
 
-  public ClassAd validateAd(SubmitAd ad) throws Exception {
+  public Ad validateAd(SubmitAd ad) throws Exception {
     return ad.filter(info_ad.opt_params);
   }
 
@@ -1128,11 +1129,11 @@ public class StorkGridFTPModule extends TransferModule {
     try {
       switch (args.length) {
         case 0:
-          System.out.println("Enter a ClassAd:");
-          ad = new SubmitAd(ClassAd.parse(System.in));
+          System.out.println("Enter a Ad:");
+          ad = new SubmitAd(Ad.parse(System.in));
           break;
         case 1:
-          ad = new SubmitAd(ClassAd.parse(new FileInputStream(args[0])));
+          ad = new SubmitAd(Ad.parse(new FileInputStream(args[0])));
           break;
         case 3:
           optimizer = args[2];
@@ -1156,12 +1157,12 @@ public class StorkGridFTPModule extends TransferModule {
         sb.append(s.nextLine()+"\n");
 
       if (sb.length() > 0)
-        ad.insert("x509_proxy", sb.toString());
+        ad.put("x509_proxy", sb.toString());
     } catch (Exception e) {
       System.out.println("Couldn't open x509_file...");
     }
 
-    ad.insert("optimizer", optimizer);
+    ad.put("optimizer", optimizer);
 
     try {
       ad.setModule(m);
@@ -1174,7 +1175,7 @@ public class StorkGridFTPModule extends TransferModule {
     tf.start();
 
     while (true) {
-      ClassAd cad = tf.getAd();
+      Ad cad = tf.getAd();
 
       if (cad != null)
         System.out.println("Got ad: "+cad);

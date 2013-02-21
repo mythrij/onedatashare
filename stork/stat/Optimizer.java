@@ -15,22 +15,22 @@ import stork.util.*;
 // TODO: Optimizer chaining? Optimizer registration. Optimizer params.
 
 public class Optimizer {
-  // Return a ClassAd containing the parameters for a sample. The ad
+  // Return a Ad containing the parameters for a sample. The ad
   // returned here should indicate some kind of limit on the sample, be
   // it a time limit or a byte length. If none is present, or length is
   // specified to be -1, or null is returned, the caller should assume
   // the optimizer is done optimizing and finish the transfer.
-  public ClassAd sample() {
-    return new ClassAd();
+  public Ad sample() {
+    return new Ad();
   } 
 
   // Used to report the results of a sample back to the optimizer. If
   // null is passed, assume the sampling failed. The optimizer should
   // also be able to handle missing attributes.
-  public void report(ClassAd ad) { }
+  public void report(Ad ad) { }
 
   // Used to initialize the optimizer's starting settings.
-  //public void initialize(ClassAd ad) { }
+  //public void initialize(Ad ad) { }
   public void initialize(long size, Range range) { }
 
   // Get the name of the optimizer.

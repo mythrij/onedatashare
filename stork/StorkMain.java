@@ -11,7 +11,7 @@ import java.io.*;
 // and running Stork commands according to passed arguments.
 
 public class StorkMain {
-  public static final ClassAd def_env = new ClassAd();
+  public static final Ad def_env = new Ad();
   public static final GetOpts opts = new GetOpts();
 
   public static final int DEFAULT_PORT = 57024;
@@ -34,8 +34,8 @@ public class StorkMain {
 
   static {
     // Initialize the default environment.
-    def_env.insert("port", DEFAULT_PORT);
-    def_env.insert("libexec", "../libexec/");
+    def_env.put("port", DEFAULT_PORT);
+    def_env.put("libexec", "../libexec/");
 
     // Initialize the default command line parser.
     opts.prog = "StorkMain.class";
@@ -50,11 +50,11 @@ public class StorkMain {
     opts.add('h', "host", "set the host for the Stork server").parser =
       opts.new Parser() {  // How can we handle IPv6?
         public String arg() { return "[host[:port]]"; }
-        public ClassAd parse(String s) throws Exception {
+        public Ad parse(String s) throws Exception {
           int i = s.lastIndexOf(':');
           String h = (i < 0) ? s    : s.substring(0,i);
           String p = (i < 0) ? null : s.substring(i+1);
-          return new ClassAd().insert("host", h).insert("port", p);
+          return new Ad().put("host", h).put("port", p);
         }
       };
     opts.add('V', "version", "display the version number and exit");
@@ -94,10 +94,9 @@ public class StorkMain {
   }
 
   // Parse config file, where each line is either a comment or a
-  // ClassAd expression which gets merged into the returned ad.
-  private static ClassAd parseConfig(String path) throws Exception {
+  // Ad expression which gets merged into the returned ad.
+  private static Ad parseConfig(String path) throws Exception {
     File file = (path != null) ? checkPath(path) : defaultConfig();
-    ClassAd env = new ClassAd();
 
     // Error checking
     if (file == null) {
@@ -107,31 +106,15 @@ public class StorkMain {
                           "find stork.conf in default locations");
     } else if (!file.canRead()) {
       System.out.println("Warning: couldn't open config file '"+file+"'");
-    } else {
-      LineNumberReader lnr = new LineNumberReader(new FileReader(file));
-      String line;
-
-      // Read whole file.
-      while ((line = lnr.readLine()) != null) {
-        // Trim whitespace.
-        line = line.trim();
-
-        // Ignore comments and empty lines.
-        if (line.length() == 0 || line.charAt(0) == '#') continue;
-
-        // Interpret line as a ClassAd expression. Is this abuse?
-        ClassAd ad = ClassAd.parse("["+line+"]");
-
-        // Error checking.
-        if (ad.error())
-          throw new Exception("couldn't parse config file at line "+
-              lnr.getLineNumber());
-
-        env.importAd(ad);
-      }
+      return new Ad();
     }
 
-    return env;
+    Reader r = new FileReader(file);
+    Scanner sc = new Scanner(r).useDelimiter("\\A");
+
+    if (!sc.hasNext())
+      throw new Exception("couldn't read from config file: '"+file+"'");
+    return Ad.parse("[\n"+sc.next()+"\n]");
   }
 
   // Main entry point. The first argument should be the command to
@@ -140,7 +123,7 @@ public class StorkMain {
   // to relevant parsers.
   public static void main(String[] args) {
     String cmd = null;
-    ClassAd env = def_env;
+    Ad env = def_env;
     GetOpts opt2;
 
     // Parse the first argument (command name).

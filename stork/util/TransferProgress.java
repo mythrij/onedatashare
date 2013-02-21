@@ -66,18 +66,18 @@ public class TransferProgress {
       sink.putAd(getAd(sink.peekAd()));
   }
 
-  // Get the ClassAd representation of this transfer progress.
-  public ClassAd getAd() {
-    return getAd(new ClassAd());
+  // Get the Ad representation of this transfer progress.
+  public Ad getAd() {
+    return getAd(new Ad());
   }
 
-  private ClassAd getAd(ClassAd ad) {
-    ad.insert("byte_progress", byte_progress.toString());
-    ad.insert("progress", byte_progress.toPercent());
-    ad.insert("file_progress", file_progress.toString());
-    ad.insert("throughput", throughput(false));
+  private Ad getAd(Ad ad) {
+    ad.put("byte_progress", byte_progress.toString());
+    ad.put("progress", byte_progress.toPercent());
+    ad.put("file_progress", file_progress.toString());
+    ad.put("throughput", throughput(false));
     if (duration() >= 1000)
-      ad.insert("avg_throughput", throughput(true));
+      ad.put("avg_throughput", throughput(true));
     return ad;
   }
 
