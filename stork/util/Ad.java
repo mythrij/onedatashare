@@ -241,7 +241,9 @@ public class Ad {
         if (chomp(Token.T_LB) != null)
           return token = Token.T_LB;
       } else if (token.next == null) {
-        return token = null;
+        Token t = token;
+        token = null;
+        return t;
       } else for (Token t : token.next) {
         // Otherwise look for the next token.
         String s = chomp(t);
@@ -258,8 +260,8 @@ public class Ad {
       while (true) {
         Token t = nextToken();
         if (t == null) return null;
-        if (t.next == null) return ad;
         dws = false;
+        if (t.next == null) return ad;
       }
     }
 
@@ -664,5 +666,27 @@ public class Ad {
       String s = a.toString(p);
       return q+(p ? s.replace("\n", "\n  ") : s);
     } return q+v.toString();
+  }
+
+  // Represent this ad as a JSON string.
+  public synchronized String toJSON() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("{");
+    Iterator<Map.Entry<String,Object>> it = map.entrySet().iterator();
+    while (it.hasNext()) {
+      Map.Entry<String,Object> e = it.next();
+      Object o = e.getValue();
+      sb.append('"'+e.getKey()+"\":");
+      if (o instanceof Ad)
+        sb.append(((Ad)o).toJSON());
+      else if (o instanceof String)
+        sb.append('"'+o.toString().replace("\\", "\\\\")
+                                  .replace("\"", "\\\"")+'"');
+      else
+        sb.append(o.toString());
+      if (it.hasNext()) sb.append(',');
+    }
+    sb.append("}");
+    return sb.toString();
   }
 }

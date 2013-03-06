@@ -56,6 +56,7 @@ public class StorkGridFTPModule extends TransferModule {
     }
 
     public void write(Buffer buffer) throws IOException {
+      System.out.println("Got buffer: "+new String(buffer.getBuffer()));
       if (buffer.getOffset() >= 0)
         file.seek(buffer.getOffset());
       file.write(buffer.getBuffer());
@@ -180,9 +181,10 @@ public class StorkGridFTPModule extends TransferModule {
           throw E("could not authenticate (certificate issue?)");
         } else {
           String user = (u.user == null) ? "anonymous" : u.user;
+          String pass = (u.pass == null) ? "" : u.pass;
           Reply r = exchange("USER "+user);
           if (Reply.isPositiveIntermediate(r)) try {
-            execute("PASS "+u.pass);
+            execute(("PASS "+pass).trim());
           } catch (Exception e) {
             throw E("bad password");
           } else if (!Reply.isPositiveCompletion(r)) {
@@ -273,9 +275,8 @@ public class StorkGridFTPModule extends TransferModule {
     public Reply handleReply() throws Exception {
       while (true) {
         Reply r = cc.read();
-        addReply(r);
-        int c = r.getCode() / 100;
-        if (c != 1 && c != 3) return r;
+        if (r.getCode() < 200) addReply(r);
+        else return r;
       }
     }
 
@@ -682,6 +683,15 @@ public class StorkGridFTPModule extends TransferModule {
 
       final ChannelPair cc = new ChannelPair(this.cc.sc);
       final String cmd = MLSD;//cc.rc.supports("MLSR") ? MLSR : MLSD;
+
+      // Turn of DCAU.
+      if (cc.rc.supports("DCAU")) try {
+        GridFTPServerFacade f = (GridFTPServerFacade) cc.oc.facade;
+        f.setDataChannelAuthentication(DataChannelAuthentication.NONE);
+        cc.rc.write("DCAU N", true);
+      } catch (Exception e) {
+        // Couldn't cast to GridFTPServerFacade probably, oh well.
+      }
 
       final LinkedList<String> dirs = new LinkedList<String>();
       dirs.add("");
@@ -1120,7 +1130,7 @@ public class StorkGridFTPModule extends TransferModule {
 
   // Tester
   // ------
-  public static void main(String args[]) {
+  public static void main1(String args[]) {
     SubmitAd ad = null;
     StorkGridFTPModule m = new StorkGridFTPModule();
     StorkTransfer tf = null;
@@ -1187,7 +1197,7 @@ public class StorkGridFTPModule extends TransferModule {
     System.out.println("Job done with exit status "+rv);
   }
 
-  public static void main2(String args[]) {
+  public static void main(String args[]) {
     URI uri, lri;
     StorkFTPClient sc;
 
@@ -1217,6 +1227,7 @@ public class StorkGridFTPModule extends TransferModule {
       System.out.println("Listing...");
       XferList xl = sc.mlsr(uri.getPath());
 
+      System.out.println("List length: "+xl.size());
       for (XferList.Entry e : xl)
         System.out.println(e.path());
       System.out.println("Done listing!");

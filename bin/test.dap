@@ -1,6 +1,6 @@
-[ src = "gridftp://didclab-ws9/home/globus/stork.log";
-  dest = "gridftp://didclab-ws9/home/globus/stork.log";
+[ src = "gridftp://didclab-ws8/home/globus/stuff/";
+  dest = "gridftp://didclab-ws9/home/globus/stuff/";
   #optimization = "full_2nd";
-  parallelism = "5-20";
+  #parallelism = "5-20";
   x509_file = "/tmp/x509up_u1000";
 ]

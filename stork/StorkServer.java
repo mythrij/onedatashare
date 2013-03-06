@@ -685,7 +685,7 @@ public class StorkServer implements Runnable {
     sock = channel.socket();
 
     // Bind socket to the given host/port.
-    if (host == null) host = "0.0.0.0";
+    if (host == null) host = "127.0.0.1";
     addr = new InetSocketAddress(host, port);
     sock.bind(addr);
     port = sock.getLocalPort();
