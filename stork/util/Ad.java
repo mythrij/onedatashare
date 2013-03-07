@@ -605,23 +605,40 @@ public class Ad {
   // ------------------
   // Methods for presenting and serializing ads.
 
-  // Reinventing wheels because replace() doesn't work for this.
+  // Reinventing wheels because replace() doesn't work for this. Translates
+  // an escaped string parsed from a text ad into a proper Java string.
   private static String unescapeString(String s) {
     boolean esc = false;
     StringBuilder sb = new StringBuilder(s.length());
     for (int i = 0; i < s.length(); i++) {
       char c = s.charAt(i);
-      if (esc) {
-        sb.append(((c == '\\' || c == '"') ? "" : "\\")+c);
-        esc = false;
+      if (c == '\n' || c == '\r') {  // Ignore newlines.
+        continue;
+      } if (esc) switch (c) {
+        case '"' :
+        case '\\': sb.append(c);    break;
+        case 'n' : sb.append('\n'); break;
+        default  : sb.append('\\').append(c);
       } else if (c == '\\') {
         esc = true;
+        continue;
       } else {
         sb.append(c);
-        esc = false;
-      }
+      } esc = false;
     } return sb.toString();
   }
+
+  // Translate a Java string into an escaped string for presentation.
+  private static String escapeString(String s) {
+    StringBuilder sb = new StringBuilder(s.length()+10);
+    char c;
+    for (int i = 0; i < s.length(); i++) switch (c = s.charAt(i)) {
+      case '\n': sb.append("\\n");  break;
+      case '\\': sb.append("\\\\"); break;
+      case '"' : sb.append("\\\""); break;
+      default  : sb.append(c);
+    } return sb.toString();
+  } 
 
   // Represent this ad as a nicely-formatted string.
   public synchronized String toString() {
@@ -633,6 +650,7 @@ public class Ad {
     return toString(false).getBytes();
   }
 
+  // TODO: Make this a little prettier maybe?
   public synchronized String toString(boolean pretty) {
     StringBuffer sb = new StringBuffer();
     String s = !pretty ? "" : (map.size() > 1) ? "\n" : " ";  // separator
@@ -653,7 +671,7 @@ public class Ad {
   private static String stringify(Object v, boolean p) {
     String q = !p ? "=" : " = ";  // assignment sign
     if (v instanceof String) {  // We need to escape the string.
-      String s = v.toString().replace("\\", "\\\\").replace("\"", "\\\"");
+      String s = escapeString(v.toString());
       return q+'"'+s+'"';
     } if (v instanceof Ad) {  // We need to indent (if pretty printing).
       Ad a = (Ad)v;
@@ -680,13 +698,23 @@ public class Ad {
       if (o instanceof Ad)
         sb.append(((Ad)o).toJSON());
       else if (o instanceof String)
-        sb.append('"'+o.toString().replace("\\", "\\\\")
-                                  .replace("\"", "\\\"")+'"');
+        sb.append('"'+escapeString(o.toString())+'"');
       else
         sb.append(o.toString());
       if (it.hasNext()) sb.append(',');
     }
     sb.append("}");
     return sb.toString();
+  }
+
+  public static void main(String args[]) {
+    System.out.println("Type an ad:");
+    try {
+      Ad ad = Ad.parse(System.in);
+      System.out.println("a = \""+ad.get("a")+"\"");
+      System.out.println("Got ad: "+ad);
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
   }
 }
