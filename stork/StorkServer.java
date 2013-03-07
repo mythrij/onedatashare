@@ -961,6 +961,9 @@ public class StorkServer implements Runnable {
   public StorkServer(Ad env) {
     this.env = (env != null) ? env : new Ad();
 
+    System.out.println("Env: "+env);
+    System.exit(1);
+
     // Initialize command handlers
     cmd_handlers = new HashMap<String, StorkCommand>();
     cmd_handlers.put("stork_q", new StorkQHandler());
