@@ -158,9 +158,10 @@ public class StorkMain {
       System.exit(1);
     }
 
-    // Try to parse config file
+    // Try to parse config file and arguments.
     try {
       env = env.merge(parseConfig(env.get("conf")));
+      env = env.merge(opts.parse(args));
     } catch (Exception e) {
       System.out.println("Error: "+e.getMessage());
     }
