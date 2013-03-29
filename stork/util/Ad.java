@@ -37,6 +37,19 @@ import java.io.*;
 //   string -> '"' ('\'.|(^"))* '"'
 //   bool   -> 'true' | 'false'
 //
+// The parser can also handle a subset of JSON (everything excluding arrays,
+// essentially). The parser determines what format it is parsing based on
+// the first character. The syntax for JSON representations of ads is:
+//   ad     -> '{' decl (',' decl?)* '}'
+//   decl   -> name '=' value
+//   name   -> '"' (a-z_) (0-9a-z_)* '"'
+//   value  -> number | string | bool | ad
+//   number -> [-+]?[0-9]* '.' [0-9]+expo?
+//           | [-+]?[0-9]+expo?
+//   expo   -> e[-+]?[0-9]+
+//   string -> '"' ('\'.|(^"))* '"'
+//   bool   -> 'true' | 'false'
+//
 // The parser will discard whitespace between tokens (except for whitespace
 // within strings, of course). It also will disregard newlines, except in
 // the case of comments indicated with a # (in which case it discards
@@ -50,6 +63,8 @@ import java.io.*;
 // for StorkCloud. Hence, we opted to implement a language that is
 // essentially a lighter version of the Ad language and is backwards
 // compatible.
+//
+// TODO: XML representation. So far we haven't had a need for this though.
 
 public class Ad {
   // The heart of the structure.
@@ -60,6 +75,10 @@ public class Ad {
     IGNORE = Pattern.compile("(\\s*(#.*$)?)+", Pattern.MULTILINE),
     PRINTABLE = Pattern.compile("[\\p{Print}\r\n]*"),
     DECL_ID = Pattern.compile("[a-z_]\\w*", Pattern.CASE_INSENSITIVE);
+
+  // Parser modes.
+  private static int AD   = 0; 
+  private static int JSON = 1; 
 
   public static class ParseError extends RuntimeException {
     public ParseError(String m) {
@@ -111,17 +130,18 @@ public class Ad {
 
   // The set of tokens for the parser.
   public static enum Token {
-    // Tokens, their patterns, and valid next tokens. (Read bottom up.)
-    T_LB ("\\["),
+    // Tokens and their patterns. The optional second argument specifies
+    // the token in JSON format.
+    T_LB ("\\[", "\\{"),
     //T_ID ("[a-z_]\\w*(?:\\.[a-z_]\\w*)*"),
-    T_ID ("[\\w\\.]+"),
-    T_EQ ("="),
+    T_ID ("[\\w\\.]+", "\"[\\w\\.]+\""),
+    T_EQ ("=", ":"),
     T_NUM("([-+]?(\\d*\\.\\d+)|(\\d+))(e[-+]?\\d+)?"),
     T_STR("\"[^\\\\\"]*(?:\\\\.[^\\\\\"]*)*?\""),
     T_TF ("(true|false)"),
-    T_SLB("\\["),
-    T_SC (";"),
-    T_RB ("\\]");
+    T_SLB("\\[", "\\{"),
+    T_SC (";", ","),
+    T_RB ("\\]", "\\}");
 
     static {
       T_LB.next (T_ID, T_SC, T_RB);
@@ -136,14 +156,26 @@ public class Ad {
 
     EnumSet<Token> next = null;
     Pattern pattern = null;
+    Pattern js_pattern = null;
 
     void next(Token t1, Token... r) {
       next = EnumSet.of(t1, r);
     }
 
+    // Get the pattern given the mode.
+    Pattern pattern(int mode) {
+      if (mode == JSON && js_pattern != null)
+        return js_pattern;
+      return pattern;
+    }
+
     // Constructor
-    Token(String re) {
-      pattern = Pattern.compile(re, Pattern.CASE_INSENSITIVE);
+    Token(String re, String jre) {
+      pattern = Pattern.compile(re,  Pattern.CASE_INSENSITIVE);
+      if (jre != null)
+        js_pattern = Pattern.compile(jre, Pattern.CASE_INSENSITIVE);
+    } Token(String re) {
+      this(re, null);
     }
   }
 
@@ -153,6 +185,7 @@ public class Ad {
     StringBuilder sb;
     Matcher m;
     Token token = null;   // Current token.
+    int mode = AD;        // Parser mode. (AD or JSON)
     Ad ad;                // The ad currently being written to.
     Parser sub = null;    // The sub-parser for recursive ad parsing.
     String cid = null;    // Current identifier we're parsing.
@@ -178,17 +211,20 @@ public class Ad {
     }
 
     // Return a string explaining what is expected after a token.
-    private static String expectStringFor(Token t) {
-      if (t == null) return "beginning of ad: [";
+    private static String expectStringFor(Token t, int m) {
+      if (t == null) return "beginning of ad: [ or {";
+      char a = (m == JSON) ? ':' : '=';
+      char s = (m == JSON) ? ',' : ';';
+      char e = (m == JSON) ? '}' : ']';
       switch (t) {
-        case T_LB : return "identifier (must start with letter)";
-        case T_ID : return "assignment operator: =";
+        case T_LB : return "identifier";
+        case T_ID : return "assignment operator: "+a;
         case T_EQ : return "value (number, string, boolean, or ad)";
         case T_SLB:
         case T_NUM:
         case T_STR:
-        case T_TF : return "separator (;) or end of ad: ]";
-        case T_SC : return "identifier or end of ad: ]";
+        case T_TF : return "separator ("+s+") or end of ad: "+e;
+        case T_SC : return "identifier or end of ad: "+e;
         case T_RB : return "nothing!";
       } throw new Error("unknown token: "+t);
     }
@@ -196,9 +232,10 @@ public class Ad {
     // "Chomp" off a piece of the input using the matcher, returning the
     // matched piece, or null if none was found. Adjusts the matcher
     // position if a match was found.
-    private synchronized String chomp(Token t) {
-      //System.out.println("Chomping: "+t);
-      return chomp(t.pattern);
+    private synchronized String chomp(Token t, int m) {
+      return chomp(t.pattern(m));
+    } private synchronized String chomp(Token t) {
+      return chomp(t.pattern(mode));
     } private synchronized String chomp(Pattern p) {
       m.usePattern(p);
       if (!m.lookingAt()) return null;
@@ -210,12 +247,15 @@ public class Ad {
     }
 
     // Handle parsing a token and potentially changing the ad.
-    private synchronized Token handleToken(Token t, String s) {
-      //System.out.println("handling: "+t+", "+s);
-      switch (t) {
-        case T_ID : cid = s; break;
-        case T_SLB: m.region(m.regionStart()-1, m.regionEnd());
-                    ad.putObject(cid, Ad.parse(m)); break;
+    private synchronized Token handleToken(Token t, String s) { 
+      // Hack for T_ID in JSON mode to handle quotes.
+      if (mode == JSON && t == Token.T_ID) {
+        cid = s.substring(1, s.length()-1).toLowerCase();
+      } else switch (t) {
+        case T_ID : cid = s.toLowerCase(); break;
+        case T_SLB: Parser p = new Parser(m);
+                    p.token = Token.T_LB; p.mode = mode;
+                    ad.putObject(cid, p.getAd()); break;
         case T_NUM: ad.putObject(cid, new BigDecimal(s)); break;
         case T_STR: s = unescapeString(s.substring(1, s.length()-1));
                     ad.putObject(cid, s); break;
@@ -223,6 +263,16 @@ public class Ad {
         case T_LB : m.region(m.regionStart()-1, m.regionEnd());
                     ad.putObject(cid, Ad.parse(m));
       } return t;
+    }
+
+    // Look for T_LB, and return the character found so we know what parse
+    // mode to use.
+    private synchronized int findStart() {
+      if (chomp(Token.T_LB, AD) != null)
+        return AD;
+      if (chomp(Token.T_LB, JSON) != null)
+        return JSON;
+      return -1;
     }
 
     // Check the sequence for the the next token and return it.
@@ -238,7 +288,7 @@ public class Ad {
 
       if (token == null) {
         // If no pattern set, look for the opening bracket.
-        if (chomp(Token.T_LB) != null)
+        if ((mode = findStart()) >= 0)
           return token = Token.T_LB;
       } else if (token.next == null) {
         Token t = token;
@@ -251,7 +301,7 @@ public class Ad {
         //System.out.println("region: "+m.regionStart()+" "+m.regionEnd());
         if (requireEnd) return null;
         if (s != null) return token = handleToken(t, s);
-      } throw PE("expecting "+expectStringFor(token));
+      } throw PE("expecting "+expectStringFor(token, mode));
     }
 
     // Return an ad from the parser. Returns null if ad is not yet
@@ -317,7 +367,7 @@ public class Ad {
 
     for (int c = is.read(); c >= 0; c = is.read()) {
       sb.append((char)c);
-      if (c != ']') continue;
+      if (c != ']' && c != '}') continue;
       Ad ad = p.write(sb);
       if (ad != null) return this;
       sb = new StringBuilder(1024);
@@ -474,16 +524,15 @@ public class Ad {
 
   // Use this to insert objects in the above methods. This takes care
   // of validating the key so accidental badness doesn't occur.
-  private synchronized Ad putObject(Object key, Object value) {
-    if (key == null)
-      throw PE("null key given");
-    String k = key.toString().toLowerCase().trim();
-    if (k.isEmpty())
-      throw PE("empty key given");
-    return putObject(key.toString().toLowerCase(), value);
-  } private synchronized Ad putObject(String key, Object value) {
+  private synchronized Ad putObject(Object okey, Object value) {
     int i;
     Ad ad = this;
+
+    if (okey == null)
+      throw PE("null key given");
+    String key = okey.toString().toLowerCase().trim();
+    if (key.isEmpty())
+      throw PE("empty key given");
 
     // Keep traversing ads until we find ad we need to insert into.
     while ((i = key.indexOf('.')) > 0) synchronized (ad) {
@@ -502,6 +551,8 @@ public class Ad {
 
     // No more ads to traverse, insert key.
     synchronized (ad) {
+      if (!DECL_ID.matcher(key).matches())
+        throw PE("invalid key name: "+key);
       if (value != null)
         ad.map.put(key, value);
       else
@@ -711,8 +762,9 @@ public class Ad {
     System.out.println("Type an ad:");
     try {
       Ad ad = Ad.parse(System.in);
-      System.out.println("a = \""+ad.get("a")+"\"");
+      System.out.println("a = \""+ad.get("A")+"\"");
       System.out.println("Got ad: "+ad);
+      System.out.println("    or: "+ad.toJSON());
     } catch (Exception e) {
       e.printStackTrace();
     }
