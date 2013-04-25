@@ -41,8 +41,8 @@ import java.io.*;
 // essentially). The parser determines what format it is parsing based on
 // the first character. The syntax for JSON representations of ads is:
 //   ad     -> '{' decl (',' decl?)* '}'
-//   decl   -> name '=' value
-//   name   -> '"' (a-z_) (0-9a-z_)* '"'
+//   decl   -> '"' name '"' ':' value
+//   name   -> (a-z_) (0-9a-z_)*
 //   value  -> number | string | bool | ad
 //   number -> [-+]?[0-9]* '.' [0-9]+expo?
 //           | [-+]?[0-9]+expo?
@@ -61,7 +61,7 @@ import java.io.*;
 // with JSON and XML somewhat less predicatable, and being able to
 // effectively convert between formats easily is something we wanted
 // for StorkCloud. Hence, we opted to implement a language that is
-// essentially a lighter version of the Ad language and is backwards
+// essentially a lighter version of the ClassAd language and is backwards
 // compatible.
 //
 // TODO: XML representation. So far we haven't had a need for this though.
@@ -77,8 +77,8 @@ public class Ad {
     DECL_ID = Pattern.compile("[a-z_]\\w*", Pattern.CASE_INSENSITIVE);
 
   // Parser modes.
-  private static int AD   = 0; 
-  private static int JSON = 1; 
+  public static int AD   = 0; 
+  public static int JSON = 1; 
 
   public static class ParseError extends RuntimeException {
     public ParseError(String m) {
@@ -121,8 +121,7 @@ public class Ad {
 
   // Merges all of the ads passed into this ad.
   public Ad(Ad... bases) {
-    map = new LinkedHashMap<String, Object>();
-    merge(bases);
+    this(); merge(bases);
   }
 
   // Convenient method for throwing parse errors.
@@ -133,7 +132,6 @@ public class Ad {
     // Tokens and their patterns. The optional second argument specifies
     // the token in JSON format.
     T_LB ("\\[", "\\{"),
-    //T_ID ("[a-z_]\\w*(?:\\.[a-z_]\\w*)*"),
     T_ID ("[\\w\\.]+", "\"[\\w\\.]+\""),
     T_EQ ("=", ":"),
     T_NUM("([-+]?(\\d*\\.\\d+)|(\\d+))(e[-+]?\\d+)?"),
@@ -261,7 +259,9 @@ public class Ad {
                     ad.putObject(cid, s); break;
         case T_TF : ad.putObject(cid, new Boolean(s)); break;
         case T_LB : m.region(m.regionStart()-1, m.regionEnd());
-                    ad.putObject(cid, Ad.parse(m));
+                    Ad ad = Ad.parse(m);
+                    // TODO: Check for null here!!
+                    ad.putObject(cid, ad);
       } return t;
     }
 

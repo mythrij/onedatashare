@@ -1,4 +1,4 @@
-package stork;
+package stork.scheduler;
 
 import stork.*;
 import stork.util.*;
@@ -12,12 +12,16 @@ import java.nio.channels.spi.*;
 import java.util.*;
 import java.util.concurrent.*;
 
-// TODO: Search FIXME and TODO! Also, make everything not static.
+// The Stork transfer job scheduler. Maintains its own internal
+// configuration and state as an ad. Operates based on commands given
+// to it in the form of ads. Can be run standalone and receive commands
+// from a number of interfaces, or can be run as part of a larger
+// program and be given commands directly (or both).
 
-public class StorkServer implements Runnable {
+// TODO: Search FIXME and TODO!
+
+public class StorkScheduler implements Runnable {
   // Server state variables
-  private ServerSocket listen_sock = null;
-
   private Thread[] thread_pool;
   private Thread[] worker_pool;
 
@@ -26,7 +30,9 @@ public class StorkServer implements Runnable {
 
   private ArrayList<StorkJob> all_jobs;
   private LinkedBlockingQueue<StorkJob> job_queue;
-  private LinkedBlockingQueue<ClientRequest> req_queue;
+  private LinkedBlockingQueue<RequestContext> req_queue;
+
+  private Bell<Integer> shutdown_bell = new Bell<Integer>();
 
   boolean connected = false;
 
@@ -52,11 +58,6 @@ public class StorkServer implements Runnable {
 
     return opts;
   }
-
-  // Used to determine time relative to start of server.
-  // TODO: Not this...
-  private long server_date = System.currentTimeMillis();
-  private long server_mt_base = System.nanoTime() / (long)1E6;
 
   // Configuration variables
   private boolean daemon = false;
@@ -150,8 +151,7 @@ public class StorkServer implements Runnable {
   // A representation of a job submitted to Stork. When this job is
   // run by a thread, start the transfer, and read aux_ads from it
   // until the job completes.
-  // TODO: Make this less hacky with the filters and such. Also, should
-  // this be in a separate class?
+  // TODO: Refactor this whole thing.
   class StorkJob implements Runnable {
     JobStatus status;
     SubmitAd job_ad;
@@ -162,8 +162,7 @@ public class StorkServer implements Runnable {
     int job_id = 0;
     int attempts = 0, rv = -1;
     String message = null;
-    long submit_time, start_time = -1;
-    int run_duration = -1;
+    Watch queue_timer = null, run_timer = null;
 
     // Set me to null to force regeneration of info ad by getAd().
     Ad cached_ad = null;
@@ -175,7 +174,7 @@ public class StorkServer implements Runnable {
       set_status(JobStatus.scheduled);
 
       // Set the submit time for the job
-      submit_time = get_server_time();
+      queue_timer = new Watch(true);
     }
 
     // Gets the job info as a ad. Will return cached_ad if there is one.
@@ -202,47 +201,25 @@ public class StorkServer implements Runnable {
         ad.put("status", status.toString());
         ad.put("module", tm.handle());
 
+        // TODO: Give raw data, let client determine presentation.
         if (job_id > 0)
           ad.put("job_id", job_id);
         if (attempts > 0)
           ad.put("attempts", attempts);
         if (message != null)
           ad.put("message", message);
-        if (run_duration >= 0)
-          ad.put("run_duration", pretty_time(run_duration));
       }
 
       if (rv >= 0)
         ad.put("exit_status", rv);
 
-      // Add elapsed time if processing
-      if (status == JobStatus.processing)
-        ad.put("run_duration", pretty_time(since(start_time)));
+      // Add elapsed times.
+      if (queue_timer != null)
+        ad.put("total_duration", queue_timer.toString());
+      if (run_timer != null)
+        ad.put("run_duration", run_timer.toString());
       
       return cached_ad = ad;
-    }
-
-    // Given date in ms, return ms elapsed.
-    // XXX: Kinda hacky to have this here...
-    private int since(long t) {
-      if (t < 0) return -1;
-      return (int) (get_server_time() - t);
-    }
-
-    // Given a duration in ms, return a pretty string representation.
-    private String pretty_time(long t) {
-      if (t < 0) return null;
-
-      long i = t % 1000,
-           s = (t/=1000) % 60,
-           m = (t/=60) % 60,
-           h = (t/=60) % 24,
-           d = t / 24;
-
-      return (d > 0) ? String.format("%dd%02dh%02dm%02ds", d, h, m, s) :
-             (h > 0) ? String.format("%dh%02dm%02ds", h, m, s) :
-             (m > 0) ? String.format("%dm%02ds", m, s) :
-                       String.format("%d.%02ds", s, i/10);
     }
 
     // Sets the status of the job and updates the ad accordingly.
@@ -281,7 +258,8 @@ public class StorkServer implements Runnable {
         // Try to stop the job. If we can't, don't do anything.
         case processing:
           if (transfer != null) transfer.stop();
-          run_duration = since(start_time);
+          queue_timer.stop();
+          run_timer.stop();
           transfer = null;
 
         // Fall through to set removed status.
@@ -324,7 +302,7 @@ public class StorkServer implements Runnable {
 
       // Start transfer
       synchronized (status) {
-        start_time = get_server_time();
+        run_timer.start();
         set_status(JobStatus.processing);
         transfer = tm.transfer(job_ad);
         transfer.start();
@@ -349,11 +327,10 @@ public class StorkServer implements Runnable {
       // Wait for job to complete and get exit status.
       rv = transfer.waitFor();
       transfer = null;
-      run_duration = since(start_time);
+      run_timer.stop();
 
       if (rv == 0) {  // Job successful!
         set_status(JobStatus.complete);
-        transfer = null;
         return;
       }
 
@@ -363,16 +340,14 @@ public class StorkServer implements Runnable {
 
         set_attempts(attempts+1);
         System.out.println("Job "+job_id+" failed! Rescheduling...");
-        transfer = null;
 
-        try {
+        while (true) try {
           job_queue.put(this);
         } catch (Exception e) {
           System.out.println("Error rescheduling job "+job_id+": "+e);
         }
       } else {
         System.out.println("Job "+job_id+" failed!");
-        transfer = null;
         set_status(JobStatus.failed);
         set_attempts(attempts);
       }
@@ -415,12 +390,27 @@ public class StorkServer implements Runnable {
     // Continually remove jobs from the queue and start them.
     public void run() {
       while (true) try {
-        ClientRequest req = req_queue.take();
+        RequestContext req = req_queue.take();
         System.out.println("Pulled request from queue");
-        req.handle();
+
+        if (req.cmd == null) {
+          req.done(new ResponseAd("error", "no command specified"));
+          continue;
+        }
+
+        StorkCommand handler = cmd_handlers.get(req.cmd);
+
+        if (handler == null) {
+          req.done(new ResponseAd("error", "invalid command: "+req.cmd));
+          continue;
+        }
+
+        Ad res = handler.handle(req);
+        req.done(res);
+
         System.out.println("Done with request!");
       } catch (Exception e) {
-        System.out.println("Something bad happened in StorkQueueThread...");
+        System.out.println("Something bad happened in StorkWorkerThread...");
         e.printStackTrace();
       }
     }
@@ -428,11 +418,11 @@ public class StorkServer implements Runnable {
 
   // Stork command handlers should implement this interface.
   static interface StorkCommand {
-    public Ad handle(ClientRequest req);
+    public Ad handle(RequestContext req);
   }
 
   class StorkQHandler implements StorkCommand {
-    public Ad handle(ClientRequest req) {
+    public Ad handle(RequestContext req) {
       // The list we will ultimately read results from.
       Iterable<StorkJob> list = all_jobs;
       EnumSet<JobStatus> filter = null;
@@ -481,7 +471,7 @@ public class StorkServer implements Runnable {
         count++;
 
         System.out.println("Sending: "+j.getAd());
-        req.add(j.getAd());
+        req.putReply(j.getAd());
       } catch (IndexOutOfBoundsException oobe) {
         missed = true;
         nfr.swallow(i);
@@ -505,13 +495,13 @@ public class StorkServer implements Runnable {
   }
 
   class StorkListHandler implements StorkCommand {
-    public Ad handle(ClientRequest req) {
+    public Ad handle(RequestContext req) {
       return null;
     }
   }
 
   class StorkSubmitHandler implements StorkCommand {
-    public Ad handle(ClientRequest req) {
+    public Ad handle(RequestContext req) {
       SubmitAd sad;
 
       // Try to interpret ad as a submit ad.
@@ -568,7 +558,7 @@ public class StorkServer implements Runnable {
   }
 
   class StorkRmHandler implements StorkCommand {
-    public Ad handle(ClientRequest req) {
+    public Ad handle(RequestContext req) {
       Ad ad = req.ad;
       StorkJob j;
       String reason = "removed by user";
@@ -608,10 +598,10 @@ public class StorkServer implements Runnable {
 
   class StorkInfoHandler implements StorkCommand {
     // Send transfer module information
-    Ad sendModuleInfo(ClientRequest req) {
+    Ad sendModuleInfo(RequestContext req) {
       for (TransferModule tm : xfer_modules.modules()) {
         try {
-          req.add(tm.infoAd());
+          req.putReply(tm.infoAd());
         } catch (Exception e) {
           return new ResponseAd("error", e.getMessage());
         }
@@ -619,11 +609,11 @@ public class StorkServer implements Runnable {
     }
 
     // TODO: Send server information.
-    Ad sendServerInfo(ClientRequest req) {
+    Ad sendServerInfo(RequestContext req) {
       return new ResponseAd("error", "not yet implemented");
     }
 
-    public Ad handle(ClientRequest req) {
+    public Ad handle(RequestContext req) {
       String type = req.ad.get("type", "module");
 
       if (type.equals("module"))
@@ -664,39 +654,6 @@ public class StorkServer implements Runnable {
       System.out.println("Warning: no transfer modules registered");
   }
 
-  // Get the current Unix date in ms based on server time.
-  // TODO: Move this somewhere else.
-  long get_server_time() {
-    long dtime = System.nanoTime() / (long)1E6 - server_mt_base;
-    return server_date + dtime;
-  }
-
-  ServerSocketChannel channel;
-
-  // Create and bind a server socket channel for this StorkServer.
-  public Selector connect(String host, int port) throws Exception {
-    ServerSocket sock;
-    InetSocketAddress addr;
-    Selector selector = SelectorProvider.provider().openSelector();
-
-    // Create selector and channel and get associated socket.
-    channel = ServerSocketChannel.open();
-    channel.configureBlocking(false);
-    sock = channel.socket();
-
-    // Bind socket to the given host/port.
-    if (host == null) host = "127.0.0.1";
-    addr = new InetSocketAddress(host, port);
-    sock.bind(addr);
-    port = sock.getLocalPort();
-
-    // Register channel to selector.
-    channel.register(selector, SelectionKey.OP_ACCEPT);
-
-    System.out.printf("Listening on %s:%d...\n", host, port);
-    return selector;
-  }
-
   // Initialize the thread pool according to config.
   // TODO: Replace worker threads with asynchronous I/O.
   public void initThreadPool() {
@@ -727,223 +684,28 @@ public class StorkServer implements Runnable {
     }
   }
 
-  // Represents a client request to be handled. Maintains a list
-  // of ads to be sent to the client.
-  private class ClientRequest {
-    boolean done = false;
-    SelectionKey key;
-    Ad ad;
-    String cmd;
-    StorkCommand handler = null;
-    LinkedList<Ad> list;
-    ByteBuffer remainder = null;
-
-    ClientRequest(SelectionKey key, Ad cmd_ad) {
-      this.key = key;
-      cmd = cmd_ad.get("command");
-      ad = cmd_ad.remove("command");
-      list = new LinkedList<Ad>();
-      if (cmd != null) handler = cmd_handlers.get(cmd);
-    }
-
-    // Call the handler for the request and finalize.
-    synchronized void handle() {
-      if (cmd == null)
-        done(new ResponseAd("error", "no command specified"));
-      else if (handler == null)
-        done(new ResponseAd("error", "invalid command: "+cmd));
-      else
-        done(handler.handle(this));
-    }
-
-    // Return the first ad in the response queue.
-    synchronized Ad peek() {
-      if (list.size() <= 0)
-        return null;
-      return list.peek();
-    }
-
-    // Remove and return the first ad in the response queue.
-    synchronized Ad pop() {
-      if (list.size() <= 0)
-        return null;
-      if (list.size() == 1)
-        key.interestOps(0);
-      return list.pop();
-    }
-
-    // Put an ad into the response queue.
-    synchronized void add(Ad ad) {
-      System.out.println("Adding: "+ad);
-      if (done) return;
-      list.add(ad);
-      key.interestOps(key.OP_WRITE);
-      key.selector().wakeup();
-    }
-
-    // Called whenever a request has been served and the next command
-    // should be read from the client and handled.
-    synchronized boolean done() {
-      return done && list.isEmpty();
-    } synchronized void done(Ad last) {
-      if (done) return;
-      if (last != null) add(last);
-      done = true;
-    }
-
-    // Write the response queue to a channel.
-    // TODO: Allow adds while writing.
-    synchronized void write(SocketChannel sc) throws Exception {
-      Ad ad;
-      System.out.println("Writing");
-
-      // Write the remainder if there is any.
-      if (remainder != null) {
-        System.out.println("Writing remainder...");
-        sc.write(remainder);
-        if (remainder.remaining() > 0) return;
-        remainder = null;
-      }
-
-      // Write ads until we're out or can't anymore.
-      while ((ad = pop()) != null) {
-        System.out.println("Writing ad: "+ad);
-        remainder = ByteBuffer.wrap(ad.serialize());
-        sc.write(remainder);
-        if (remainder.remaining() > 0) return;
-        remainder = null;
-      }
-
-      // We're out of ads, so disable write until later.
-      key.interestOps(0);
-    }
-  }
-
-  // Cancel a key in a selector.
-  private static void cancelKey(SelectionKey k) {
+  // Put a command in the server's request queue.
+  public RequestContext putRequest(Ad ad, Bell<Ad> bell) {
+    RequestContext rc = new RequestContext(ad, bell);
     try {
-      k.cancel();
-      ((SocketChannel) k.channel()).close();
+      req_queue.put(rc);
     } catch (Exception e) {
-      // We don't really care that much...
-    }
+      // Ugh...
+    } return rc;
   }
 
-  // Handle selection keys from our selector.
-  public void readCommand(SelectionKey k) {
-    if (!k.isValid()) return;
-
-    SocketChannel sc = (SocketChannel) k.channel();
-    Ad.Parser par = (Ad.Parser) k.attachment();
-    ByteBuffer bb = ByteBuffer.allocate(5000);
-    int len;
-
-    if (par == null)
-      k.attach(par = new Ad.Parser());
-
-    // Try to read data from socket.
-    try {
-      len = sc.read(bb);
-    } catch (Exception e) {
-      System.out.println("Something nasty happened...");
-      cancelKey(k);
-      return;
-    }
-
-    // See if we got a disconnect.
-    if (len > 0) try {
-      String str = new String(bb.array(), 0, len);
-      Ad ad = par.write(str);
-
-      // Null means more data is required by the parser.
-      if (ad == null)
-        return;
-      
-      System.out.println("Got ad: "+ad);
-      k.interestOps(0);
-      k.selector().wakeup();
-
-      // Queue up request, unless there's an issue.
-      ClientRequest cr = new ClientRequest(k, ad);
-      if (cr.handler != null) {
-        k.attach(cr); req_queue.add(cr);
-      }
-    } catch (Exception e) {
-      System.out.println("Got bad input: "+e.getMessage());
-      cancelKey(k);
-    } else if (len < 0) {
-      cancelKey(k);
-    }
+  // Shut the server down gracefully.
+  public void shutdown(int rv) {
+    shutdown_bell.ring(rv);
   }
 
-  // Handle writing responses to the client.
-  public void writeResponse(SelectionKey k) {
-    if (!k.isValid()) return;
-
-    SocketChannel sc = (SocketChannel) k.channel();
-    ClientRequest rq = (ClientRequest) k.attachment();
-
-    // See if we're done first.
-    if (rq == null || rq.done()) return;
-
-    try {
-      rq.write(sc);
+  // Wait for the server to shutdown on its own, returning an error code
+  // suitable to System.exit() with.
+  public int waitFor() {
+    while (true) try {
+      return shutdown_bell.waitFor().intValue();
     } catch (Exception e) {
-      System.out.println("Uh oh: "+e);
-      e.printStackTrace();
-    }
-
-    if (rq.done()) {
-      k.attach(null);
-      k.interestOps(k.OP_READ);
-      k.selector().wakeup();
-    }
-  }
-
-  // Handle accepting a new client.
-  public void acceptClient(SelectionKey k) {
-    if (!k.isValid()) return;
-
-    try {
-      ServerSocketChannel ssc = (ServerSocketChannel) k.channel();
-      SocketChannel sc = ssc.accept();
-      if (sc != null) {
-        sc.configureBlocking(false);
-        sc.register(k.selector(), k.OP_READ);
-      }
-    } catch (Exception e) {
-      System.out.println("Warning: caught something weird...");
-      e.printStackTrace();
-    }
-  }
-
-  // Initialize the server and start listening.
-  public void main() throws Exception {
-    Selector s = connect(env.get("host"), env.getInt("port"));
-
-    populateModules();
-
-    initThreadPool();
-
-    // Select sockets from selector in a loop.
-    while (s.select() >= 0) {
-      Iterator<SelectionKey> it = s.selectedKeys().iterator();
-      while (it.hasNext()) try {
-        SelectionKey k = it.next();
-        if (k.isValid()) {
-          System.out.println("Key: "+k.readyOps()+" "+k.channel());
-          int ops = k.readyOps();
-          if ((ops & k.OP_ACCEPT) > 0)
-            acceptClient(k);
-          if ((ops & k.OP_READ) > 0)
-            readCommand(k);
-          if ((ops & k.OP_WRITE) > 0)
-            writeResponse(k);
-        } it.remove();
-      } catch (Exception e) {
-        System.out.println("Warning: badness in select loop");
-        e.printStackTrace();
-      }
+      // Just don't break.
     }
   }
 
@@ -951,14 +713,15 @@ public class StorkServer implements Runnable {
   // for debugging output.
   public void run() {
     try {
-      main();
+      populateModules();
+      initThreadPool();
     } catch (Exception e) {
       System.err.println("Error: "+e.getMessage());
       e.printStackTrace();
     }
   }
 
-  public StorkServer(Ad env) {
+  public StorkScheduler(Ad env) {
     this.env = (env != null) ? env : new Ad();
 
     // Initialize command handlers
@@ -975,7 +738,7 @@ public class StorkServer implements Runnable {
 
     // Initialize queues
     job_queue = new LinkedBlockingQueue<StorkJob>();
-    req_queue = new LinkedBlockingQueue<ClientRequest>();
+    req_queue = new LinkedBlockingQueue<RequestContext>();
     all_jobs = new ArrayList<StorkJob>();
   }
 }

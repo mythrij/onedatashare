@@ -11,4 +11,8 @@ for i in ../cog/*.jar; do
   jar -J-Xmx512m xvf $i
 done
 
+for i in ../netty/*.jar; do
+  jar -J-Xmx512m xvf $i
+done
+
 rm -rf META-INF/ stylesheet.css log4j.properties

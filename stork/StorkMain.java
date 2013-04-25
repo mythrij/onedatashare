@@ -1,6 +1,7 @@
 package stork;
 
 import stork.*;
+import stork.scheduler.*;
 import stork.util.*;
 
 import java.util.*;
@@ -136,7 +137,7 @@ public class StorkMain {
 
     // Little hacky...
     if (cmd.equals("stork_server")) {
-      opt2 = StorkServer.getParser(opts);
+      opt2 = StorkScheduler.getParser(opts);
     } else {
       opt2 = StorkClient.getParser(cmd, opts);
     } if (opt2 == null) {
@@ -177,8 +178,23 @@ public class StorkMain {
 
     // Now run the actual command. (Again, a little hacky.)
     if (cmd.equals("stork_server")) {
-      StorkServer s = new StorkServer(env);
+      String host = env.get("host", "127.0.0.1");
+      int port = env.getInt("port", DEFAULT_PORT);
+
+      StorkScheduler s = new StorkScheduler(env);
+      //SocketInterface si;
+      NettyStuff.TcpInterface si;
+
+      try {
+        si = new NettyStuff.TcpInterface(s, host, port);
+      } catch (Exception e) {
+        e.printStackTrace();
+        System.exit(1);
+        return;
+      }
+
       s.run();
+      System.exit(s.waitFor());
     } else {
       StorkClient c = new StorkClient(env);
       c.execute(cmd, args);

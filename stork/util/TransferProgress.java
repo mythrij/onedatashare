@@ -1,5 +1,7 @@
 package stork.util;
 
+import static stork.util.Watch.now;
+
 // Used to track transfer progress. Just tell this thing when some
 // bytes or a file are done and it will update its state with that
 // information and, if an AdSink is attached, publish an ad to it.
@@ -17,11 +19,6 @@ public class TransferProgress {
   private long lst = -1;  // last sample time
   private long btq = 0;  // bytes this quantum
   private long blq = 0;  // bytes last quantum
-
-  // Get the current time in ms.
-  public static long now() {
-    return System.nanoTime() / (long) 1E6;
-  }
 
   // Pretty format a throughput.
   public static String prettyThrp(double tp, char pre) {
