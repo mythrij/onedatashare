@@ -82,6 +82,12 @@ public final class NettyStuff {
     public void messageReceived(final ChannelHandlerContext ctx, Ad ad) {
       // Hand the request off to the scheduler.
       sched.putRequest(ad, new Bell<Ad>() {
+        // Bell rung on reply.
+        public synchronized void onRing(Ad ad) {
+          ctx.write(ad);
+        }
+      }, new Bell<Ad>() {
+        // Bell rung on end of request with status ad.
         public synchronized void onRing(Ad ad) {
           ctx.write(ad);
         }

@@ -69,6 +69,7 @@ import java.io.*;
 public class Ad {
   // The heart of the structure.
   private final Map<String, Object> map;
+  private int mode = AD;
 
   // Some compiled patterns used for parsing.
   static final Pattern
@@ -311,7 +312,7 @@ public class Ad {
         Token t = nextToken();
         if (t == null) return null;
         dws = false;
-        if (t.next == null) return ad;
+        if (t.next == null) return ad.mode(mode);
       }
     }
 
@@ -656,6 +657,19 @@ public class Ad {
   // ------------------
   // Methods for presenting and serializing ads.
 
+  // Change the default rendering mode of the ad.
+  public Ad mode(int m) {
+    if (m == JSON)
+      mode = JSON;
+    else mode = AD;
+    return this;
+  }
+
+  // Get the default rendering mode of the ad.
+  public int mode() {
+    return mode;
+  }
+
   // Reinventing wheels because replace() doesn't work for this. Translates
   // an escaped string parsed from a text ad into a proper Java string.
   private static String unescapeString(String s) {
@@ -693,11 +707,13 @@ public class Ad {
 
   // Represent this ad as a nicely-formatted string.
   public synchronized String toString() {
+    if (mode == JSON) return toJSON();
     return toString(true);
   }
 
   // Represent this ad in a compact way for serialization.
   public synchronized byte[] serialize() {
+    if (mode == JSON) return toJSON().getBytes();
     return toString(false).getBytes();
   }
 

@@ -20,7 +20,10 @@ import java.util.concurrent.*;
 
 // TODO: Search FIXME and TODO!
 
-public class StorkScheduler implements Runnable {
+public class StorkScheduler {
+  // Singleton instance of the scheduler.
+  private static StorkScheduler instance = null;
+
   // Server state variables
   private Thread[] thread_pool;
   private Thread[] worker_pool;
@@ -258,13 +261,13 @@ public class StorkScheduler implements Runnable {
         // Try to stop the job. If we can't, don't do anything.
         case processing:
           if (transfer != null) transfer.stop();
-          queue_timer.stop();
           run_timer.stop();
           transfer = null;
 
         // Fall through to set removed status.
         case scheduled:
           set_message(reason);
+          queue_timer.stop();
           set_status(JobStatus.removed);
 
           return true;
@@ -302,7 +305,7 @@ public class StorkScheduler implements Runnable {
 
       // Start transfer
       synchronized (status) {
-        run_timer.start();
+        run_timer = new Watch(true);
         set_status(JobStatus.processing);
         transfer = tm.transfer(job_ad);
         transfer.start();
@@ -330,6 +333,7 @@ public class StorkScheduler implements Runnable {
       run_timer.stop();
 
       if (rv == 0) {  // Job successful!
+        queue_timer.stop();
         set_status(JobStatus.complete);
         return;
       }
@@ -349,6 +353,7 @@ public class StorkScheduler implements Runnable {
       } else {
         System.out.println("Job "+job_id+" failed!");
         set_status(JobStatus.failed);
+        queue_timer.stop();
         set_attempts(attempts);
       }
     }
@@ -626,27 +631,29 @@ public class StorkScheduler implements Runnable {
 
   // Iterate over libexec directory and add transfer modules to list.
   public void populateModules() {
-    File dir = new File(env.get("libexec"));
-
     // Load built-in modules.
     // TODO: Not this...
     xfer_modules.register(new StorkGridFTPModule());
 
     // Iterate over and populate external module list.
     // TODO: Do this in parallel and detect misbehaving externals.
-    if (dir.isDirectory()) for (File f : dir.listFiles()) {
-      // Skip over things that obviously aren't transfer modules.
-      if (!f.isFile() || f.isHidden() || !f.canExecute())
-        continue;
+    if (env.has("libexec")) {
+      File dir = new File(env.get("libexec"));
 
-      try {
-        xfer_modules.register(new ExternalModule(f));
-      } catch (Exception e) {
-        System.out.println("Warning: "+f+": "+e.getMessage());
-        e.printStackTrace();
+      if (dir.isDirectory()) for (File f : dir.listFiles()) {
+        // Skip over things that obviously aren't transfer modules.
+        if (!f.isFile() || f.isHidden() || !f.canExecute())
+          continue;
+
+        try {
+          xfer_modules.register(new ExternalModule(f));
+        } catch (Exception e) {
+          System.out.println("Warning: "+f+": "+e.getMessage());
+          e.printStackTrace();
+        }
+      } else {
+        System.out.println("Warning: libexec is not a directory!");
       }
-    } else {
-      System.out.println("Warning: libexec is not a directory!");
     }
 
     // Check if anything got added.
@@ -684,9 +691,14 @@ public class StorkScheduler implements Runnable {
     }
   }
 
-  // Put a command in the server's request queue.
-  public RequestContext putRequest(Ad ad, Bell<Ad> bell) {
-    RequestContext rc = new RequestContext(ad, bell);
+  // Put a command in the server's request queue with an optional reply
+  // bell and end bell.
+  public RequestContext putRequest(Ad ad) {
+    return putRequest(ad, null, null);
+  } public RequestContext putRequest(Ad ad, Bell<Ad> reply_bell) {
+    return putRequest(ad, reply_bell, null);
+  } public RequestContext putRequest(Ad ad, Bell<Ad> rb, Bell<Ad> eb) {
+    RequestContext rc = new RequestContext(ad, rb, eb);
     try {
       req_queue.put(rc);
     } catch (Exception e) {
@@ -694,9 +706,10 @@ public class StorkScheduler implements Runnable {
     } return rc;
   }
 
-  // Shut the server down gracefully.
-  public void shutdown(int rv) {
+  // Shut the server down gracefully and discard the instance.
+  public synchronized void shutdown(int rv) {
     shutdown_bell.ring(rv);
+    instance = null;
   }
 
   // Wait for the server to shutdown on its own, returning an error code
@@ -709,20 +722,23 @@ public class StorkScheduler implements Runnable {
     }
   }
 
-  // The actual entry point for the server. Includes exception handler
-  // for debugging output.
-  public void run() {
-    try {
-      populateModules();
-      initThreadPool();
-    } catch (Exception e) {
-      System.err.println("Error: "+e.getMessage());
-      e.printStackTrace();
-    }
+  // Set or get the environment ad for the scheduler.
+  public Ad environment() {
+    return env;
+  } public Ad environment(Ad e) {
+    return env = (e != null) ? e : new Ad();
   }
 
-  public StorkScheduler(Ad env) {
-    this.env = (env != null) ? env : new Ad();
+  // Get the global instance of the StorkScheduler. Make one if it
+  // doesn't exist.
+  public static synchronized StorkScheduler instance(Ad env) {
+    if (instance == null)
+      instance = new StorkScheduler(env);
+    return instance;
+  }
+
+  private StorkScheduler(Ad env) {
+    environment(env);
 
     // Initialize command handlers
     cmd_handlers = new HashMap<String, StorkCommand>();
@@ -740,5 +756,9 @@ public class StorkScheduler implements Runnable {
     job_queue = new LinkedBlockingQueue<StorkJob>();
     req_queue = new LinkedBlockingQueue<RequestContext>();
     all_jobs = new ArrayList<StorkJob>();
+
+    // Initialize workers
+    populateModules();
+    initThreadPool();
   }
 }

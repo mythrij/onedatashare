@@ -3,6 +3,8 @@ package stork.module;
 import stork.util.*;
 import static stork.util.StorkUtil.Static.*;
 import stork.stat.*;
+import stork.cred.*;
+
 import java.net.*;
 import java.util.*;
 import java.io.*;
@@ -176,7 +178,7 @@ public class StorkGridFTPModule extends TransferModule {
         gc.open();
 
         if (u.cred != null) try {
-          gc.authenticate(u.cred, u.user);
+          gc.authenticate(u.cred.credential(), u.user);
         } catch (Exception e) {
           throw E("could not authenticate (certificate issue?)");
         } else {
@@ -463,7 +465,7 @@ public class StorkGridFTPModule extends TransferModule {
     void setPerfFreq(int f) throws Exception {
       //if (!rc.gridftp || trev == f) return;
       trev = f = (f < 1) ? 1 : f;
-      //rc.exchange("TREV", "PERF", f);
+      sc.exchange("TREV PERF "+f);
       sc.exchange("OPTS RETR markers="+f+";");
     }
 
@@ -536,7 +538,7 @@ public class StorkGridFTPModule extends TransferModule {
   // represents a supported protocol. Also parses out a bunch of stuff.
   private static class FTPURI {
     public final URI uri;
-    public final GSSCredential cred;
+    public final StorkGSSCred cred;
 
     public final boolean gridftp, ftp, file;
     public final String host, proto;
@@ -544,7 +546,7 @@ public class StorkGridFTPModule extends TransferModule {
     public final String user, pass;
     public final String path;
 
-    public FTPURI(URI uri, GSSCredential cred) throws Exception {
+    public FTPURI(URI uri, StorkGSSCred cred) throws Exception {
       this.uri = uri; this.cred = cred;
       host = uri.getHost();
       proto = uri.getScheme();
@@ -962,7 +964,7 @@ public class StorkGridFTPModule extends TransferModule {
   static class GridFTPTransfer implements StorkTransfer {
     Thread thread = null;
     SubmitAd job;
-    GSSCredential cred = null;
+    StorkGSSCred cred = null;
 
     StorkFTPClient client;
     FTPURI su = null, du = null;
@@ -981,13 +983,7 @@ public class StorkGridFTPModule extends TransferModule {
 
       // Check if we were provided a proxy. If so, load it.
       if (job.has("x509_proxy")) try {
-        ExtendedGSSManager gm =
-          (ExtendedGSSManager) ExtendedGSSManager.getInstance();
-        cred = gm.createCredential(
-          job.get("x509_proxy").getBytes(),
-          ExtendedGSSCredential.IMPEXP_OPAQUE,
-          GSSCredential.DEFAULT_LIFETIME, null,
-          GSSCredential.INITIATE_AND_ACCEPT);
+        cred = StorkGSSCred.fromBytes(job.get("x509_proxy").getBytes());
       } catch (Exception e) {
         fatal("error loading x509 proxy: "+e.getMessage());
       }
@@ -1209,17 +1205,8 @@ public class StorkGridFTPModule extends TransferModule {
       // Open connection
       System.out.println("Reading credentials...");
       File cred_file = new File("/tmp/x509up_u1000");
-      FileInputStream fis = new FileInputStream(cred_file);
-      byte[] cred_bytes = new byte[(int) cred_file.length()];
-      fis.read(cred_bytes);
 
-      // Authenticate
-      ExtendedGSSManager gm =
-        (ExtendedGSSManager) ExtendedGSSManager.getInstance();
-      GSSCredential cred = gm.createCredential(
-          cred_bytes, ExtendedGSSCredential.IMPEXP_OPAQUE,
-          GSSCredential.DEFAULT_LIFETIME, null,
-          GSSCredential.INITIATE_AND_ACCEPT);
+      StorkGSSCred cred = StorkGSSCred.fromFile(cred_file);
 
       System.out.println("Connecting to: "+uri);
       sc = new StorkFTPClient(new FTPURI(uri, cred), new FTPURI(lri, null));

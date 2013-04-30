@@ -181,8 +181,7 @@ public class StorkMain {
       String host = env.get("host", "127.0.0.1");
       int port = env.getInt("port", DEFAULT_PORT);
 
-      StorkScheduler s = new StorkScheduler(env);
-      //SocketInterface si;
+      StorkScheduler s = StorkScheduler.instance(env);
       NettyStuff.TcpInterface si;
 
       try {
@@ -193,7 +192,6 @@ public class StorkMain {
         return;
       }
 
-      s.run();
       System.exit(s.waitFor());
     } else {
       StorkClient c = new StorkClient(env);
