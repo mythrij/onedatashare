@@ -15,7 +15,7 @@ public class CredManager {
   }
 
   // Get an instance of the credential manager.
-  public synchronized CredManager instance() {
+  public static synchronized CredManager instance() {
     if (instance == null)
       instance = new CredManager();
     return instance;
