@@ -1,9 +1,10 @@
 package stork.util;
 
 import java.util.*;
+import stork.ad.*;
 
 // A list of files and directories to transfer.
-// TODO: Bug fixes!
+// TODO: Refactor this entire thing to be not bad.
 
 public class XferList implements Iterable<XferList.Entry> {
   private LinkedList<Entry> list = new LinkedList<Entry>();
@@ -28,6 +29,25 @@ public class XferList implements Iterable<XferList.Entry> {
     if (size == 0) size = -1;  // FIXME XXX THIS IS A HACK, REMOVE ME
     add(StorkUtil.basename(src), size);
     root = new Entry("");
+  }
+
+  // Create an XferList from a listing ad.
+  public XferList(String src, String dest, Ad ad) {
+    if (!src.endsWith("/"))  src  += "/";
+    if (!dest.endsWith("/")) dest += "/";
+    sp = src;
+    dp = dest;
+    root = new Entry("");
+    translateAd("", ad);
+  }
+
+  private void translateAd(String path, Ad ad) {
+    if (ad.has("dirs")) for (Ad d : ad.getAd("dirs"))
+      if (d.has("name")) add(d.get("name"));
+    if (ad.has("files")) for (Ad f : ad.getAd("files"))
+      if (f.has("name")) add(f.get("name"), f.getInt("size"));
+    if (ad.has("dirs")) for (Ad d : ad.getAd("dirs"))
+      if (d.has("name")) translateAd(path+"/"+d.get("name"), d);
   }
 
   // An entry (file or directory) in the list.

@@ -1,11 +1,14 @@
 package stork;
 
 import stork.*;
+import stork.ad.*;
 import stork.util.*;
 
 import java.io.*;
 import java.net.*;
 import java.util.*;
+
+// All the client commands tossed into one file. TODO: Refactor.
 
 public class StorkClient {
   private Socket server_sock;
@@ -20,11 +23,11 @@ public class StorkClient {
     // Initialize command handlers
     cmd_handlers = new HashMap<String, Class>();
     cmd_handlers.put("stork_q", StorkQHandler.class);
-    cmd_handlers.put("stork_list", StorkQHandler.class);
     cmd_handlers.put("stork_status", StorkQHandler.class);
     cmd_handlers.put("stork_submit", StorkSubmitHandler.class);
     cmd_handlers.put("stork_rm", StorkRmHandler.class);
     cmd_handlers.put("stork_info", StorkInfoHandler.class);
+    cmd_handlers.put("stork_ls", StorkLsHandler.class);
   }
 
   // Client command handlers
@@ -64,6 +67,59 @@ public class StorkClient {
 
     abstract GetOpts parser(GetOpts base);
     abstract ResponseAd handle() throws Exception;
+  }
+
+  // Handler for performing remote listings.
+  static class StorkLsHandler extends StorkCommand {
+    GetOpts parser(GetOpts base) {
+      GetOpts opts = new GetOpts(base);
+
+      opts.prog = "stork_ls";
+      opts.args = new String[] { "[option...] <url>" };
+      opts.desc = new String[] {
+        "This command can be used to list the contents of a remote "+
+        "directory."
+      };
+      opts.add('d', "depth", "list only up to N levels").parser =
+        opts.new SimpleParser("depth", "N", false);
+      opts.add('r', "recursive", "recursively list subdirectories");
+
+      return opts;
+    }
+
+    ResponseAd handle() throws Exception {
+      Ad ad = new Ad("command", "stork_ls");
+
+      // Check args.
+      if (args.length < 1)
+        return new ResponseAd("error", "not enough arguments");
+      else if (args.length > 1)
+        return new ResponseAd("error", "too many arguments");
+      ad.put("url", args[0]);
+
+      // Check for options.
+      if (env.getBoolean("recursive"))
+        ad.put("depth", env.getInt("depth", -1));
+
+      // Send command to server.
+      os.write(ad.serialize());
+      os.flush();
+
+      // Read response from server.
+      try {
+        Ad res = Ad.parse(is);
+
+        // Check if the server returned a response ad.
+        if (ResponseAd.is(res))
+          return new ResponseAd(res);
+
+        // For now just print the ugly ad unformatted.
+        System.out.println(res.toJSON());
+        return new ResponseAd("success");
+      } catch (Exception e) {
+        return new ResponseAd("error", "malformed response from server");
+      }
+    }
   }
 
   static class StorkQHandler extends StorkCommand {

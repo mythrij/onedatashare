@@ -1,5 +1,6 @@
 package stork.module;
 
+import stork.ad.*;
 import stork.util.*;
 import java.util.*;
 import java.io.*;
@@ -12,7 +13,7 @@ public class ExternalModule extends TransferModule {
   private File exe;
 
   // Inner class representing a transfer.
-  class ExternalTransfer implements StorkTransfer {
+  class ExternalTransfer extends StorkTransfer {
     Thread thread = null;
     SubmitAd job;
     long bytes_xferred = 0, bytes_total = 0;
@@ -21,6 +22,7 @@ public class ExternalModule extends TransferModule {
     InputStream proc_is = null;
 
     ExternalTransfer(SubmitAd job) {
+      super(null, job);
       this.job = job;
     }
 
@@ -94,6 +96,11 @@ public class ExternalModule extends TransferModule {
     }
   }
 
+  // Not supported yet...
+  public Ad list(String url, Ad opts) {
+    throw new UnsupportedOperationException();
+  }
+
   public ExternalModule(File exe) throws Exception {
     if (!exe.isAbsolute())
       exe = exe.getAbsoluteFile();
@@ -118,6 +125,13 @@ public class ExternalModule extends TransferModule {
       throw new Exception("couldn't parse module info ad");
     }
   }
+
+  // Just to satisfy the interface for now.
+  public StorkSession session(URI uri, Ad ad) {
+    return null;
+  }
+
+  public void closeImpl() { }
 
   // Return cached info ad or read new one if necessary.
   public ModuleInfoAd infoAd() {

@@ -1,6 +1,7 @@
 package stork.util;
 
 import java.util.*;
+import stork.ad.*;
 
 // This class is both an argument parser and a usage information generator.
 // Options are individually added with optional argument handlers (see the

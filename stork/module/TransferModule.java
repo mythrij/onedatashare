@@ -1,5 +1,6 @@
 package stork.module;
 
+import stork.ad.*;
 import stork.util.*;
 import java.net.URI;
 
@@ -18,12 +19,32 @@ public abstract class TransferModule {
     return infoAd().protocols;
   }
 
-  public abstract StorkTransfer transfer(SubmitAd ad);
-
-  // Generate a new Ad from given URLs and use that.
-  public StorkTransfer transfer(String src, String dest) throws Exception {
-    return transfer(new SubmitAd(src, dest));
+  // Start a session and perform a transfer.
+  // TODO: Remove this.
+  public StorkTransfer transfer(SubmitAd ad) {
+    StorkSession src = session(ad.src);
+    StorkSession dest = session(ad.dest);
+    src.pair(dest);
+    return new StorkTransfer(src, ad);
   }
+
+  // Start a session and perform a listing.
+  public Ad list(URI uri, Ad opts) {
+    try {
+      return session(uri, opts).list(uri.getPath(), opts);
+    } catch (Exception e) {
+      throw new Error("couldn't list: "+e.getMessage());
+    }
+  }
+
+  // Create a new session capable of interacting with a URI.
+  public StorkSession session(String url) throws Exception {
+    return session(new URI(url), null);
+  } public StorkSession session(String url, Ad opts) throws Exception {
+    return session(new URI(url), opts);
+  } public StorkSession session(URI url) {
+    return session(url, null);
+  } public abstract StorkSession session(URI url, Ad opts);
 
   public String toString() {
     return infoAd().full_name;

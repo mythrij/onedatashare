@@ -1,6 +1,7 @@
 package stork.scheduler;
 
 import stork.util.*;
+import stork.ad.*;
 
 import io.netty.bootstrap.*;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -42,7 +43,8 @@ public final class NettyStuff {
   public static class AdEncoder extends MessageToByteEncoder<Ad> {
     protected void encode(ChannelHandlerContext ctx, Ad ad, ByteBuf out)
     throws Exception {
-      out.writeBytes(ad.serialize());
+      System.out.println("Writing ad: "+ad);
+      out.writeBytes(ad.serialize(true));
     }
   }
 
@@ -84,12 +86,12 @@ public final class NettyStuff {
       sched.putRequest(ad, new Bell<Ad>() {
         // Bell rung on reply.
         public synchronized void onRing(Ad ad) {
-          ctx.write(ad);
+          if (ad != null) ctx.write(ad);
         }
       }, new Bell<Ad>() {
         // Bell rung on end of request with status ad.
         public synchronized void onRing(Ad ad) {
-          ctx.write(ad);
+          if (ad != null) ctx.write(ad);
         }
       });
     }

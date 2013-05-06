@@ -1,17 +1,21 @@
-package stork.util;
+package stork.ad;
 
 import java.util.*;
 import java.util.regex.*;
 import java.math.BigDecimal;
-import java.nio.*;
+//import java.nio.*;
 import java.io.*;
 
+// TODO: Chained ads break compatibility with ClassAds. Update
+// documentation to reflect this. Also remove "LiteAd" references and just
+// call them ads. Also remove XML references.
+//
 // This file defines the stucture and grammar of our key-value store
 // utility and language, hereforth referred to as LiteAds, as well as an
 // implementation which includes a parser and composer for three different
 // representations: LiteAd/Ad, XML, and JSON. LiteAds are intended to
 // be a subset of Condor's Ad language -- that is, anything that can
-// parse Ads can parse LiteAds (aside from comments).
+// parse Ads can parse LiteAds.
 //
 // Ads contain case-insensitive keys and corresponding values of the
 // following five types: number, string, boolean, null, and ad. This means
@@ -25,9 +29,10 @@ import java.io.*;
 // 
 // The syntax of a LiteAd will now be described. The details of encoding
 // are assumed to be handled by Java; the data type of characters in the
-// grammar is assumed to be Java chars. Alphabetical characters are case
+// grammar is assumed to be Java chars. Declaration names are case
 // insensitive (internally, all names are lowercased).
-//   ad     -> '[' decl (';' decl?)* ']'
+//   ads    -> '[' decls ('|' decls)* ']'
+//   decls  -> decl (';' decl?)*
 //   decl   -> name '=' value
 //   name   -> (a-z_) (0-9a-z_)*
 //   value  -> number | string | bool | ad
@@ -63,17 +68,16 @@ import java.io.*;
 // for StorkCloud. Hence, we opted to implement a language that is
 // essentially a lighter version of the ClassAd language and is backwards
 // compatible.
-//
-// TODO: XML representation. So far we haven't had a need for this though.
 
-public class Ad {
+public class Ad implements Iterable<Ad> {
   // The heart of the structure.
-  private final Map<String, Object> map;
-  private int mode = AD;
+  final Map<String, Object> map;
+  Ad next = null, prev = null;
+  int mode = AD;
 
   // Some compiled patterns used for parsing.
   static final Pattern
-    IGNORE = Pattern.compile("(\\s*(#.*$)?)+", Pattern.MULTILINE),
+    IGNORE = Pattern.compile("(\\s*((#|//).*$)?)+", Pattern.MULTILINE),
     PRINTABLE = Pattern.compile("[\\p{Print}\r\n]*"),
     DECL_ID = Pattern.compile("[a-z_]\\w*", Pattern.CASE_INSENSITIVE);
 
@@ -94,29 +98,17 @@ public class Ad {
   // Create an ad with given key and value.
   public Ad(Object key, int value) {
     this(); put(key, value);
-  }
-
-  public Ad(Object key, long value) {
+  } public Ad(Object key, long value) {
     this(); put(key, value);
-  }
-
-  public Ad(Object key, double value) {
+  } public Ad(Object key, double value) {
     this(); put(key, value);
-  }
-
-  public Ad(Object key, boolean value) {
+  } public Ad(Object key, boolean value) {
     this(); put(key, value);
-  }
-
-  public Ad(Object key, Number value) {
+  } public Ad(Object key, Number value) {
     this(); put(key, value);
-  }
-
-  public Ad(Object key, String value) {
+  } public Ad(Object key, String value) {
     this(); put(key, value);
-  }
-
-  public Ad(Object key, Ad value) {
+  } public Ad(Object key, Ad value) {
     this(); put(key, value);
   }
 
@@ -140,17 +132,19 @@ public class Ad {
     T_TF ("(true|false)"),
     T_SLB("\\[", "\\{"),
     T_SC (";", ","),
+    T_JP ("\\|"),  // "joiner pipe"
     T_RB ("\\]", "\\}");
 
     static {
-      T_LB.next (T_ID, T_SC, T_RB);
+      T_LB.next (T_ID, T_SC, T_JP, T_RB);
+      T_JP.next (T_ID, T_SC, T_JP, T_RB);
       T_ID.next (T_EQ);
       T_EQ.next (T_NUM, T_STR, T_TF, T_SLB);
-      T_NUM.next(T_SC, T_RB);
-      T_STR.next(T_SC, T_RB);
-      T_TF.next (T_SC, T_RB);
-      T_SLB.next(T_SC, T_RB);
-      T_SC.next (T_ID, T_RB);
+      T_NUM.next(T_SC, T_JP, T_RB);
+      T_STR.next(T_SC, T_JP, T_RB);
+      T_TF.next (T_SC, T_JP, T_RB);
+      T_SLB.next(T_SC, T_JP, T_RB);
+      T_SC.next (T_ID, T_JP, T_RB);
     }
 
     EnumSet<Token> next = null;
@@ -181,11 +175,12 @@ public class Ad {
   // The parser itself. Can be fed bytes/chars incrementally, buffering
   // input, and tossing it as it is processed.
   public static class Parser {
+    Ad main_ad;           // The ad we're going to return.
+    Ad ad;                // The ad to put declarations into.
     StringBuilder sb;
     Matcher m;
     Token token = null;   // Current token.
     int mode = AD;        // Parser mode. (AD or JSON)
-    Ad ad;                // The ad currently being written to.
     Parser sub = null;    // The sub-parser for recursive ad parsing.
     String cid = null;    // Current identifier we're parsing.
     boolean dws = false;  // True if we discarded whitespace already.
@@ -197,12 +192,12 @@ public class Ad {
       sb = new StringBuilder();
       sb.append(c.toString());
       m = IGNORE.matcher(sb);
-      this.ad = ad;
+      this.ad = main_ad = ad;
     } public Parser(Matcher m) {
       this(new Ad(), m);
     } public Parser(Ad ad, Matcher m) {
       this.m = m;
-      this.ad = ad;
+      this.ad = main_ad = ad;
     } public Parser(Ad ad) {
       this(ad, "");
     } public Parser() {
@@ -216,7 +211,8 @@ public class Ad {
       char s = (m == JSON) ? ',' : ';';
       char e = (m == JSON) ? '}' : ']';
       switch (t) {
-        case T_LB : return "identifier";
+        case T_JP :
+        case T_LB : return "identifier or terminator";
         case T_ID : return "assignment operator: "+a;
         case T_EQ : return "value (number, string, boolean, or ad)";
         case T_SLB:
@@ -259,6 +255,7 @@ public class Ad {
         case T_STR: s = unescapeString(s.substring(1, s.length()-1));
                     ad.putObject(cid, s); break;
         case T_TF : ad.putObject(cid, new Boolean(s)); break;
+        case T_JP : ad = ad.next(new Ad()); break;
         case T_LB : m.region(m.regionStart()-1, m.regionEnd());
                     Ad ad = Ad.parse(m);
                     // TODO: Check for null here!!
@@ -310,9 +307,11 @@ public class Ad {
     private synchronized Ad getAd() {
       while (true) {
         Token t = nextToken();
-        if (t == null) return null;
+        if (t == null) 
+          return null;
         dws = false;
-        if (t.next == null) return ad.mode(mode);
+        if (t.next == null)
+          return main_ad.mode(mode);
       }
     }
 
@@ -447,13 +446,15 @@ public class Ad {
     return def;
   }
 
-  // Get an inner ad from this ad. Defaults to null. Should this parse
-  // strings?
+  // Get an inner ad from this ad. Defaults to an empty ad. Should this
+  // parse strings?
   public Ad getAd(Object s) {
     return getAd(s, null);
   } public Ad getAd(Object s, Ad def) {
     Object o = getObject(s);
-    return (s != null && o instanceof Ad) ? (Ad)o : def;
+    if (s != null && o instanceof Ad)
+      return (Ad)o;
+    return (def == null) ? new Ad() : def;
   }
     
   // Look up an object by its key. Handles recursive ad lookups.
@@ -561,6 +562,53 @@ public class Ad {
     } return this;
   }
 
+  // Chaining methods
+  // ----------------
+  // Get the previous ad in this chain.
+  public synchronized Ad prev() {
+    return prev;
+  }
+
+  // Insert an ad after this ad in the chain. If null, "cuts" the chain.
+  // Returns the inserted ad.
+  public synchronized Ad next(Ad ad) {
+    Ad on = next;
+    next = ad;
+    if (on != null) {
+      on.prev = ad;
+    } if (ad != null) {
+      ad.next = on;
+      ad.prev = this;
+    } return ad;
+  }
+
+  // Get the next ad in the chain.
+  public synchronized Ad next() {
+    return next;
+  }
+
+  // Return whether or not there is another ad in the chain.
+  public synchronized boolean hasNext() {
+    return next != null;
+  }
+
+  // Remove this ad from the chain, linking the two ends.
+  public synchronized void remove() {
+    if (next != null) next.prev = prev;
+    if (prev != null) prev.next = next;
+    next = prev = null;
+  }
+
+  // Get an iterator which goes over each ad in the chain.
+  public synchronized Iterator<Ad> iterator() {
+    return new Iterator<Ad>() {
+      Ad ad = Ad.this, prev = null;
+      public boolean hasNext() { return ad != null; }
+      public Ad next() { prev = ad; ad = prev.next; return prev; }
+      public void remove() { prev.remove(); }
+    };
+  }
+
   // Other methods
   // -------------
   // Methods to get information about and perform operations on the ad.
@@ -586,8 +634,9 @@ public class Ad {
   // Merge ads into this one.
   // XXX Possible race condition? Just don't do crazy stuff like try
   // to insert two ads into each other at the same time.
+  // FIXME: Doesn't work quite right for chained ads.
   public synchronized Ad merge(Ad... ads) {
-    for (Ad a : ads) synchronized (a) {
+    for (Ad a : ads) if (a != null) synchronized (a) {
       map.putAll(a.map);
     } return this;
   }
@@ -693,93 +742,36 @@ public class Ad {
     } return sb.toString();
   }
 
-  // Translate a Java string into an escaped string for presentation.
-  private static String escapeString(String s) {
-    StringBuilder sb = new StringBuilder(s.length()+10);
-    char c;
-    for (int i = 0; i < s.length(); i++) switch (c = s.charAt(i)) {
-      case '\n': sb.append("\\n");  break;
-      case '\\': sb.append("\\\\"); break;
-      case '"' : sb.append("\\\""); break;
-      default  : sb.append(c);
-    } return sb.toString();
-  } 
-
   // Represent this ad as a nicely-formatted string.
   public synchronized String toString() {
-    if (mode == JSON) return toJSON();
-    return toString(true);
+    return (mode == JSON) ?
+      AdPrinter.JSON.toString(this) :
+      AdPrinter.PRETTY.toString(this);
   }
 
   // Represent this ad in a compact way for serialization.
   public synchronized byte[] serialize() {
-    if (mode == JSON) return toJSON().getBytes();
-    return toString(false).getBytes();
-  }
-
-  // TODO: Make this a little prettier maybe?
-  public synchronized String toString(boolean pretty) {
-    StringBuffer sb = new StringBuffer();
-    String s = !pretty ? "" : (map.size() > 1) ? "\n" : " ";  // separator
-    String i = (pretty && map.size() > 1) ? "  " : "";  // indentation
-    Iterator<Map.Entry<String,Object>> it = map.entrySet().iterator();
-    sb.append("["+s);
-    while (it.hasNext()) {
-      Map.Entry<String,Object> e = it.next();
-      sb.append(i+e.getKey()+stringify(e.getValue(), pretty));
-      if (it.hasNext()) sb.append(';');
-      if (pretty) sb.append(s);
-    }
-    sb.append("]");
-    return sb.toString();
-  }
-
-  // Turns entries into strings suitable for printing/serializing.
-  private static String stringify(Object v, boolean p) {
-    String q = !p ? "=" : " = ";  // assignment sign
-    if (v instanceof String) {  // We need to escape the string.
-      String s = escapeString(v.toString());
-      return q+'"'+s+'"';
-    } if (v instanceof Ad) {  // We need to indent (if pretty printing).
-      Ad a = (Ad)v;
-      if (a.size() == 1) for (String k : a.map.keySet()) {
-        Object o = a.map.get(k);
-        if (o instanceof Ad)
-          return '.'+k+stringify(o, p);
-        return '.'+k+stringify(a.map.get(k), p);
-      }
-      String s = a.toString(p);
-      return q+(p ? s.replace("\n", "\n  ") : s);
-    } return q+v.toString();
+    return serialize(true);
+  } public synchronized byte[] serialize(boolean decor) {
+    AdPrinter p;
+    if (mode == JSON)
+      p = (decor) ? AdPrinter.JSON : AdPrinter.BARE_JSON;
+    else
+      p = (decor) ? AdPrinter.COMPACT : AdPrinter.BARE;
+    return p.toBytes(this);
   }
 
   // Represent this ad as a JSON string.
   public synchronized String toJSON() {
-    StringBuilder sb = new StringBuilder();
-    sb.append("{");
-    Iterator<Map.Entry<String,Object>> it = map.entrySet().iterator();
-    while (it.hasNext()) {
-      Map.Entry<String,Object> e = it.next();
-      Object o = e.getValue();
-      sb.append('"'+e.getKey()+"\":");
-      if (o instanceof Ad)
-        sb.append(((Ad)o).toJSON());
-      else if (o instanceof String)
-        sb.append('"'+escapeString(o.toString())+'"');
-      else
-        sb.append(o.toString());
-      if (it.hasNext()) sb.append(',');
-    }
-    sb.append("}");
-    return sb.toString();
+    return AdPrinter.JSON.toString(this);
   }
 
   public static void main(String args[]) {
     System.out.println("Type an ad:");
     try {
       Ad ad = Ad.parse(System.in);
-      System.out.println("a = \""+ad.get("A")+"\"");
       System.out.println("Got ad: "+ad);
+      System.out.println("    or: "+new String(ad.serialize()));
       System.out.println("    or: "+ad.toJSON());
     } catch (Exception e) {
       e.printStackTrace();

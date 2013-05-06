@@ -1,9 +1,11 @@
 package stork.stat;
 
+import stork.ad.*;
 import stork.util.*;
 
 // The optimizer base class. This optimizer can be initialized, but
-// will simply tell the caller to transfer the whole file and 
+// will simply tell the caller to transfer the whole file and use
+// default transfer parameters.
 //
 // An optimizer, in short, after being initialized with required
 // information, will output adsjdescribing parameters for a sampling.

@@ -1,14 +1,13 @@
 package stork.scheduler;
 
 import stork.*;
+import stork.ad.*;
 import stork.util.*;
 import stork.module.*;
+import stork.module.gridftp.*;
 
 import java.io.*;
 import java.net.*;
-import java.nio.*;
-import java.nio.channels.*;
-import java.nio.channels.spi.*;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -501,7 +500,18 @@ public class StorkScheduler {
 
   class StorkListHandler implements StorkCommand {
     public Ad handle(RequestContext req) {
-      return null;
+      try {
+        URI url = new URI(req.ad.get("url")).normalize();
+        String proto = url.getScheme();
+        TransferModule tm = xfer_modules.lookup(proto, proto);
+
+        if (tm == null)
+          throw new Exception("cannot list "+proto);
+
+        return tm.list(url, req.ad);
+      } catch (Exception e) {
+        return new ResponseAd("error", e.getMessage());
+      }
     }
   }
 
@@ -633,7 +643,7 @@ public class StorkScheduler {
   public void populateModules() {
     // Load built-in modules.
     // TODO: Not this...
-    xfer_modules.register(new StorkGridFTPModule());
+    xfer_modules.register(new GridFTPModule());
 
     // Iterate over and populate external module list.
     // TODO: Do this in parallel and detect misbehaving externals.

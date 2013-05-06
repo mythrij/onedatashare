@@ -1,5 +1,6 @@
 package stork.util;
 
+import stork.ad.*;
 import java.util.*;
 
 // A pipeline can be used by command-based protocols to send multiple
@@ -89,11 +90,11 @@ public abstract class Pipeline<C,R> extends Thread {
     while (!dead) try {
       while (!dead && sent.isEmpty()) wait();
       if (!dead) try {
-        R r = sent.pop().handle();
+        R r = sent.peek().handle();
         if (r != null) addReply(r);
       } catch (Exception e) {
         addReply(e);
-      } notifyAll();
+      } sent.pop(); notifyAll();
     } catch (Exception e) {
       // wait() interrupted, ignore...
     }

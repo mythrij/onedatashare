@@ -32,8 +32,8 @@ public class StorkUtil {
     }
 
     // Join objects into a string and return as a new exception.
-    public static Exception E(Object... o) {
-      return new Exception(join(o));
+    public static Error E(Object... o) {
+      return new Error(join(o));
     }
 
     // Print debugging output.
@@ -110,7 +110,6 @@ public class StorkUtil {
 
     return sb.toString();
   }
-
 
   // Path functions
   // --------------

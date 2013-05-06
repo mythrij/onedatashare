@@ -1,4 +1,4 @@
-package stork.util;
+package stork.ad;
 
 import stork.util.*;
 import stork.module.*;
@@ -41,7 +41,7 @@ public class SubmitAd extends Ad {
   public SubmitAd(String s, String d) throws Exception {
     src  = makeURI("src", s);  src_proto  = src.getScheme();
     dest = makeURI("dest", d); dest_proto = dest.getScheme();
-  }
+  } 
 
   // Create a submit ad from a Ad.
   public SubmitAd(Ad ad) throws Exception {

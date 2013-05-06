@@ -1,4 +1,4 @@
-package stork.util;
+package stork.ad;
 
 // Ad sink to allow for ads from multiple sources.
 

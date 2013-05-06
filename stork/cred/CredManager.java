@@ -10,8 +10,8 @@ public class CredManager {
 
   private Map<UUID, StorkCred> cred_map;
 
-  private CredManager() {
-    cred_map = new LinkedHashMap<UUID, StorkCred>();
+  public CredManager() {
+    cred_map = new HashMap<UUID, StorkCred>();
   }
 
   // Get an instance of the credential manager.
@@ -36,7 +36,7 @@ public class CredManager {
   // generated token for the credential.
   public synchronized String putCred(StorkCred cred) {
     UUID uuid;
-    do {
+    do {  // Better safe than sorry. :)
       uuid = UUID.randomUUID();
     } while (cred_map.containsKey(uuid));
     cred_map.put(uuid, cred);

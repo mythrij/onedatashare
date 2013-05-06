@@ -1,6 +1,7 @@
 package stork.util;
 
 import static stork.util.Watch.now;
+import stork.ad.*;
 
 // Used to track transfer progress. Just tell this thing when some
 // bytes or a file are done and it will update its state with that

@@ -3,6 +3,7 @@ package stork;
 import stork.*;
 import stork.scheduler.*;
 import stork.util.*;
+import stork.ad.*;
 
 import java.util.*;
 import java.io.*;
@@ -175,6 +176,9 @@ public class StorkMain {
       else break;
       if (s.equals("--")) break;
     } args = Arrays.copyOfRange(args, i, args.length);
+
+    if (env.getBoolean("quiet"))
+      System.out.close();
 
     // Now run the actual command. (Again, a little hacky.)
     if (cmd.equals("stork_server")) {
