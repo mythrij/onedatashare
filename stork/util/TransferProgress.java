@@ -13,7 +13,7 @@ public class TransferProgress {
   private long start_time = -1, end_time = -1;
   private Progress byte_progress = new Progress();
   private Progress file_progress = new Progress();
-  private AdSink sink = null;
+  private Pipe<Ad>.End pipe = null;
 
   // Metrics used to calculate instantaneous throughput.
   private double q = 500.0; // Time quantum for throughput.
@@ -54,14 +54,14 @@ public class TransferProgress {
   }
 
   // Attach an AdSink to publish progress information to.
-  public synchronized void attach(AdSink sink) {
-    this.sink = sink;
+  public synchronized void attach(Pipe<Ad>.End pipe) {
+    this.pipe = pipe;
   }
 
   // Publish an ad to the AdSink, if there is one.
   private synchronized void updateAd() { 
-    if (sink != null)
-      sink.putAd(getAd(sink.peekAd()));
+    if (pipe != null)
+      pipe.put(getAd());
   }
 
   // Get the Ad representation of this transfer progress.

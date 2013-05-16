@@ -10,6 +10,7 @@ import java.util.*;
 public class RequestContext {
   public final Ad ad;
   public final String cmd;
+  public StorkUser user = null;
   private LinkedList<Ad> replies;
 
   private Bell<Ad> reply_bell, end_bell;

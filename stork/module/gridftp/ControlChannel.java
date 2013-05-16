@@ -25,100 +25,119 @@ public class ControlChannel extends Pipeline<String, Reply> {
   private FTPURI my_uri = null;
   public int port = -1;
   public final boolean local, gridftp;
-  public final FTPServerFacade facade;
-  public final FTPControlChannel fc;
+  public final GridFTPServerFacade facade;
+  public final HackedControlChannel fc;
   public final BasicClientControlChannel cc;
   private Set<String> features = null;
   private boolean cmd_done = false;
 
-  public ControlChannel(FTPURI u) throws Exception {
+  // Quick hack to handle getting peer IP from control channel.
+  static class HackedControlChannel extends GridFTPControlChannel {
+    public HackedControlChannel(String host, int port) {
+      super(host, port);
+    }
+
+    String getIP() {
+      SocketAddress sa = socket.getRemoteSocketAddress();
+      return ((InetSocketAddress)sa).getAddress().getHostAddress();
+    }
+  }
+
+  public ControlChannel(FTPURI u) {
     my_uri = u;
     port = u.port;
 
     if (u.file)
-      throw new Error("making remote connection to invalid URL");
+      throw new FatalEx("making remote connection to invalid URL");
     local = false;
     facade = null;
     gridftp = u.gridftp;
 
-    if (u.gridftp) {
-      GridFTPControlChannel gc;
-      cc = fc = gc = new GridFTPControlChannel(u.host, u.port);
-      gc.open();
+    try {
+      if (u.gridftp) {
+        GridFTPControlChannel gc;
+        cc = fc = new HackedControlChannel(u.host, u.port);
+        fc.open();
 
-      if (u.cred != null) try {
-        gc.authenticate(u.cred.credential(), u.user);
-      } catch (Exception e) {
-        throw E("could not authenticate (certificate issue?) "+e);
+        if (u.cred != null) try {
+          fc.authenticate(u.cred.credential(), null);
+        } catch (Exception e) {
+          throw new FatalEx("could not authenticate (certificate issue?) "+e);
+        } else {
+          String user = (u.user == null) ? "anonymous" : u.user;
+          String pass = (u.pass == null) ? "" : u.pass;
+          Reply r = exchange("USER "+user);
+          if (Reply.isPositiveIntermediate(r)) try {
+            execute(("PASS "+pass).trim());
+          } catch (Exception e) {
+            throw new FatalEx("bad password");
+          } else if (!Reply.isPositiveCompletion(r)) {
+            throw new FatalEx("bad username");
+          }
+        }
+
+        exchange("SITE CLIENTINFO appname="+GridFTPModule.info_ad.name+
+                 ";appver="+GridFTPModule.info_ad.version+";schema=gsiftp;");
       } else {
         String user = (u.user == null) ? "anonymous" : u.user;
         String pass = (u.pass == null) ? "" : u.pass;
+        cc = fc = new HackedControlChannel(u.host, u.port);
+        fc.open();
+
         Reply r = exchange("USER "+user);
         if (Reply.isPositiveIntermediate(r)) try {
-          execute(("PASS "+pass).trim());
+          execute("PASS "+pass);
         } catch (Exception e) {
-          throw E("bad password");
+          throw new FatalEx("bad password");
         } else if (!Reply.isPositiveCompletion(r)) {
-          throw E("bad username");
+          throw new FatalEx("bad username");
         }
       }
-
-      exchange("SITE CLIENTINFO appname="+GridFTPModule.info_ad.name+
-               ";appver="+GridFTPModule.info_ad.version+";schema=gsiftp;");
-    } else {
-      String user = (u.user == null) ? "anonymous" : u.user;
-      String pass = (u.pass == null) ? "" : u.pass;
-      cc = fc = new FTPControlChannel(u.host, u.port);
-      fc.open();
-
-      Reply r = exchange("USER "+user);
-      if (Reply.isPositiveIntermediate(r)) try {
-        execute("PASS "+pass);
-      } catch (Exception e) {
-        throw E("bad password");
-      } else if (!Reply.isPositiveCompletion(r)) {
-        throw E("bad username");
-      }
+    } catch (Exception e) {
+      if (e instanceof RuntimeException)
+        throw (RuntimeException) e;
+      throw new FatalEx("couldn't establish channel: "+e.getMessage(), e);
     }
   }
 
   // Make a local control channel connection to a remote control channel.
-  public ControlChannel(ControlChannel rc) throws Exception {
+  public ControlChannel(ControlChannel rc) {
     if (rc.local)
-      throw new Error("making local facade for local channel");
+      throw new FatalEx("making local facade for local channel");
     local = true;
     gridftp = rc.gridftp;
-    if (gridftp)
-      facade = new GridFTPServerFacade((GridFTPControlChannel) rc.fc);
-    else
-      facade = new FTPServerFacade(rc.fc);
+    facade = new GridFTPServerFacade(rc.fc);
+
+    if (!rc.gridftp)
+      facade.setDataChannelAuthentication(DataChannelAuthentication.NONE);
+
     cc = facade.getControlChannel();
     fc = null;
   }
 
   // Create a duplicate of this channel.
-  public ControlChannel duplicate() throws Exception {
+  public ControlChannel duplicate() {
     return new ControlChannel(my_uri);
   }
 
   // Dumb thing to convert mode/type chars into JGlobus mode ints...
-  private static int modeIntValue(char m) throws Exception {
+  private static int modeIntValue(char m) {
     switch (m) {
       case 'E': return org.globus.ftp.GridFTPSession.MODE_EBLOCK;
       case 'B': return org.globus.ftp.GridFTPSession.MODE_BLOCK;
       case 'S': return org.globus.ftp.GridFTPSession.MODE_STREAM;
-      default : throw new Error("bad mode: "+m);
+      default : throw new FatalEx("bad mode: "+m);
     }
-  } private static int typeIntValue(char t) throws Exception {
+  } private static int typeIntValue(char t) {
     switch (t) {
       case 'A': return Session.TYPE_ASCII;
       case 'I': return Session.TYPE_IMAGE;
-      default : throw new Error("bad type: "+t);
+      default : throw new FatalEx("bad type: "+t);
     }
   }
 
   // Checks if a command is supported by the channel.
-  public boolean supports(String... query) throws Exception {
+  public boolean supports(String... query) {
     if (local) return false;
     
     // If we haven't cached the features, do so.
@@ -142,16 +161,29 @@ public class ControlChannel extends Pipeline<String, Reply> {
   }
 
   // Write a command to the control channel.
-  public void handleWrite(String cmd) throws Exception {
+  public void handleWrite(String cmd) {
     if (local) return;
     System.out.println("Write ("+port+"): "+cmd);
-    fc.write(new Command(cmd));
+    try {
+      fc.write(new Command(cmd));
+    } catch (Exception e) {
+      throw new FatalEx("read error: "+e.getMessage(), e);
+    }
+  }
+
+  // Read from the underlying control channel.
+  public Reply readChannel() {
+    try {
+      return cc.read();
+    } catch (Exception e) {
+      throw new FatalEx("read error: "+e.getMessage(), e);
+    }
   }
 
   // Read replies from the control channel.
-  public Reply handleReply() throws Exception {
+  public Reply handleReply() {
     while (true) {
-      Reply r = cc.read();
+      Reply r = readChannel();
       System.out.println("Reply: "+r);
       if (r.getCode() < 200) addReply(r);
       else return r;
@@ -166,12 +198,12 @@ public class ControlChannel extends Pipeline<String, Reply> {
       if (p != null) pl = new ProgressListener(p);
     }
 
-    public synchronized Reply handleReply() throws Exception {
-      Reply r = cc.read();
+    public synchronized Reply handleReply() {
+      Reply r = readChannel();
 
       if (!Reply.isPositivePreliminary(r)) {
-        throw E("transfer failed to start: "+r);
-      } while (true) switch ((r = cc.read()).getCode()) {
+        throw new FatalEx("transfer failed to start: "+r);
+      } while (true) switch ((r = readChannel()).getCode()) {
         case 111:  // Restart marker
           break;   // Just ignore for now...
         case 112:  // Progress marker
@@ -184,16 +216,16 @@ public class ControlChannel extends Pipeline<String, Reply> {
         case 226:  // Transfer complete!
           return r;
         default:
-          throw E("unexpected reply: "+r.getCode());
+          throw new FatalEx("unexpected reply: "+r.getCode());
       }
     }
   }
 
   // Execute command, but DO throw on negative reply.
-  public Reply execute(String cmd) throws Exception {
+  public Reply execute(String cmd) {
     Reply r = exchange(cmd);
     if (!Reply.isPositiveCompletion(r))
-      throw E("bad reply: "+r);
+      throw new FatalEx("bad reply: "+r);
     return r;
   }
 
@@ -211,17 +243,21 @@ public class ControlChannel extends Pipeline<String, Reply> {
     }
   }
 
-  public void abort() throws Exception {
-    if (local)
-      facade.abort();
-    else
-      exchange("ABOR");
-    kill();
+  public void abort() {
+    try {
+      if (local)
+        facade.abort();
+      else
+        exchange("ABOR");
+      kill();
+    } catch (Exception e) {
+      // Who cares.
+    }
   }
 
   // Change the mode of this channel.
   // TODO: Detect unsupported modes.
-  public void mode(char m) throws Exception {
+  public void mode(char m) {
     if (local)
       facade.setTransferMode(modeIntValue(m));
     else write("MODE "+m, true);
@@ -229,9 +265,14 @@ public class ControlChannel extends Pipeline<String, Reply> {
 
   // Change the data type of this channel.
   // TODO: Detect unsupported types.
-  public void type(char t) throws Exception {
+  public void type(char t) {
     if (local)
       facade.setTransferType(typeIntValue(t));
     else write("TYPE "+t, true);
+  }
+
+  // Get the IP from the remote server as a string.
+  public String getIP() {
+    return fc.getIP();
   }
 }

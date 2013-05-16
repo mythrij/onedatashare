@@ -17,19 +17,17 @@ public class Bell<O> {
     onRing(o);
   }
 
-  // Wait for the bell to ring, optionally for some maximum duration. In
-  // case of interruption, the InterruptException will be wrapped in an
-  // Error, so callers can choose to handle it only if necessary.
-  public synchronized O waitFor() throws Error {
+  // Wait for the bell to ring, optionally for some maximum duration.
+  public synchronized O waitFor() {
     return waitFor(0, 0);
-  } public synchronized O waitFor(long time) throws Error {
+  } public synchronized O waitFor(long time) {
     return waitFor(time, 0);
-  } public synchronized O waitFor(long time, int ns) throws Error {
-    try {
+  } public synchronized O waitFor(long time, int ns) {
+    while (true) try {
       wait();
       return thing;
     } catch (Exception e) {
-      throw new Error(e);
+      // Do nothing...
     }
   }
 

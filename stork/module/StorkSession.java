@@ -1,16 +1,17 @@
 package stork.module;
 
 import stork.ad.*;
+import stork.util.*;
 import java.net.URI;
 
 // Represents a connection to a remote end-point. A session should
 // provide methods for starting a transfer, listing directories, and
 // performing other operations on the end-point.
 
-public abstract class StorkSession {
+public abstract class StorkSession extends Ad {
   protected Ad config;
   protected URI url;
-  protected AdSink sink = null;
+  protected Pipe<Ad>.End pipe = null;
   protected StorkSession pair = null;
   protected boolean closed = false;
 
@@ -50,21 +51,14 @@ public abstract class StorkSession {
 
   // Create a session from a URL. Generally the path is ignored.
   public StorkSession(URI url, Ad config) {
-    this.config = config;
+    super(config);
     this.url = url;
-  }
-
-  // Get the current configuration of the session. The returned ad
-  // should be the configuration used live by the session, so that
-  // changes to the ad result in changes in the session behavior.
-  public Ad config() {
-    return config;
   }
 
   // Set an ad sink to write update ads into.
   // TODO: This is a temporary hack, remove me.
-  public void setSink(AdSink sink) {
-    this.sink = sink;
+  public void setPipe(Pipe<Ad> pipe) {
+    this.pipe = pipe.new End();
   }
 
   // Public interfaces to abstract methods.
@@ -81,14 +75,14 @@ public abstract class StorkSession {
   public void transfer(String src, String dest, Ad opts) {
     checkConnected();
     if (pair == null)
-      throw new Error("session is not paired");
+      throw new FatalEx("session is not paired");
     transferImpl(src, dest, opts);
   }
 
   // Check if the session hasn't been closed. Throws exception if so.
   private void checkConnected() {
     if (!isConnected())
-      throw new Error("session has been closed");
+      throw new FatalEx("session has been closed");
   }
 
   // Check if the session is connected or if it's closed.
@@ -100,7 +94,7 @@ public abstract class StorkSession {
 
   // Close the session, cancel and transfers, free any resources.
   public synchronized void close() {
-    pair(null);
+    unpair();
     closeImpl();
     closed = true;
   }
@@ -108,14 +102,14 @@ public abstract class StorkSession {
   // Pair this session with another session. Calls pairCheck() first
   // to see if the sessions are compatible. Returns paired session.
   public synchronized StorkSession pair(StorkSession other) {
-    if (pair == other)
-      throw new Error("these sessions are already paired");
+    if (other != null && pair == other)
+      throw new FatalEx("these sessions are already paired");
     if (other == this)
-      throw new Error("cannot pair a session with itself");
+      throw new FatalEx("cannot pair a session with itself");
     if (other != null && (!pairCheck(other) || !other.pairCheck(this)))
-      throw new Error("other session is not compatible with this session");
+      throw new FatalEx("other session is not compatible with this session");
     if (other != null && other.pair != null)
-      throw new Error("other session is already paired");
+      throw new FatalEx("other session is already paired");
     if (other == null)
       return null;
     if (pair != null)
@@ -154,10 +148,5 @@ public abstract class StorkSession {
   // Get the authority for the session.
   public String authority() {
     return url.getAuthority();
-  }
-
-  // Represent this session as a string.
-  public String toString() {
-    return protocol()+":"+authority();
   }
 }

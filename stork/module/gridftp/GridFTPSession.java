@@ -33,7 +33,6 @@ public class GridFTPSession extends StorkSession {
     .put("pipelining", 20);
   
   private TransferProgress progress = null;
-  private AdSink sink = null;
   private FTPServerFacade local;
 
   private int parallelism = 1;
@@ -44,16 +43,16 @@ public class GridFTPSession extends StorkSession {
   // Create a new session connected to an end-point specified by a URL.
   // opts may be null.
   public GridFTPSession(URI uri, Ad opts) {
-    super(uri, new Ad().merge(DEFAULT_CONFIG, opts));
+    super(uri, new Ad(DEFAULT_CONFIG, opts));
 
     // Check if we've been given a credential to use.
     // TODO: Automatic instantiation from MyProxy as well.
-    if (opts.has("cred_token"))
+    if (has("cred_token"))
       cred = CredManager.instance().getCred(opts.get("cred_token"));
-    if (cred == null && opts.has("x509_file"))
-      cred = StorkGSSCred.fromFile(opts.get("x509_file"));
-    if (cred == null && opts.has("x509_proxy"))
-      cred = StorkGSSCred.fromBytes(opts.get("x509_proxy").getBytes());
+    if (cred == null && has("x509_proxy"))
+      cred = StorkGSSCred.fromBytes(get("x509_proxy").getBytes());
+    if (cred == null)
+      throw new FatalEx("still no cred: "+opts);
 
     // Check if we've been given an optimizer to use.
     // TODO: Replace with query to optimizer manager.
@@ -66,11 +65,7 @@ public class GridFTPSession extends StorkSession {
       optimizer = new Optimizer();
 
     // Establish a control channel connection to remote server.
-    try {
-      cc = new ControlChannel(new FTPURI(uri, cred));
-    } catch (Exception e) {
-      throw new Error(e);
-    }
+    cc = new ControlChannel(new FTPURI(uri, cred));
   }
 
   // StorkSession interface implementations
@@ -97,7 +92,7 @@ public class GridFTPSession extends StorkSession {
     try {
       return listImpl2(path, opts);
     } catch (Exception e) {
-      throw new Error(e);
+      throw new FatalEx(e);
     }
   } protected Ad listImpl2(final String path, Ad opts) throws Exception {
     int depth = 0;
@@ -138,12 +133,10 @@ public class GridFTPSession extends StorkSession {
     D("Doing list command: "+cmd);
 
     // Turn off DCAU.
-    if (cp.rc.supports("DCAU")) try {
-      GridFTPServerFacade f = (GridFTPServerFacade) cp.oc.facade;
+    if (cp.rc.supports("DCAU")) {
+      GridFTPServerFacade f = cp.oc.facade;
       f.setDataChannelAuthentication(DataChannelAuthentication.NONE);
       cp.rc.write("DCAU N", true);
-    } catch (Exception e) {
-      // Couldn't cast to GridFTPServerFacade probably, oh well.
     }
 
     work.add("");
@@ -160,11 +153,11 @@ public class GridFTPSession extends StorkSession {
         total++;
         cp.pipePassive();
         cp.rc.write(cmd+path+"/"+p, true, cp.rc.new XferHandler(null) {
-          public Reply handleReply() throws Exception {
+          public Reply handleReply() {
             ListAdSink sink = new ListAdSink(ad, is_mlsd);
             cp.oc.facade.store(sink);
             Reply r = super.handleReply();
-            D("Got reply: "+r);
+            D("Got reply: "+r+", waiting for sink...");
             sink.waitFor();
             D("Ad is: "+ad);
 
@@ -191,10 +184,10 @@ public class GridFTPSession extends StorkSession {
         return StorkUtil.size(path);
       Reply r = cc.exchange("SIZE "+path);
       if (!Reply.isPositiveCompletion(r))
-        throw E("file does not exist: "+path);
+        throw new FatalEx("file does not exist: "+path);
       return Long.parseLong(r.getMessage());
     } catch (Exception e) {
-      throw new Error(e);
+      throw new FatalEx(e);
     }
   }
 
@@ -205,9 +198,9 @@ public class GridFTPSession extends StorkSession {
 
     // Some quick sanity checking.
     if (src == null || src.isEmpty())
-      throw E("src path is empty");
+      throw new FatalEx("src path is empty");
     if (dest == null || dest.isEmpty())
-      throw E("dest path is empty");
+      throw new FatalEx("dest path is empty");
 
     System.out.println("Transferring: "+src+" -> "+dest);
 
@@ -221,14 +214,14 @@ public class GridFTPSession extends StorkSession {
 
     // Create a new progress tracker.
     progress = new TransferProgress();
-    if (sink != null)
-      progress.attach(sink);
+    if (pipe != null)
+      progress.attach(pipe);
 
     // Pass the list off to the transfer() which handles lists.
     try {
       transfer(xl);
     } catch (Exception e) {
-      throw new Error(e);
+      throw new FatalEx(e.getMessage());
     }
   }
 
@@ -254,7 +247,7 @@ public class GridFTPSession extends StorkSession {
     } else {
       System.out.println("File size < 1M, not optimizing...");
       optimizer = new Optimizer();
-    } sink.mergeAd(new Ad("optimizer", optimizer.name()));
+    } pipe.put(new Ad("optimizer", optimizer.name()));
 
     // Connect source and destination server.
     System.out.println("Setting passive mode...");
@@ -305,8 +298,8 @@ public class GridFTPSession extends StorkSession {
       else update.remove("concurrency");
       */
 
-      if (sink != null && update.size() > 0)
-        sink.mergeAd(update);
+      if (pipe != null && update.size() > 0)
+        pipe.put(update);
 
       if (len >= 0)
         xs = xl.split(len);

@@ -16,10 +16,13 @@ import java.util.concurrent.*;
 // to it in the form of ads. Can be run standalone and receive commands
 // from a number of interfaces, or can be run as part of a larger
 // program and be given commands directly (or both).
-
-// TODO: Search FIXME and TODO!
-
-public class StorkScheduler {
+//
+// The entire state of the scheduler can be serialized and saved to disk,
+// and subsequently recovered if so desired. Its entire state is stored as
+// an ad, which is the reason for THIS. Is this the worst abuse of a data
+// structure ever, or the best? :)  |
+//                                  v
+public class StorkScheduler extends Ad {
   // Singleton instance of the scheduler.
   private static StorkScheduler instance = null;
 
@@ -30,13 +33,16 @@ public class StorkScheduler {
   private Map<String, StorkCommand> cmd_handlers;
   private TransferModuleTable xfer_modules;
 
-  private ArrayList<StorkJob> all_jobs;
-  private LinkedBlockingQueue<StorkJob> job_queue;
+  private JobQueue job_queue;
   private LinkedBlockingQueue<RequestContext> req_queue;
 
   private Bell<Integer> shutdown_bell = new Bell<Integer>();
 
-  boolean connected = false;
+  // Initialize the server state to a fresh state.
+  public void initializeState() {
+    //put("queue", new AdList());
+    //put("users", StorkUser.globalMap());
+  }
 
   // Construct and return a usage/options parser object.
   public static GetOpts getParser(GetOpts base) {
@@ -48,7 +54,7 @@ public class StorkScheduler {
       "The Stork server is the core of the Stork system, handling "+
       "connections from clients and scheduling transfers. This command "+
       "is used to start a Stork server.",
-      "Upon startup, the Stork server loads stork.env and begins "+
+      "Upon startup, the Stork server loads stork.conf and begins "+
       "listening for clients."
     };
 
@@ -65,301 +71,7 @@ public class StorkScheduler {
   private boolean daemon = false;
   private Ad env;
 
-  // States a job can be in.
-  static enum JobStatus {
-    scheduled, processing, removed, failed, complete
-  }
-
-  // Filters for jobs of certain types.
-  static class JobFilter {
-    static EnumSet<JobStatus>
-      all = EnumSet.allOf(JobStatus.class),
-      pending = EnumSet.of(JobStatus.scheduled,
-                           JobStatus.processing),
-      done = EnumSet.complementOf(JobFilter.pending);
-  }
-
-  // A class for looking up transfer modules by protocol and handle.
-  class TransferModuleTable {
-    Map<String, TransferModule> by_proto, by_handle;
-
-    public TransferModuleTable() {
-      by_proto  = new HashMap<String, TransferModule>();
-      by_handle = new HashMap<String, TransferModule>();
-    }
-
-    // Add a transfer module to the table.
-    public void register(TransferModule tm) {
-      if (tm == null) {
-        System.out.println("Error: register called with null argument");
-        return;
-      }
-
-      // Check if handle is in use.
-      if (!by_handle.containsKey(tm.handle())) {
-        by_handle.put(tm.handle(), tm);
-        System.out.println(
-          "Registered module \""+tm+"\" [handle: "+tm.handle()+"]");
-      } else {
-        System.out.println(
-          "Warning: module handle "+tm.handle()+" in use, ignoring");
-        return;
-      }
-
-      // Add the protocols for this module.
-      for (String p : tm.protocols()) {
-        if (!by_proto.containsKey(p)) {
-          System.out.println("  Registering protocol: "+p);
-          by_proto.put(p, tm);
-        } else {
-          System.out.println(
-            "  Note: protocol "+p+" already registered, not registering");
-          continue;
-        }
-      }
-    }
-
-    // Get a transfer module based on source and destination protocol.
-    public TransferModule lookup(String sp, String dp) {
-      TransferModule tm = by_proto.get(sp);
-
-      // TODO: Cross-module lookup.
-      if (tm != by_proto.get(dp))
-        return null;
-      return tm;
-    }
-
-    // Get a transfer module by its handle.
-    public TransferModule lookup(String handle) {
-      return by_handle.get(handle);
-    }
-
-    // Get a set of all the modules.
-    public Collection<TransferModule> modules() {
-      return by_handle.values();
-    }
-
-    // Get a set of all the handles.
-    public Collection<String> handles() {
-      return by_handle.keySet();
-    }
-
-    // Get a set of all the supported protocols.
-    public Collection<String> protocols() {
-      return by_proto.keySet();
-    }
-  }
-
-  // A representation of a job submitted to Stork. When this job is
-  // run by a thread, start the transfer, and read aux_ads from it
-  // until the job completes.
-  // TODO: Refactor this whole thing.
-  class StorkJob implements Runnable {
-    JobStatus status;
-    SubmitAd job_ad;
-    Ad aux_ad;
-    StorkTransfer transfer;
-    TransferModule tm;
-
-    int job_id = 0;
-    int attempts = 0, rv = -1;
-    String message = null;
-    Watch queue_timer = null, run_timer = null;
-
-    // Set me to null to force regeneration of info ad by getAd().
-    Ad cached_ad = null;
-
-    // Create a StorkJob from a job ad.
-    public StorkJob(SubmitAd ad) {
-      job_ad = ad;
-      tm = ad.tm;
-      set_status(JobStatus.scheduled);
-
-      // Set the submit time for the job
-      queue_timer = new Watch(true);
-    }
-
-    // Gets the job info as a ad. Will return cached_ad if there is one.
-    // To force regeneration of ad, reset cached_ad to null.
-    public synchronized Ad getAd() {
-      Ad ad = cached_ad;
-
-      // If we don't have a cached ad, generate a new one.
-      if (ad == null) {
-        ad = new Ad(job_ad);
-
-        // Remove sensitive stuff.
-        // TODO: Better method...
-        ad.remove("x509_proxy");
-
-        // Merge auxilliary ad if there is one.
-        // TODO: Real filtering.
-        if (aux_ad != null) {
-          ad.merge(aux_ad);
-          ad.remove("error");  // Don't misbehave!
-        }
-
-        // Add other job information.
-        ad.put("status", status.toString());
-        ad.put("module", tm.handle());
-
-        // TODO: Give raw data, let client determine presentation.
-        if (job_id > 0)
-          ad.put("job_id", job_id);
-        if (attempts > 0)
-          ad.put("attempts", attempts);
-        if (message != null)
-          ad.put("message", message);
-      }
-
-      if (rv >= 0)
-        ad.put("exit_status", rv);
-
-      // Add elapsed times.
-      if (queue_timer != null)
-        ad.put("total_duration", queue_timer.toString());
-      if (run_timer != null)
-        ad.put("run_duration", run_timer.toString());
-      
-      return cached_ad = ad;
-    }
-
-    // Sets the status of the job and updates the ad accordingly.
-    public synchronized void set_status(JobStatus s) {
-      status = s;
-
-      if (cached_ad != null)
-        cached_ad.put("status", s.toString());
-    }
-
-    // Set job message. Pass null to remove message.
-    public synchronized void set_message(String m) {
-      message = m;
-
-      if (cached_ad != null)
-        cached_ad.put("message", m);
-    }
-
-    // Set the attempts counter.
-    public synchronized void set_attempts(int a) {
-      attempts = a;
-
-      if (cached_ad != null) {
-        if (a != 0)
-          cached_ad.put("attempts", a);
-        else
-          cached_ad.remove("attempts");
-      }
-    }
-
-    // Called when the job gets removed. Returns true if the job had its
-    // state updated, and false otherwise (e.g., the job was already
-    // complete or couldn't be removed).
-    public synchronized boolean remove(String reason) {
-      switch (status) {
-        // Try to stop the job. If we can't, don't do anything.
-        case processing:
-          if (transfer != null) transfer.stop();
-          run_timer.stop();
-          transfer = null;
-
-        // Fall through to set removed status.
-        case scheduled:
-          set_message(reason);
-          queue_timer.stop();
-          set_status(JobStatus.removed);
-
-          return true;
-
-        // In any other case, the job has ended, do nothing.
-        default:
-          return false;
-      }
-    }
-
-    // Check if the job should be rescheduled.
-    public synchronized boolean shouldReschedule() {
-      // Check for forced rescheduling prevention.
-      if (rv >= 255)
-        return false;
-
-      // Check for custom max attempts.
-      int max = job_ad.getInt("max_attempts", 10);
-      if (max > 0 && attempts >= max)
-        return false;
-
-      // Check for configured max attempts.
-      max = env.getInt("max_attempts", 10);
-      if (max > 0 && attempts >= max)
-        return false;
-
-      return true;
-    }
-
-    // Run the job and watch it to completion.
-    public void run() {
-      // Must be scheduled to be able to run.
-      if (status != JobStatus.scheduled)
-        return;
-
-      // Start transfer
-      synchronized (status) {
-        run_timer = new Watch(true);
-        set_status(JobStatus.processing);
-        transfer = tm.transfer(job_ad);
-        transfer.start();
-      }
-
-      // Read progress ads until end of ad stream.
-      while (true) try {
-        Ad ad = transfer.getAd();
-
-        aux_ad = ad;
-
-        // Check if we have message; unset if present and empty string.
-        message = aux_ad.get("message", message);
-        if (message != null && message.isEmpty())
-          message = null;
-
-        cached_ad = null;  // Blow out the cached ad.
-      } catch (Exception e) {
-        break;
-      }
-
-      // Wait for job to complete and get exit status.
-      rv = transfer.waitFor();
-      transfer = null;
-      run_timer.stop();
-
-      if (rv == 0) {  // Job successful!
-        queue_timer.stop();
-        set_status(JobStatus.complete);
-        return;
-      }
-
-      // Job not successful! :( Check if we should requeue.
-      if (shouldReschedule()) {
-        set_status(JobStatus.scheduled);
-
-        set_attempts(attempts+1);
-        System.out.println("Job "+job_id+" failed! Rescheduling...");
-
-        while (true) try {
-          job_queue.put(this);
-        } catch (Exception e) {
-          System.out.println("Error rescheduling job "+job_id+": "+e);
-        }
-      } else {
-        System.out.println("Job "+job_id+" failed!");
-        set_status(JobStatus.failed);
-        queue_timer.stop();
-        set_attempts(attempts);
-      }
-    }
-  }
-
   // A thread which runs continuously and starts jobs as they're found.
-  // TODO: Refactor me.
   private class StorkQueueThread extends Thread {
     StorkQueueThread() {
       setDaemon(true);
@@ -369,17 +81,30 @@ public class StorkScheduler {
     public void run() {
       while (true) try {
         StorkJob job = job_queue.take();
-        System.out.println("Pulled job from queue");
+        System.out.println("Pulled job from queue: "+job);
 
-        // Some sanity checking
-        if (job.status != JobStatus.scheduled) {
-          System.out.println("How did this get here?! ("+job+")");
+        // Make sure we didn't get interrupted while taking.
+        if (job == null)
           continue;
-        }
 
-        job.run();
+        // Run the job then check the return status.
+        switch (job.process()) {
+          // If a job is still processing, something weird happened.
+          case processing:
+            throw new Exception("job still processing after completion");
+          // If job is scheduled, put it back in the schedule queue.
+          case scheduled:
+            System.out.println("Job "+job.jobId()+" rescheduling...");
+            job_queue.add(job); break;
+          // If the job was paused, put it in limbo until it's resumed.
+          case paused:  // This can't happen yet!
+            break;
+          // Alert the user if it failed.
+          case failed:
+            System.out.println("Job "+job.jobId()+" failed!");
+        }
       } catch (Exception e) {
-        System.out.println("Something bad happened in StorkQueueThread...");
+        System.out.println("Badness in StorkQueueThread...");
         e.printStackTrace();
       }
     }
@@ -393,186 +118,116 @@ public class StorkScheduler {
 
     // Continually remove jobs from the queue and start them.
     public void run() {
-      while (true) try {
-        RequestContext req = req_queue.take();
-        System.out.println("Pulled request from queue");
+      while (true) {
+        RequestContext req;
 
-        if (req.cmd == null) {
-          req.done(new ResponseAd("error", "no command specified"));
+        // Try to take something from the queue.
+        try {
+          req = req_queue.take();
+          System.out.println("Pulled request from queue");
+        } catch (Exception e) {
+          System.out.println("Something bad happened in StorkWorkerThread...");
+          e.printStackTrace();
           continue;
         }
 
-        StorkCommand handler = cmd_handlers.get(req.cmd);
+        // Try handling the command.
+        try {
+          if (req.cmd == null)
+            throw new FatalEx("no command specified");
 
-        if (handler == null) {
-          req.done(new ResponseAd("error", "invalid command: "+req.cmd));
-          continue;
+          StorkCommand handler = cmd_handlers.get(req.cmd);
+
+          if (handler == null)
+            throw new FatalEx("invalid command: "+req.cmd);
+
+          // Check if the handler requires a logged in user.
+          if (handler.requiresLogin())
+            req.user = StorkUser.login(req.ad);
+
+          // Let the magic happen.
+          req.done(handler.handle(req));
+        } catch (Exception e) {
+          e.printStackTrace();
+          req.done(new ResponseAd("error", e.getMessage()));
+        } finally {
+          System.out.println("Done with request!");
         }
-
-        Ad res = handler.handle(req);
-        req.done(res);
-
-        System.out.println("Done with request!");
-      } catch (Exception e) {
-        System.out.println("Something bad happened in StorkWorkerThread...");
-        e.printStackTrace();
       }
     }
   }
 
   // Stork command handlers should implement this interface.
-  static interface StorkCommand {
-    public Ad handle(RequestContext req);
+  static abstract class StorkCommand {
+    public abstract Ad handle(RequestContext req);
+
+    // Override for commands that don't require logon.
+    public boolean requiresLogin() {
+      return false;
+    }
   }
 
-  class StorkQHandler implements StorkCommand {
+  class StorkQHandler extends StorkCommand {
     public Ad handle(RequestContext req) {
-      // The list we will ultimately read results from.
-      Iterable<StorkJob> list = all_jobs;
-      EnumSet<JobStatus> filter = null;
       Ad ad = req.ad;
-
-      String type = ad.get("status");
-      Range range, nfr = new Range();
-      int count = 0;
       boolean missed = false;
 
-      // Lowercase the job type just to make things easier.
-      if (type != null)
-        type = type.toLowerCase();
-
-      // Pick a filter depending on type. Valid types include:
-      // "pending", "done", "all", and any job status. Defaults to
-      // "pending" if no range specified, "all" if it is specified.
-      if (type == null) {
-        filter = ad.has("range") ? JobFilter.all : JobFilter.pending;
-      } else if (type.equals("pending")) {
-        filter = JobFilter.pending;
-      } else if (type.equals("done")) {
-        filter = JobFilter.done;
-      } else if (type.equals("all")) {
-        filter = JobFilter.all;
-      } else try {
-        filter = EnumSet.of(JobStatus.valueOf(type));
-      } catch (Exception e) {
-        return new ResponseAd("error", "invalid job type '"+type+"'");
-      }
-
-      // If a range was given, show jobs from range.
-      if (ad.has("range"))
-        range = Range.parseRange(ad.get("range"));
-      else
-        range = new Range(1, all_jobs.size());
-      if (range == null)
-        return new ResponseAd("error", "could not parse range");
-
       // Show all jobs in range matching filter.
-      for (int i : range) try {
-        StorkJob j = all_jobs.get(i-1);
+      List<StorkJob> jobs = job_queue.get(ad.get("range"), ad.get("status"));
+      int count = jobs.size();
 
-        if (!filter.contains(j.status))
-          continue; 
-        count++;
+      if (count < 1)
+        throw new FatalEx("no jobs found");
 
-        System.out.println("Sending: "+j.getAd());
-        req.putReply(j.getAd());
-      } catch (IndexOutOfBoundsException oobe) {
-        missed = true;
-        nfr.swallow(i);
-      } catch (Exception e) {
-        return new ResponseAd("error", e.getMessage());
-      }
+      for (StorkJob j : jobs)
+        req.putReply(j);
 
-      // Inform user of count and any missing jobs.
       ResponseAd res = new ResponseAd("success");
-
-      if (!nfr.isEmpty()) {
-        if (count == 0)
-          res.set("error", "no jobs found");
-        else
-          res.put("not_found", nfr.toString());
-      }
-
       res.put("count", count);
       return res;
     }
   }
 
-  class StorkListHandler implements StorkCommand {
+  class StorkListHandler extends StorkCommand {
     public Ad handle(RequestContext req) {
+      StorkSession sess = null;
       try {
-        URI url = new URI(req.ad.get("url")).normalize();
-        String proto = url.getScheme();
-        TransferModule tm = xfer_modules.lookup(proto, proto);
-
-        if (tm == null)
-          throw new Exception("cannot list "+proto);
-
-        return tm.list(url, req.ad);
-      } catch (Exception e) {
-        return new ResponseAd("error", e.getMessage());
+        EndPoint ep = new EndPoint(req.ad);
+        sess = ep.session();
+        return sess.list(ep.path, ep);
+      } finally {
+        if (sess != null) sess.close();
       }
     }
   }
 
-  class StorkSubmitHandler implements StorkCommand {
+  // Handle user registration.
+  class StorkRegisterHandler extends StorkCommand {
     public Ad handle(RequestContext req) {
-      SubmitAd sad;
+      System.out.println("Got registration ad: "+req.ad);
+      StorkUser user = StorkUser.register(req.ad);
+      return user;
+    }
+  }
 
-      // Try to interpret ad as a submit ad.
-      try {
-        sad = new SubmitAd(req.ad);
-        TransferModule tm;
-        String handle = StorkUtil.normalize(sad.get("module"));
+  class StorkSubmitHandler extends StorkCommand {
+    public Ad handle(RequestContext req) {
+      StorkJob job;
 
-        // See if job specially requests a module.
-        if (!handle.isEmpty()) {
-          tm = xfer_modules.lookup(handle);
+      // Make sure the request has everything a StorkJob needs.
+      job = new StorkJob(req.ad);
 
-          if (tm == null)
-            throw new Exception("no module with name \""+handle+"\"");
-        } else {
-          // Check for transfer modules for URLs.
-          // TODO: Check for inter-module transfers later.
-          String sp = sad.src_proto, dp = sad.dest_proto;
-          tm = xfer_modules.lookup(sp, dp);
-
-          if (tm == null)
-            throw new Exception("cannot transfer "+sp+" -> "+dp);
-        }
-
-        // Make sure transfer module likes job ad.
-        sad.setModule(tm);
-      } catch (Exception e) {
-        return new ResponseAd("error", e.getMessage());
-      }
-
-      StorkJob job = new StorkJob(sad);
-
-      // Check that is ready to be processed.
-      if (job.status != JobStatus.scheduled)
-        return new ResponseAd("error", job.message);
-
-      // Add job to the job log and determine job id
-      synchronized (all_jobs) {
-        all_jobs.add(job);
-        job.job_id = all_jobs.size();
-      }
-
-      // Add to the scheduler
-      try {
-        job_queue.put(job);
-      } catch (Exception e) {
-        System.out.println("Error scheduling job "+job.job_id+": "+e);
-      }
+      // Add job to the job queue.
+      job_queue.add(job);
 
       Ad res = new ResponseAd("success");
-      res.put("job_id", job.job_id);
+      res.put("job_id", job.jobId());
       return res;
     }
   }
 
-  class StorkRmHandler implements StorkCommand {
+  // FIXME: This doesn't work right now; cause this to work.
+  class StorkRmHandler extends StorkCommand {
     public Ad handle(RequestContext req) {
       Ad ad = req.ad;
       StorkJob j;
@@ -592,8 +247,7 @@ public class StorkScheduler {
 
       // Find ad in job list, set it as removed.
       for (int job_id : r) try {
-        j = all_jobs.get(job_id-1);
-        job_queue.remove(j);
+        j = job_queue.get(job_id);
         j.remove(reason);
       } catch (IndexOutOfBoundsException oobe) {
         cdr.swallow(job_id);
@@ -606,12 +260,12 @@ public class StorkScheduler {
         return new ResponseAd("success");
       if (cdr.size() == r.size())
         return new ResponseAd("error", "no jobs were removed");
-      return new ResponseAd("error",
+      return new ResponseAd("success",
                             "the following jobs weren't removed: "+cdr);
     }
   }
 
-  class StorkInfoHandler implements StorkCommand {
+  class StorkInfoHandler extends StorkCommand {
     // Send transfer module information
     Ad sendModuleInfo(RequestContext req) {
       for (TransferModule tm : xfer_modules.modules()) {
@@ -625,7 +279,7 @@ public class StorkScheduler {
 
     // TODO: Send server information.
     Ad sendServerInfo(RequestContext req) {
-      return new ResponseAd("error", "not yet implemented");
+      return new Ad(StorkScheduler.this);
     }
 
     public Ad handle(RequestContext req) {
@@ -647,8 +301,8 @@ public class StorkScheduler {
 
     // Iterate over and populate external module list.
     // TODO: Do this in parallel and detect misbehaving externals.
-    if (env.has("libexec")) {
-      File dir = new File(env.get("libexec"));
+    if (has("env.libexec")) {
+      File dir = new File(get("env.libexec"));
 
       if (dir.isDirectory()) for (File f : dir.listFiles()) {
         // Skip over things that obviously aren't transfer modules.
@@ -674,8 +328,8 @@ public class StorkScheduler {
   // Initialize the thread pool according to config.
   // TODO: Replace worker threads with asynchronous I/O.
   public void initThreadPool() {
-    int jn = env.getInt("max_jobs", 10);
-    int wn = env.getInt("workers", 4);
+    int jn = getInt("env.max_jobs", 10);
+    int wn = getInt("env.workers", 4);
 
     if (jn < 1) {
       jn = 10;
@@ -732,13 +386,6 @@ public class StorkScheduler {
     }
   }
 
-  // Set or get the environment ad for the scheduler.
-  public Ad environment() {
-    return env;
-  } public Ad environment(Ad e) {
-    return env = (e != null) ? e : new Ad();
-  }
-
   // Get the global instance of the StorkScheduler. Make one if it
   // doesn't exist.
   public static synchronized StorkScheduler instance(Ad env) {
@@ -747,8 +394,11 @@ public class StorkScheduler {
     return instance;
   }
 
-  private StorkScheduler(Ad env) {
-    environment(env);
+  // Create a new scheduler from a serialized state.
+  public StorkScheduler() {
+    this(null);
+  } public StorkScheduler(Ad state) {
+    super(state);
 
     // Initialize command handlers
     cmd_handlers = new HashMap<String, StorkCommand>();
@@ -758,17 +408,22 @@ public class StorkScheduler {
     cmd_handlers.put("stork_submit", new StorkSubmitHandler());
     cmd_handlers.put("stork_rm", new StorkRmHandler());
     cmd_handlers.put("stork_info", new StorkInfoHandler());
+    cmd_handlers.put("stork_register", new StorkRegisterHandler());
 
     // Initialize transfer module set
-    xfer_modules = new TransferModuleTable();
+    xfer_modules = TransferModuleTable.instance();
 
     // Initialize queues
-    job_queue = new LinkedBlockingQueue<StorkJob>();
+    job_queue = new JobQueue();
     req_queue = new LinkedBlockingQueue<RequestContext>();
-    all_jobs = new ArrayList<StorkJob>();
 
     // Initialize workers
     populateModules();
     initThreadPool();
+
+    // Set/get the user map.
+    if (has("users") && typeOf("users") == AD)
+      StorkUser.map(getAd("users"));
+    put("users", StorkUser.map());
   }
 }

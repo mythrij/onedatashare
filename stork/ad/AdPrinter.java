@@ -54,18 +54,17 @@ public class AdPrinter {
   }
 
   // Do the deed.
-  public String toString(Ad... ads) {
-    return append(new StringBuilder(), ads).toString();
-  } public byte[] toBytes(Ad... ads) {
-    return append(new StringBuilder(), ads).toString().getBytes();
-  } public StringBuilder append(StringBuilder sb, Ad... ads) {
+  public String toString(Ad ad) {
+    return append(new StringBuilder(), ad).toString();
+  } public byte[] toBytes(Ad ad) {
+    return append(new StringBuilder(), ad).toString().getBytes();
+  } public StringBuilder append(StringBuilder sb, Ad ad) {
     sb.append(LB);
-    for (Ad ad : ads) {
-      appendEntries(sb, ad);
-      if (ad.next != null) for (Ad sub : ad.next)
-        appendEntries(sb.append(JP), sub);
-    } sb.append(RB);
-    return sb;
+    String j = "";
+    for (Ad a : ad) {
+      appendEntries(sb.append(j), a);
+      j = JP;
+    } return sb.append(RB);
   }
 
   // Helpers

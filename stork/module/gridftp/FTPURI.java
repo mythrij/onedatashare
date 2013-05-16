@@ -50,7 +50,7 @@ public class FTPURI {
       this.cred = null;
     else if (cred instanceof StorkGSSCred)
       this.cred = (StorkGSSCred) cred;
-    else throw E("unsupported credential type: "+cred.type());
+    else throw new FatalEx("unsupported credential type: "+cred.type());
 
     if (uri.getPath().startsWith("/~"))
       path = uri.getPath().substring(1);
@@ -59,7 +59,7 @@ public class FTPURI {
 
     // Check protocol and determine port.
     if (proto == null || proto.isEmpty()) {
-      throw E("no protocol specified");
+      throw new FatalEx("no protocol specified");
     } if ("gridftp".equals(proto) || "gsiftp".equals(proto)) {
       port = (p > 0) ? p : 2811;
       gridftp = true; ftp = false; file = false;
@@ -70,7 +70,7 @@ public class FTPURI {
       port = -1;
       gridftp = false; ftp = false; file = true;
     } else {
-      throw E("unsupported protocol: "+proto);
+      throw new FatalEx("unsupported protocol: "+proto);
     }
   }
 }

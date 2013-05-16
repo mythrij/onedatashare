@@ -1,5 +1,7 @@
 package stork.cred;
 
+import stork.util.*;
+
 import java.util.*;
 import java.io.*;
 import java.net.*;
@@ -30,7 +32,7 @@ public class StorkGSSCred extends StorkCred<GSSCredential> {
           GSSCredential.INITIATE_AND_ACCEPT);
       return new StorkGSSCred(null, cred);
     } catch (Exception e) {
-      throw new Error(e);
+      throw new FatalEx("couldn't parse certificate", e);
     }
   }
 
@@ -47,7 +49,7 @@ public class StorkGSSCred extends StorkCred<GSSCredential> {
 
       return fromBytes(cred_bytes);
     } catch (Exception e) {
-      throw new Error(e);
+      throw new FatalEx("couldn't read certificate file", e);
     }
   }
 

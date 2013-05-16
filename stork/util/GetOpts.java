@@ -124,7 +124,7 @@ public class GetOpts {
         return new Ad().put(name, s);
       if (optional)
         return new Ad().put(name, true);
-      throw new Error(name+" requires an argument!!");
+      throw new FatalEx(name+" requires an argument!!");
     }
   }
 

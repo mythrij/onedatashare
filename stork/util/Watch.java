@@ -1,11 +1,13 @@
 package stork.util;
 
+import stork.ad.*;
+
 // A class for keeping track of time in a way that it is guaranteed to
 // be monotonically increasing even in the face of system time changes
 // and also provide a meaningful time. Also provides a stopwatch
 // mechanism to measure elapsed time.
 
-public class Watch {
+public class Watch extends Ad {
   private static long abs_base = System.currentTimeMillis();
   private static long rel_base = System.nanoTime() / (long)1E6;
 
@@ -26,10 +28,31 @@ public class Watch {
     this(start_time, -1);
   }
 
+  // Create a watch from an ad.
+  public Watch(Ad ad) {
+    this(ad.getLong("start_time"), ad.getLong("end_time"));
+  }
+
   // Create a watch with both a given start and end time.
   public Watch(long start_time, long end_time) {
-    st = start_time;
-    et = end_time;
+    setTimes(start_time, end_time);
+  }
+
+  // Set the start/end time and update the underlying ad.
+  private synchronized void setTimes(long st, long et) {
+    if (st == this.st) {
+      this.st = st;
+      if (st < 0)
+        remove("start_time");
+      else put("start_time", st);
+    }
+
+    if (et == this.et) {
+      this.et = et;
+      if (et < 0)
+        remove("end_time");
+      else put("end_time", st);
+    }
   }
 
   // Get the current time since epoch in milliseconds.
@@ -61,8 +84,7 @@ public class Watch {
 
   // Start (or restart) the timer.
   public synchronized Watch start() {
-    st = now();
-    et = -1;
+    setTimes(now(), -1);
     return this;
   }
 
@@ -74,12 +96,17 @@ public class Watch {
 
   // Stop the timer.
   public synchronized long stop() {
-    return (et = now())-st;
+    setTimes(st, now());
+    return et-st;
   }
 
   // Get start and end times. Returns -1 if not started/ended.
   public long startTime() { return st; }
   public long endTime()   { return et; }
+
+  // Check if the timer is started/stopped.
+  public synchronized boolean isStarted() { return st != -1; }
+  public synchronized boolean isStopped() { return et != -1; }
 
   // Display the elapsed time as a pretty string.
   public String toString() {

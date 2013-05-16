@@ -3,6 +3,7 @@ package stork.util;
 import java.util.*;
 import java.util.regex.*;
 import java.io.*;
+import java.net.URI;
 
 // A bunch of static utility functions, how fun!
 
@@ -31,17 +32,11 @@ public class StorkUtil {
       return joinWith(d, sa);
     }
 
-    // Join objects into a string and return as a new exception.
-    public static Error E(Object... o) {
-      return new Error(join(o));
-    }
-
     // Print debugging output.
     public static void D(Object... o) {
       System.out.println(join(o));
     }
   }
-
 
   // String functions
   // ----------------
@@ -177,5 +172,29 @@ public class StorkUtil {
   // Get the size of a file.
   public static long size(String path) throws Exception {
     return new File(path).length();
+  }
+
+  // Miscellaneous functions
+  // -----------------------
+  // Make a URI from string, throws if there's a parse error.
+  public static URI makeURI(String uri) {
+    try {
+      URI u = new URI(uri).normalize();
+
+      if (u.getScheme() == null || u.getScheme().isEmpty())
+        throw new FatalEx("no protocol specified");
+
+      return u;
+    } catch (Exception e) {
+      throw new FatalEx("couldn't parse URI: "+e.getMessage(), e);
+    }
+  }
+
+  // Convert a byte array into a formatted string.
+  public static String formatBytes(byte[] bytes, String fmt) {
+    StringBuilder sb = new StringBuilder();
+    for (byte b : bytes)
+      sb.append(String.format(fmt, b));
+    return sb.toString();
   }
 }

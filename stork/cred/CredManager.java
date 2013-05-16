@@ -29,7 +29,7 @@ public class CredManager {
       return null;
     }
   } public synchronized StorkCred getCred(UUID token) {
-    return cred_map.get(token);
+    return (token == null) ? null : cred_map.get(token);
   }
 
   // Put a credential into the map and return an automatically

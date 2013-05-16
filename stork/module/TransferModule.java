@@ -22,8 +22,8 @@ public abstract class TransferModule {
   // Start a session and perform a transfer.
   // TODO: Remove this.
   public StorkTransfer transfer(SubmitAd ad) {
-    StorkSession src = session(ad.src);
-    StorkSession dest = session(ad.dest);
+    StorkSession src = session(ad.src, ad);
+    StorkSession dest = session(ad.dest, ad);
     src.pair(dest);
     return new StorkTransfer(src, ad);
   }
@@ -33,7 +33,7 @@ public abstract class TransferModule {
     try {
       return session(uri, opts).list(uri.getPath(), opts);
     } catch (Exception e) {
-      throw new Error("couldn't list: "+e.getMessage());
+      throw new FatalEx("couldn't list: "+e.getMessage());
     }
   }
 

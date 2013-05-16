@@ -28,13 +28,11 @@ public class StorkClient {
     cmd_handlers.put("stork_rm", StorkRmHandler.class);
     cmd_handlers.put("stork_info", StorkInfoHandler.class);
     cmd_handlers.put("stork_ls", StorkLsHandler.class);
+    cmd_handlers.put("stork_raw", StorkRawHandler.class);
   }
 
   // Client command handlers
   // -----------------------
-  // The handle method should return a Ad containing the response
-  // from the server. To extend this class, one should override the abstract
-  // handle method, not the final one (obviously that would be impossible).
   static abstract class StorkCommand {
     Socket sock = null;
     InputStream is = null;
@@ -52,6 +50,7 @@ public class StorkClient {
         this.sock = sock;
         is = sock.getInputStream();
         os = sock.getOutputStream();
+        Ad ad;
 
         // Some sanity checking
         if (env == null || args == null)
@@ -59,14 +58,49 @@ public class StorkClient {
         if (is == null || os == null)
           throw new Exception("problem with socket");
 
-        return handle();
+        // Write command ad to the server.
+        do {
+          ad = command();
+
+          // Write command to server.
+          os.write(ad.serialize());
+          os.flush();
+
+          // Receive responses until we're done.
+          do {
+            ad = Ad.parse(is);
+          } while (ad != null && handle(ad));
+
+          // Return response ad if last handled ad was one.
+          if (ResponseAd.is(ad))
+            return new ResponseAd(ad);
+          return new ResponseAd("success");
+        } while (hasMoreCommands());
       } catch (Exception e) {
         return new ResponseAd("error", e.getMessage());
+      } finally {
+        complete();
       }
     }
 
+    // Override this if the handler sends multiple command ads.
+    public boolean hasMoreCommands() {
+      return false;
+    }
+
+    // Return a parser for parsing command line options.
     abstract GetOpts parser(GetOpts base);
-    abstract ResponseAd handle() throws Exception;
+
+    // Return the command ad to send to the server.
+    abstract public Ad command();
+
+    // Handle each response from the server. Return true if more ads
+    // are expected, false if the end of the stream was detected.
+    // Throw an exception if an error occurs.
+    abstract public boolean handle(Ad ad);
+
+    // Anything else that needs to be done at the end of a command.
+    public void complete() { }
   }
 
   // Handler for performing remote listings.
@@ -87,7 +121,7 @@ public class StorkClient {
       return opts;
     }
 
-    ResponseAd handle() throws Exception {
+    public Ad command() {
       Ad ad = new Ad("command", "stork_ls");
 
       // Check args.
@@ -95,34 +129,23 @@ public class StorkClient {
         return new ResponseAd("error", "not enough arguments");
       else if (args.length > 1)
         return new ResponseAd("error", "too many arguments");
-      ad.put("url", args[0]);
+      ad.put("uri", args[0]);
 
       // Check for options.
       if (env.getBoolean("recursive"))
         ad.put("depth", env.getInt("depth", -1));
+      return ad;
+    }
 
-      // Send command to server.
-      os.write(ad.serialize());
-      os.flush();
-
-      // Read response from server.
-      try {
-        Ad res = Ad.parse(is);
-
-        // Check if the server returned a response ad.
-        if (ResponseAd.is(res))
-          return new ResponseAd(res);
-
-        // For now just print the ugly ad unformatted.
-        System.out.println(res.toJSON());
-        return new ResponseAd("success");
-      } catch (Exception e) {
-        return new ResponseAd("error", "malformed response from server");
-      }
+    public boolean handle(Ad ad) {
+      System.out.println(ad);
+      return false;
     }
   }
 
   static class StorkQHandler extends StorkCommand {
+    private int received = 0;
+
     GetOpts parser(GetOpts base) {
       GetOpts opts = new GetOpts(base);
 
@@ -148,49 +171,7 @@ public class StorkClient {
       return opts;
     }
 
-    ResponseAd sendRequest(Ad ad) throws Exception {
-      int received = 0, expecting;
-
-      os.write(ad.serialize());
-      os.flush();
-
-      // Read and print Ads until response ad is found
-      try {
-        for (ad = Ad.parse(is); !ad.has("response"); received++) {
-          System.out.print(ad+"\n\n");
-          ad = Ad.parse(is);
-        }
-      } catch (Exception e) {
-        return new ResponseAd("error", e.getMessage());
-      }
-
-      // We're done once we get a response ad.
-      String msg = null;
-      ResponseAd res = new ResponseAd(ad);
-
-      expecting = res.getInt("count");
-      String not_found = res.get("not_found");
-
-      // Report how many ads we received.
-      if (expecting >= 0 && received != expecting) {
-        msg = "Warning: expecting "+expecting+" job ad(s), "+
-              "but received "+received+"!\n";
-      } else if (received > 0) {
-        msg = "Received "+received+" job ad(s)";
-        if (not_found != null)
-          msg += ", but some jobs not found: "+not_found+"\n";
-        else
-          msg += ".\n";
-      } else if (res.success()) {
-        msg = "No jobs found...\n";
-      }
-
-      if (msg != null) System.out.println(msg);
-
-      return res;
-    }
-
-    ResponseAd handle() throws Exception {
+    public Ad command() {
       Ad ad = new Ad();
       ResponseAd res;
       Range range = new Range();
@@ -219,9 +200,49 @@ public class StorkClient {
         ad.put("range", range.toString());
       if (status != null)
         ad.put("status", status);
+      return ad;
+    }
+
+    public boolean handle(Ad ad) {
+      // If it's not a response ad, print it.
+      // TODO: Presentation.
+      if (!ResponseAd.is(ad)) {
+        received += ad.count();
+        System.out.println(ad+"\n\n");
+        return true;
+      }
+
+      ResponseAd res = new ResponseAd(ad);
+
+      // Check if there was an error.
+      if (res.error())
+        throw new FatalEx(res.message());
+
+      int expecting = res.getInt("count");
+      String not_found = res.get("not_found");
+      String msg = null;
+
+      // Report how many ads we received.
+      if (expecting >= 0 && received != expecting) {
+        msg = "Warning: expecting "+expecting+" job ad(s), "+
+              "but received "+received+"!\n";
+      } else if (received > 0) {
+        msg = "Received "+received+" job ad(s)";
+        if (not_found != null)
+          msg += ", but some jobs not found: "+not_found+"\n";
+        else
+          msg += ".\n";
+      } else if (res.success()) {
+        msg = "No jobs found...\n";
+      }
+
+      if (msg != null) System.out.println(msg);
+
+      return false;
 
       // If we're watching, keep resending every interval.
       // TODO: Make sure clearing is portable.
+      /*
       if (watch > 0) while (true) {
         System.out.print("\033[H\033[2J");
         System.out.print("Querying every "+watch+" sec...\n\n");
@@ -235,6 +256,7 @@ public class StorkClient {
       } else {
         res = sendRequest(ad);
       } return res;
+      */
     }
   }
 
@@ -254,36 +276,30 @@ public class StorkClient {
       return opts;
     }
 
-    ResponseAd handle() throws Exception {
+    public Ad command() {
       Range range = new Range();
       Ad ad = new Ad();
       ad.put("command", "stork_rm");
 
-      // Arg check
+      // Arg check.
       if (args.length < 1)
-        return new ResponseAd("error", "not enough arguments");
+        throw new FatalEx("not enough arguments");
 
-      // Parse arguments
+      // Parse arguments.
       for (String s : args) {
         Range r = Range.parseRange(s);
         if (r == null)
-          return new ResponseAd("error", "invalid argument: "+s);
+          throw new FatalEx("invalid argument: "+s);
         range.swallow(r);
       }
 
       ad.put("range", range.toString());
+      return ad;
+    }
 
-      // Write request ad
-      os.write(ad.serialize());
-      os.flush();
-
-      // Read and print Ads until response ad is found
-      ad = Ad.parse(is);
-
-      if (ad == null || !ResponseAd.is(ad))
-        return new ResponseAd("error", "invalid response ad received");
-      else
-        return new ResponseAd(ad);
+    public boolean handle(Ad ad) {
+      System.out.println(ad);
+      return false;
     }
   }
 
@@ -302,7 +318,7 @@ public class StorkClient {
       return opts;
     }
 
-    ResponseAd handle() throws Exception {
+    public Ad command() {
       Ad ad = new Ad();
       ad.put("command", "stork_info");
 
@@ -311,28 +327,18 @@ public class StorkClient {
         ad.put("type", args[0]);
       else
         ad.put("type", "module");
+      return ad;
+    }
 
-      // Write request ad
-      os.write(ad.serialize());
-      os.flush();
-
-      // Read and print Ads until response ad is found
-      while (true) try {
-        ad = Ad.parse(is);
-
-        if (!ad.has("response"))
-          System.out.println(ad);
-        else
-          return new ResponseAd(ad);
-      } catch (Ad.ParseError e) {
-        return new ResponseAd("error", "malformed server response");
-      } catch (IOException e) {
-        return new ResponseAd("error", "error communicating with server");
-      }
+    public boolean handle(Ad ad) {
+      System.out.println(ad);
+      return false;
     }
   }
 
   static class StorkSubmitHandler extends StorkCommand {
+    private int submitted = 0, accepted = 0;
+
     GetOpts parser(GetOpts base) {
       GetOpts opts = new GetOpts(base);
 
@@ -389,9 +395,58 @@ public class StorkClient {
       }
     }
 
-    // Attempt to submit a job and return a response ad.
-    private ResponseAd submit_job(Ad ad) {
-      ad.put("command", "stork_submit");
+    private boolean parsedArgs = false;
+    private PushbackInputStream stream = null;
+    private boolean echo = true;
+
+    // A little bit on the hacky side.
+    public boolean hasMoreCommands() {
+      if (stream != null) try {
+        int b = stream.read();
+        if (b == -1) return false;
+        stream.unread(b);
+        return true;
+      } catch (Exception e) { 
+        // Fall through to return.
+      } return false;
+    }
+
+    public Ad command() {
+      Ad ad;
+
+      // Determine if we're going to read from stream or generator our
+      // own ad.
+      if (!parsedArgs) switch (args.length) {
+        default:
+          throw new FatalEx("wrong number of arguments");
+        case 2:  // src_url and dest_url
+          return new Ad("src",  args[0])
+                   .put("dest", args[1]);
+        case 1:  // From file
+          try {
+            stream = new PushbackInputStream(new FileInputStream(args[0]));
+          } catch (Exception e) {
+            throw new FatalEx("could not open file: "+args[0]);
+          } break;
+        case 0:  // From stdin
+          // Check if we're running on a console first. If so, give
+          // them the fancy prompt. TODO: use readline()
+          if (System.console() != null) {
+            echo = false;
+            System.out.print("Begin typing submit ads (ctrl+D to end):\n\n");
+          } try {
+            stream = new PushbackInputStream(System.in);
+          } catch (Exception e) {
+            throw new FatalEx("could not open standard input");
+          }
+      } parsedArgs = true;
+
+      assert stream != null;
+      try {
+        ad = Ad.parse(stream).put("command", "stork_submit");
+      } catch (Exception e) {
+        throw new FatalEx("could not parse input ad");
+      }
 
       // Replace x509_proxy in job ad.
       // TODO: A better way of doing this would be nice...
@@ -413,74 +468,65 @@ public class StorkClient {
         System.exit(1);
       }
 
-      // Write ad and return response.
-      try {
-        os.write(ad.serialize());
-        os.flush();
-
-        return new ResponseAd(Ad.parse(is));
-      } catch (Exception e) {
-        return new ResponseAd("error", e.getMessage());
-      }
+      // Print the command sent if we're echoing.
+      if (echo)
+        System.out.println(ad+"\n\n");
+      return ad;
     }
 
-    // Submit multiple ads from a stream, return ad reporting statistics.
-    private ResponseAd submit_from_stream(final InputStream in, boolean print) {
-      Ad ad = null;
-      ResponseAd res;
-      int js = 0, ja = 0;  // jobs sent and jobs accepted
-
-      while (true) try {
-        ad = Ad.parse(in);
-
-        if (ad == null) break;
-
-        if (print) System.out.println(ad);
-
-        // Submit job and check response.
-        print_response(res = submit_job(ad));
-
-        js++;
-
-        if (res.success()) ja++;
-      } catch (Exception e) {
-        System.out.println("\nError: "+e.getMessage());
-        e.printStackTrace();
-      }
-
-      // Report number of submissions that were accepted. If none were
-      // accepted, return an error.
-      return new ResponseAd(ja > 0 ? "success" : "error",
-                            ja+" of "+js + " jobs successfully submitted");
+    public boolean handle(Ad ad) {
+      ResponseAd res = new ResponseAd(ad);
+      submitted++;
+      if (res.error())
+        System.out.println(res.toDisplayString());
+      else
+        accepted++;
+      return false;
     }
 
-    ResponseAd handle() throws Exception {
-      Ad ad;
-      ResponseAd res;
-      Console cons;
+    public void complete() {
+      if (stream != null && stream != System.in) try {
+        stream.close();
+      } catch (Exception e) {
+        // Who cares...
+      } System.out.println(
+        (accepted > 0 ? "Success: " : "Error: ") +
+        accepted+" of "+submitted+" jobs successfully submitted");
+    }
+  }
 
-      switch (args.length) {
-        case 0:  // From stdin
-          cons = System.console();
+  // Handler for sending a raw command ad to the server.
+  static class StorkRawHandler extends StorkCommand {
+    GetOpts parser(GetOpts base) {
+      GetOpts opts = new GetOpts(base);
 
-          // Check if we're running on a console first. If so, give
-          // them the fancy prompt. TODO: use readline()
-          if (cons != null) {
-            System.out.println("Begin typing Ad (ctrl-D to end):");
-            return submit_from_stream(System.in, false);
-          } else {
-            return submit_from_stream(System.in, true);
-          }
-        case 1:  // From file
-          FileInputStream fis = new FileInputStream(new File(args[0]));
-          return submit_from_stream(fis, true);
-        case 2:  // src_url and dest_url
-          ad = new SubmitAd(args[0], args[1]);
-          print_response(res = submit_job(ad));
-          return res;
-        default:
-          return new ResponseAd("error", "wrong number of arguments");
+      opts.prog = "stork_raw";
+      opts.args = new String[] { "[ad_file]" };
+      opts.desc = new String[] {
+        "Send a raw command ad to a server, for debugging purposes.",
+        "If no input ad is specified, reads from standard input."
+      };
+
+      return opts;
+    }
+
+    public Ad command() {
+      if (args.length > 0) try {
+        return Ad.parse(new FileInputStream(args[0]));
+      } catch (Exception e) {
+        throw new FatalEx("couldn't read ad from file");
+      } else try {
+        System.out.print("Type a command ad:\n\n");
+        return Ad.parse(System.in);
+      } catch (Exception e) {
+        throw new FatalEx("couldn't read ad from stream");
       }
+    }
+        
+    // Keep parsing ads from the server forever.
+    public boolean handle(Ad ad) {
+      System.out.println(ad);
+      return true;
     }
   }
 
@@ -522,6 +568,8 @@ public class StorkClient {
       return;
     }
 
+    // Initialize command handler. TODO: Merge args and env, also check
+    // opts parser for errors.
     scmd.init(env, args);
 
     // Try to do connection stuff.
@@ -536,15 +584,18 @@ public class StorkClient {
     }
 
     // Execute the command handler.
-    ResponseAd ad = scmd.handle(server_sock);
-    System.out.println("Done: "+ad.toDisplayString());
+    try {
+      Ad ad = scmd.handle(server_sock);
+      System.out.println("Done: "+ad);
+    } catch (Exception e) {
+      System.out.println("Error: "+e.getMessage());
+    }
   }
 
-  public StorkClient(Ad env) {
-    this.env = env;
-  }
 
   public StorkClient() {
-    env = new Ad();
+    this(new Ad());
+  } public StorkClient(Ad env) {
+    this.env = env;
   }
 }

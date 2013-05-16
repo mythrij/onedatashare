@@ -9,7 +9,6 @@ public class StorkTransfer implements Runnable {
   SubmitAd ad;
   StorkSession sess;
   int rv = -1;
-  AdSink sink = new AdSink();
 
   public StorkTransfer(StorkSession sess, SubmitAd ad) {
     this.sess = sess;
@@ -17,17 +16,15 @@ public class StorkTransfer implements Runnable {
   }
 
   public void run() {
+    run(null);
+  } public void run(Pipe<Ad> pipe) {
     try {
-      sess.setSink(sink);
+      sess.setPipe(pipe);
       sess.transfer(ad.src.getPath(), ad.dest.getPath());
       done(0);
-    } catch (Exception e) {
+    } catch (Throwable e) {
       done(1);
     }
-  }
-
-  public void start() {
-    new Thread(this).start();
   }
 
   public void stop() {
@@ -45,9 +42,5 @@ public class StorkTransfer implements Runnable {
     } catch (Exception e) {
       return 1;
     } return rv;
-  }
-
-  public Ad getAd() {
-    return sink.getAd();
   }
 }

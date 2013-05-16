@@ -101,28 +101,28 @@ public class ExternalModule extends TransferModule {
     throw new UnsupportedOperationException();
   }
 
-  public ExternalModule(File exe) throws Exception {
+  public ExternalModule(File exe) {
     if (!exe.isAbsolute())
       exe = exe.getAbsoluteFile();
     this.exe = exe;
 
     // Check that it's a valid executable.
     if (!exe.canExecute() || !exe.isFile() || exe.isHidden())
-      throw new Exception("file is not a valid executable");
+      throw new FatalEx("file is not a valid executable");
 
     // Read info ad from executable.
     Process p = execute("-i");
 
     // Make sure it worked first!
     if (p == null)
-      throw new Exception("couldn't execute transfer module");
+      throw new FatalEx("couldn't execute transfer module");
 
     // Attempt to read ad.
     try {
       Ad ad = Ad.parse(p.getInputStream());
       info_ad = new ModuleInfoAd(ad);
     } catch (Exception e) {
-      throw new Exception("couldn't parse module info ad");
+      throw new FatalEx("couldn't parse module info ad");
     }
   }
 

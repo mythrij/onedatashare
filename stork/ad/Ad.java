@@ -71,19 +71,18 @@ import java.io.*;
 
 public class Ad implements Iterable<Ad> {
   // The heart of the structure.
-  final Map<String, Object> map;
-  Ad next = null, prev = null;
+  protected final Map<String, Object> map;
+  Ad next = null;
   int mode = AD;
 
   // Some compiled patterns used for parsing.
-  static final Pattern
+  public static final Pattern
     IGNORE = Pattern.compile("(\\s*((#|//).*$)?)+", Pattern.MULTILINE),
     PRINTABLE = Pattern.compile("[\\p{Print}\r\n]*"),
     DECL_ID = Pattern.compile("[a-z_]\\w*", Pattern.CASE_INSENSITIVE);
 
-  // Parser modes.
-  public static int AD   = 0; 
-  public static int JSON = 1; 
+  public static final int
+    AD = 0, JSON = 1, STRING = 1, NUMBER = 2, BOOL = 3;
 
   public static class ParseError extends RuntimeException {
     public ParseError(String m) {
@@ -96,25 +95,31 @@ public class Ad implements Iterable<Ad> {
   }
 
   // Create an ad with given key and value.
-  public Ad(Object key, int value) {
+  public Ad(String key, int value) {
     this(); put(key, value);
-  } public Ad(Object key, long value) {
+  } public Ad(String key, long value) {
     this(); put(key, value);
-  } public Ad(Object key, double value) {
+  } public Ad(String key, double value) {
     this(); put(key, value);
-  } public Ad(Object key, boolean value) {
+  } public Ad(String key, boolean value) {
     this(); put(key, value);
-  } public Ad(Object key, Number value) {
+  } public Ad(String key, Number value) {
     this(); put(key, value);
-  } public Ad(Object key, String value) {
+  } public Ad(String key, String value) {
     this(); put(key, value);
-  } public Ad(Object key, Ad value) {
+  } public Ad(String key, Ad value) {
     this(); put(key, value);
   }
 
   // Merges all of the ads passed into this ad.
   public Ad(Ad... bases) {
     this(); merge(bases);
+  }
+
+  // Allows subclasses to take maps from input ads directly to prevent
+  // needless copying.
+  protected Ad(boolean copy, Ad ad) {
+    map = copy ? new LinkedHashMap<String, Object>(ad.map) : ad.map;
   }
 
   // Convenient method for throwing parse errors.
@@ -221,7 +226,7 @@ public class Ad implements Iterable<Ad> {
         case T_TF : return "separator ("+s+") or end of ad: "+e;
         case T_SC : return "identifier or end of ad: "+e;
         case T_RB : return "nothing!";
-      } throw new Error("unknown token: "+t);
+      } return "unknown";
     }
 
     // "Chomp" off a piece of the input using the matcher, returning the
@@ -446,7 +451,7 @@ public class Ad implements Iterable<Ad> {
     return def;
   }
 
-  // Get an inner ad from this ad. Defaults to an empty ad. Should this
+  // Get an inner ad from this ad. Defaults to null. Should this
   // parse strings?
   public Ad getAd(Object s) {
     return getAd(s, null);
@@ -454,11 +459,11 @@ public class Ad implements Iterable<Ad> {
     Object o = getObject(s);
     if (s != null && o instanceof Ad)
       return (Ad)o;
-    return (def == null) ? new Ad() : def;
+    return def;
   }
     
   // Look up an object by its key. Handles recursive ad lookups.
-  private synchronized Object getObject(Object key) {
+  protected synchronized Object getObject(Object key) {
     if (key == null)
       throw PE("null key given");
     return getObject(key.toString().toLowerCase());
@@ -564,22 +569,11 @@ public class Ad implements Iterable<Ad> {
 
   // Chaining methods
   // ----------------
-  // Get the previous ad in this chain.
-  public synchronized Ad prev() {
-    return prev;
-  }
-
   // Insert an ad after this ad in the chain. If null, "cuts" the chain.
   // Returns the inserted ad.
   public synchronized Ad next(Ad ad) {
-    Ad on = next;
     next = ad;
-    if (on != null) {
-      on.prev = ad;
-    } if (ad != null) {
-      ad.next = on;
-      ad.prev = this;
-    } return ad;
+    return ad;
   }
 
   // Get the next ad in the chain.
@@ -592,20 +586,13 @@ public class Ad implements Iterable<Ad> {
     return next != null;
   }
 
-  // Remove this ad from the chain, linking the two ends.
-  public synchronized void remove() {
-    if (next != null) next.prev = prev;
-    if (prev != null) prev.next = next;
-    next = prev = null;
-  }
-
   // Get an iterator which goes over each ad in the chain.
   public synchronized Iterator<Ad> iterator() {
     return new Iterator<Ad>() {
-      Ad ad = Ad.this, prev = null;
+      Ad ad = Ad.this;
       public boolean hasNext() { return ad != null; }
-      public Ad next() { prev = ad; ad = prev.next; return prev; }
-      public void remove() { prev.remove(); }
+      public Ad next() { Ad a = ad; ad = a.next; return a; }
+      public void remove() { }
     };
   }
 
@@ -616,6 +603,13 @@ public class Ad implements Iterable<Ad> {
   // Get the number of fields in this ad.
   public synchronized int size() {
     return map.size();
+  }
+
+  // Get the number of sub ads in this ad.
+  public int count() {
+    int i = 1;
+    if (hasNext()) for (Ad a : next) i++;
+    return i;
   }
 
   // Check if fields are present in the ad.
@@ -629,6 +623,17 @@ public class Ad implements Iterable<Ad> {
     for (String k : keys) if (getObject(k) == null)
       return k;
     return null;
+  }
+
+  // Get the type of an entry in this ad. Returns -1 if the key is not in
+  // the ad or if a catastrophe happened and something weird was found.
+  public int typeOf(String key) {
+    Object o = getObject(key);
+    return (o == null)            ? -1 :
+           (o instanceof Ad)      ? AD :
+           (o instanceof String)  ? STRING :
+           (o instanceof Number)  ? NUMBER :
+           (o instanceof Boolean) ? BOOL : -1;
   }
 
   // Merge ads into this one.

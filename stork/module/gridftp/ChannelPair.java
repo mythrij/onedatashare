@@ -36,9 +36,9 @@ public class ChannelPair {
   // Create a control channel pair.
   public ChannelPair(ControlChannel sc, ControlChannel dc) {
     if (sc == null || dc == null) {
-      throw new Error("ChannelPair called with null args");
+      throw new FatalEx("ChannelPair called with null args");
     } if (sc.local && dc.local) {
-      throw E("file-to-file not supported");
+      throw new FatalEx("file-to-file not supported");
     } else if (sc.local) {
       rc = this.dc = dc;
       oc = this.sc = sc;
@@ -54,7 +54,7 @@ public class ChannelPair {
   // Pair a channel with a new local channel. Note: doesn't duplicate().
   public ChannelPair(ControlChannel cc) throws Exception {
     if (cc.local)
-      throw E("cannot create local pair for local channel");
+      throw new FatalEx("cannot create local pair for local channel");
     rc = dc = cc;
     oc = sc = new ControlChannel(cc);
   }
@@ -73,21 +73,30 @@ public class ChannelPair {
   }
 
   // Pipe a PASV command to remote channel and set local channel active.
+  // We should ignore the returned IP in case of a malicious server, and
+  // simply subtitute the remote server's IP.
   public void pipePassive() throws Exception {
     String cmd = rc.fc.isIPv6() ? "EPSV" : "PASV";
     rc.write(cmd, rc.new Handler() {
-      public Reply handleReply() throws Exception {
-        Reply r = rc.cc.read();
+      public Reply handleReply() {
+        Reply r = rc.readChannel();
         String s = r.getMessage().split("[()]")[1];
         HostPort hp = new HostPort(s);
 
-        if (oc.local)
+        // Fake the IP address.
+        hp = new HostPort(rc.getIP(), hp.getPort());
+
+        D("Making active connection to: "+hp.getHost()+":"+hp.getPort());
+
+        if (oc.local) try {
           oc.facade.setActive(hp);
-        else if (oc.fc.isIPv6())
+        } catch (Exception e) {
+          throw new FatalEx(e.getMessage(), e);
+        } else if (oc.fc.isIPv6()) {
           oc.execute("EPRT "+hp.toFtpCmdArgument());
-        else
+        } else {
           oc.execute("PORT "+hp.toFtpCmdArgument());
-        dc_ready = true;
+        } dc_ready = true;
         return r;
       }
     });

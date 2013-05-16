@@ -40,10 +40,10 @@ public class StorkMain {
     def_env.put("libexec", "../libexec/");
 
     // Initialize the default command line parser.
-    opts.prog = "StorkMain.class";
+    opts.prog = "stork";
     opts.args = new String[] { "<command> [args...]" };
     opts.desc = new String[] {
-      "Protip: you shouldn't be running me directly! :)" };
+      "Execute a Stork command. TODO: Auto-generate command list." };
 
     opts.add('C', "conf", "specify custom path to stork.conf").parser =
       opts.new SimpleParser("conf", "PATH", false);
@@ -185,7 +185,7 @@ public class StorkMain {
       String host = env.get("host", "127.0.0.1");
       int port = env.getInt("port", DEFAULT_PORT);
 
-      StorkScheduler s = StorkScheduler.instance(env);
+      StorkScheduler s = new StorkScheduler(new Ad("env", env));
       NettyStuff.TcpInterface si;
 
       try {

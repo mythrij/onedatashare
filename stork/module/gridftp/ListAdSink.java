@@ -25,7 +25,7 @@ class ListAdSink implements DataSink {
   private boolean closed = false;
 
   // Pass an ad to write into and whether or not this is an mlsx listing.
-  public ListAdSink(Ad ad, boolean mlsx) throws Exception {
+  public ListAdSink(Ad ad, boolean mlsx) {
     this.ad = ad;
     this.mlsx = mlsx;
     sb = new StringBuilder();
@@ -43,8 +43,12 @@ class ListAdSink implements DataSink {
   }
 
   // Wait for the sink to be closed.
-  public synchronized void waitFor() throws Exception {
-    while (!closed) wait();
+  public synchronized void waitFor() {
+    while (!closed) try {
+      wait();
+    } catch (Exception e) {
+      // Do nothing.
+    }
   }
 
   public synchronized void close() throws IOException {
@@ -77,6 +81,7 @@ class ListAdSink implements DataSink {
       String line = m.group();
       try {
         MlsxEntry me = new MlsxEntry(line);
+        //System.out.println("MLSX Line: "+line);
 
         String name = me.getFileName();
         String type = me.get("type");
@@ -99,6 +104,7 @@ class ListAdSink implements DataSink {
       String line = m.group();
       try {
         FileInfo fi = new FileInfo(line);
+        //System.out.println("LIST Line: "+line);
 
         String name = fi.getName();
         boolean dir = fi.isDirectory();

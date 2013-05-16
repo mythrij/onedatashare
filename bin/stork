@@ -1,0 +1,13 @@
+#!/bin/sh
+DIR=`dirname $0`
+CLASS=stork.StorkMain
+BIN=`basename $0`
+CMD=stork_$1
+
+[ -z "$1" ] && {
+  echo "Usage: $BIN <command> [command args]"
+  exit 1
+}
+
+shift
+java "-Dstork.exedir=$DIR" -Xmx512m -cp "$DIR/stork.jar" $CLASS "$CMD" $@
