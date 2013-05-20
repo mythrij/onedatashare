@@ -3,6 +3,7 @@ package stork.scheduler;
 import stork.ad.*;
 import stork.cred.*;
 import stork.util.*;
+import static stork.util.StorkUtil.splitCSV;
 
 import java.security.*;
 
@@ -12,6 +13,7 @@ import java.security.*;
 
 public class StorkUser extends Ad {
   private CredManager cm;
+  private JobQueue queue;
 
   // The global user id map.
   private static Ad user_map = null;
@@ -29,32 +31,34 @@ public class StorkUser extends Ad {
   public static final int PASS_LEN = 6;
 
   // Filters/requirements for registration and StorkUser state.
-  private static final String[] reg_filter =
-    { "user_id", "password", "name", "email" };
-  private static final String[] reg_require =
-    { "user_id", "password" };
-  private static final String[] user_filter =
-    { "user_id", "pass_hash", "pass_salt", "name", "email" };
-  private static final String[] user_require =
-    { "user_id" };
+  private static final String reg_require =
+    "user_id, password";
+  private static final String reg_optional =
+    "name, email, contact, institution";
+  private static final String user_require =
+    "user_id";
+  private static final String user_optional =
+    "pass_hash, pass_salt, "+reg_optional;
+
+  // Normalize a user_id by lowercasing it and making sure it contains
+  // valid characters and doesn't start with a number. Returns null if
+  // it's a bad user name.
+  public static String normalize(String s) {
+    if (s == null || s.isEmpty() || !Ad.DECL_ID.matcher(s).matches())
+      return null;
+    return s.toLowerCase();
+  }
 
   // Create a new user from an ad containing hashed password and other
   // user information.
   // TODO: Verify that password hash is in proper format.
   private StorkUser(Ad ad) {
-    super(ad.filter(user_filter));
-    System.out.println("The this: "+this);
-    String r = require(user_require);
-
-    if (r != null)
-      throw new FatalEx("couldn't create user: missing field '"+r+"'");
+    super(ad.model(user_require, user_optional));
 
     // Check and sanitize user_id.
-    String user = get("user_id", "").toLowerCase();
-    if (user.isEmpty())
+    String user = normalize(get("user_id"));
+    if (user == null)
       throw new FatalEx("user id was not provided");
-    if (!Ad.DECL_ID.matcher(user).matches())
-      throw new FatalEx("invalid user id");
     put("user_id", user);
   }
 
@@ -73,13 +77,14 @@ public class StorkUser extends Ad {
   }
 
   // Register a new user and add them to the login map, only if a user
-  // by the same user_id does not already exist. Throws exception if
-  // something goes wrong.
+  // by the same user_id does not already exist. If a user attempts to
+  // register with the same user_id and password as an existing user,
+  // return that user object, assuming it's someone who forgot they had
+  // an account already. Throws exception if something goes wrong.
   public static StorkUser register(Ad ad) {
-    ad = ad.filter(reg_filter);
+    ad = ad.model(reg_require, reg_optional);
 
     // Create user. This checks and sanitizes user_id.
-    System.out.println("Before pass: "+ad);
     StorkUser su = new StorkUser(ad);
     su.setPassword(ad.get("password"));
 
@@ -87,38 +92,63 @@ public class StorkUser extends Ad {
     // synchronized on the map.
     Ad map = map();
     synchronized (map) {
-      if (lookup(su.get("user_id")) != null)
+      StorkUser u2 = lookup(su.user_id());
+      if (u2 != null) {
+        if (u2.equals(su))
+          return u2;
         throw new FatalEx("this user id is already in use");
-      map.put(su.get("user_id"), su);
+      } map.put(su.get("user_id"), su);
     } return su;
+  }
+
+  // Get the user_id from the underlying ad.
+  public String user_id() {
+    return get("user_id", "");
   }
 
   // Return the display name of the user. Either their full name or
   // their user id.
   public String name() {
-    return get("name", get("user_id"));
+    return get("name", user_id());
+  }
+
+  // Get the queue for this user.
+  public JobQueue queue() {
+    return queue;
+  }
+
+  // A user equals another user if their user_ids and their pass_hashes
+  // are the same.
+  public boolean equals(Object o) {
+    if (o instanceof Ad)
+      return ((Ad)o).filter("user_id", "pass_hash").equals(
+                this.filter("user_id", "pass_hash"));
+    return false;
+  }
+
+  public int hashCode() {
+    return filter("user_id", "pass_hash").hashCode();
   }
 
   // Check a login request. Returns the user object if the login was
-  // successful. Returns null if the user name or password was incorrect.
-  // Throws an exception if there was another problem.
+  // successful. Throws an exception if there's a problem.
   public static StorkUser login(Ad ad) {
-    String user = ad.get("user_id");
+    ad.model(reg_require, null);
+
+    String user = normalize(ad.get("user_id"));
     String pass = ad.get("password");
 
-    if (user == null || user.isEmpty())
-      throw new FatalEx("user_id was not provided");
-    if (pass == null || pass.length() < PASS_LEN)
-      throw new FatalEx("password is too short");
+    if (pass.length() < PASS_LEN)
+      throw new FatalEx("invalid username or password");
 
     StorkUser su = lookup(user);
 
     if (su == null)
-      return null;
+      throw new FatalEx("invalid username or password");
     if (!su.has("pass_hash"))
       throw new FatalEx("user's password has not been set");
     if (!su.hash(pass).equals(su.get("pass_hash")))
-      return null;
+      throw new FatalEx("invalid username or password");
     if (su.getBoolean("disabled"))
       throw new FatalEx("user is disabled");
     return su;
@@ -127,6 +157,8 @@ public class StorkUser extends Ad {
   // Lookup a Stork user by user id. Returns null if the user does
   // not exist.
   public static StorkUser lookup(String id) {
+    if ((id = normalize(id)) == null)
+      return null;
     Ad ad = map().getAd(id);
 
     if (ad == null)
@@ -136,9 +168,13 @@ public class StorkUser extends Ad {
 
     // This happens if server state has been serialized. Might throw
     // exception if the serialization was tampered with.
-    StorkUser user = new StorkUser(ad);
-    map().put(user.get("user_id"), user);
-    return user;
+    try {
+      StorkUser user = new StorkUser(ad);
+      map().put(user.user_id(), user);
+      return user;
+    } catch (Exception e) {
+      return null;
+    }
   }
 
   // Generate a random salt using a secure random number generator.
@@ -154,7 +190,7 @@ public class StorkUser extends Ad {
   // Hash a password using salt.
   // TODO: Check password constraints.
   public String hash(String pass) {
-    return hash(pass, get("user_id"), get("pass_salt"));
+    return hash(pass, user_id(), get("pass_salt"));
   } public static String hash(String pass, String user, String salt) {
     try {
       String saltpass = salt+'\n'+user+'\n'+pass;

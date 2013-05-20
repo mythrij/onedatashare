@@ -53,6 +53,11 @@ public class StorkJob extends Ad {
     return new Ad(this);
   }
 
+  // Get the user_id of the user who owns this job.
+  public String user_id() {
+    return get("user_id");
+  }
+
   // Determine either the src or dest end-point. Checks the 
   private EndPoint getEndPoint(String w) {
     Ad ea = new Ad("module", get("module"))

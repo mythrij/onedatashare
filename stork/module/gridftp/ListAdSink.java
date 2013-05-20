@@ -38,7 +38,7 @@ class ListAdSink implements DataSink {
 
   // Write a JGlobus buffer to the sink.
   public synchronized void write(Buffer buffer) throws IOException {
-    //System.out.println("Got buffer: "+new String(buffer.getBuffer()));
+    System.out.println("Got buffer: "+new String(buffer.getBuffer()));
     write(buffer.getBuffer());
   }
 
@@ -52,12 +52,10 @@ class ListAdSink implements DataSink {
   }
 
   public synchronized void close() throws IOException {
-    try {
+    if (!closed) {
       finalizeList();
-    } finally {
       closed = true;
-      notifyAll();
-    }
+    } notifyAll();
   }
 
   // Pattern to match whole lines.
@@ -110,9 +108,11 @@ class ListAdSink implements DataSink {
         boolean dir = fi.isDirectory();
         long size = fi.getSize();
 
-        if (dir)
+        if (name.equals(".") || name.equals(".."))
+          continue;
+        if (!dir)
           addFile(new Ad("name", name).put("size", size));
-        else if (!name.equals(".") && !name.equals(".."))
+        else 
           addDir(new Ad("name", name));
       } catch (Exception e) {
         e.printStackTrace();

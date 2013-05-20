@@ -21,7 +21,7 @@ public abstract class Pipeline<C,R> extends Thread {
   private final LinkedList<Wrapper> done;
   private int level;
   private PipedCommand current_cmd = null;
-  protected Handler default_handler = null;
+  //protected Handler default_handler = null;
   private boolean dead = false;
 
   // Constructor

@@ -14,6 +14,7 @@ import java.io.*;
 import org.globus.ftp.*;
 import org.globus.ftp.vanilla.*;
 import org.globus.ftp.extended.*;
+import org.globus.ftp.dc.*;
 import org.ietf.jgss.*;
 import org.gridforum.jgss.*;
 
@@ -25,7 +26,7 @@ public class ControlChannel extends Pipeline<String, Reply> {
   private FTPURI my_uri = null;
   public int port = -1;
   public final boolean local, gridftp;
-  public final GridFTPServerFacade facade;
+  public final HackedFTPServerFacade facade;
   public final HackedControlChannel fc;
   public final BasicClientControlChannel cc;
   private Set<String> features = null;
@@ -40,6 +41,44 @@ public class ControlChannel extends Pipeline<String, Reply> {
     String getIP() {
       SocketAddress sa = socket.getRemoteSocketAddress();
       return ((InetSocketAddress)sa).getAddress().getHostAddress();
+    }
+  }
+
+  // Quick hack to handle JGlobus race condition during recursive listing.
+  static class HackedFTPServerFacade extends GridFTPServerFacade {
+    public TransferThreadManager createTransferThreadManager() {
+      return new HackedThreadManager(
+        socketPool, this, localControlChannel, gSession);
+    } public HackedFTPServerFacade(GridFTPControlChannel cc) {
+      super(cc);
+    }
+  } static class HackedThreadManager extends TransferThreadManager {
+    public HackedThreadManager(SocketPool sp, GridFTPServerFacade f,
+      BasicServerControlChannel cc, org.globus.ftp.GridFTPSession s) {
+      super(sp, f, cc, s);
+      dataChannelFactory = new HackedChannelFactory();
+    }
+  } static class HackedChannelFactory extends GridFTPDataChannelFactory {
+    public DataChannel getDataChannel(Session s, SocketBox b) {
+      return new HackedDataChannel(s, b);
+    }
+  } static class HackedDataChannel extends GridFTPDataChannel {
+    public HackedDataChannel(Session session, SocketBox socketBox) {
+      super(session, socketBox);
+    } public void startTransfer(DataSink sink, BasicServerControlChannel b,
+      TransferContext c) throws Exception {
+      transferThread = new TransferSinkThread(this, socketBox, sink, b, c) {
+        public void run() {
+          try {
+            super.run();
+          } catch (Exception e) {
+            // Who cares.
+          } finally {
+            try { sink.close(); }
+            catch (Exception e) { }
+          }
+        }
+      }; transferThread.run();
     }
   }
 
@@ -106,7 +145,7 @@ public class ControlChannel extends Pipeline<String, Reply> {
       throw new FatalEx("making local facade for local channel");
     local = true;
     gridftp = rc.gridftp;
-    facade = new GridFTPServerFacade(rc.fc);
+    facade = new HackedFTPServerFacade(rc.fc);
 
     if (!rc.gridftp)
       facade.setDataChannelAuthentication(DataChannelAuthentication.NONE);

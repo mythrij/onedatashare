@@ -1,5 +1,7 @@
 package stork.ad;
 
+import static stork.util.StorkUtil.splitCSV;
+
 import java.util.*;
 import java.util.regex.*;
 import java.math.BigDecimal;
@@ -259,7 +261,7 @@ public class Ad implements Iterable<Ad> {
         case T_NUM: ad.putObject(cid, new BigDecimal(s)); break;
         case T_STR: s = unescapeString(s.substring(1, s.length()-1));
                     ad.putObject(cid, s); break;
-        case T_TF : ad.putObject(cid, new Boolean(s)); break;
+        case T_TF : ad.putObject(cid, Boolean.valueOf(s)); break;
         case T_JP : ad = ad.next(new Ad()); break;
         case T_LB : m.region(m.regionStart()-1, m.regionEnd());
                     Ad ad = Ad.parse(m);
@@ -646,6 +648,25 @@ public class Ad implements Iterable<Ad> {
     } return this;
   }
 
+  // Return a new ad containing only the given keys. Any required key that
+  // is missing will result in an error being thrown.
+  public Ad model(String required, String optional) {
+    return model(splitCSV(required), splitCSV(optional));
+  } public Ad model(String[] required, String[] optional) {
+    Ad ad = new Ad();
+    for (String s : required) {
+      Object o = getObject(s);
+      if (o == null)
+        throw new RuntimeException("missing required field: "+s);
+      ad.putObject(s, o);
+    } for (String s : required) {
+      Object o = getObject(s);
+      if (o == null)
+        continue;
+      ad.putObject(s, o);
+    } return ad;
+  }
+
   // Remove fields from this ad.
   public synchronized Ad remove(String... keys) {
     for (String k : keys)
@@ -705,6 +726,20 @@ public class Ad implements Iterable<Ad> {
     synchronized (ad) {
       return ad.map.remove(key);
     }
+  }
+
+  // Two ads are equal if they have the same keys and the corresponding
+  // values are equal.
+  public boolean equals(Object o) {
+    if (o == this)
+      return true;
+    if (o instanceof Ad)
+      return ((Ad)o).map.equals(this.map);
+    return false;
+  }
+
+  public int hashCode() {
+    return map.hashCode();
   }
 
   // Composition methods

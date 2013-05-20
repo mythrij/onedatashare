@@ -56,7 +56,10 @@ public class StorkUtil {
 
   // Split a CSV string into an array of normalized strings.
   public static String[] splitCSV(String s) {
-    String[] a = regex_csv.split(normalize(s), 0);
+    if (s == null) s = "";
+    String[] a = regex_csv.split(s, 0);
+    for (int i = 0; i < a.length; i++)
+      a[i] = normalize(a[i]);
     return (a == null) ? new String[0] : a;
   }
 

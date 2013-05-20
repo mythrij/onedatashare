@@ -52,7 +52,7 @@ public class ChannelPair {
   }
 
   // Pair a channel with a new local channel. Note: doesn't duplicate().
-  public ChannelPair(ControlChannel cc) throws Exception {
+  public ChannelPair(ControlChannel cc) {
     if (cc.local)
       throw new FatalEx("cannot create local pair for local channel");
     rc = dc = cc;
@@ -60,7 +60,7 @@ public class ChannelPair {
   }
 
   // Get a new control channel pair based on this one.
-  public ChannelPair duplicate() throws Exception {
+  public ChannelPair duplicate() {
     ChannelPair cp = new ChannelPair(sc.duplicate(), dc.duplicate());
     cp.setTypeAndMode(type, mode);
     cp.setParallelism(parallelism);
@@ -75,7 +75,7 @@ public class ChannelPair {
   // Pipe a PASV command to remote channel and set local channel active.
   // We should ignore the returned IP in case of a malicious server, and
   // simply subtitute the remote server's IP.
-  public void pipePassive() throws Exception {
+  public void pipePassive() {
     String cmd = rc.fc.isIPv6() ? "EPSV" : "PASV";
     rc.write(cmd, rc.new Handler() {
       public Reply handleReply() {
@@ -103,7 +103,7 @@ public class ChannelPair {
   }
 
   // Set the mode and type for the pair.
-  void setTypeAndMode(char t, char m) throws Exception {
+  void setTypeAndMode(char t, char m) {
     if (t > 0 && type != t) {
       type = t; sc.type(t); dc.type(t);
     } if (m > 0 && mode != m) {
@@ -112,7 +112,7 @@ public class ChannelPair {
   }
 
   // Set the parallelism for this pair.
-  void setParallelism(int p) throws Exception {
+  void setParallelism(int p) {
     //if (!rc.gridftp || parallelism == p) return;
     parallelism = p = (p < 1) ? 1 : p;
     sc.write("OPTS RETR Parallelism="+p+","+p+","+p+";", false);
@@ -126,7 +126,7 @@ public class ChannelPair {
   }
 
   // Set event frequency for this pair.
-  void setPerfFreq(int f) throws Exception {
+  void setPerfFreq(int f) {
     //if (!rc.gridftp || trev == f) return;
     trev = f = (f < 1) ? 1 : f;
     sc.exchange("TREV PERF "+f);
@@ -134,12 +134,12 @@ public class ChannelPair {
   }
 
   // Flush both channels so they are synchronized.
-  void sync() throws Exception {
+  void sync() {
     sc.flush(true); dc.flush(true);
   }
 
   // Make a directory on the destination.
-  void pipeMkdir(String path, boolean ignore) throws Exception {
+  void pipeMkdir(String path, boolean ignore) {
     if (dc.local)
       new File(path).mkdir();
     else
@@ -160,7 +160,7 @@ public class ChannelPair {
 
   // Prepare the channels to transfer an XferEntry.
   // TODO: Check for extended mode support.
-  void pipeXfer(XferList.Entry e, TransferProgress p) throws Exception {
+  void pipeXfer(XferList.Entry e, TransferProgress p) {
     System.out.println("Piping: "+e);
     if (e.dir) {
       pipeMkdir(e.dpath(), true);
@@ -173,8 +173,10 @@ public class ChannelPair {
 
       // Pipe RETR
       System.out.println("RETR going to: "+sc.port);
-      if (sc.local) {
+      if (sc.local) try {
         sc.facade.retrieve(new FileMap(path, off, len));
+      } catch (Exception ex) {
+        throw new TempEx("could not retrieve: "+ex.getMessage(), ex);
       } else if (len > -1) {
         sc.write(J("ERET P", off, len, path), hs);
       } else {
@@ -185,8 +187,10 @@ public class ChannelPair {
 
       // Pipe STOR
       System.out.println("STOR going to: "+dc.port);
-      if (dc.local) {
+      if (dc.local) try {
         dc.facade.store(new FileMap(dpath, off, len));
+      } catch (Exception ex) {
+        throw new TempEx("could not store: "+ex.getMessage(), ex);
       } else if (len > -1) {
         dc.write(J("ESTO A", off, dpath), hd);
       } else {

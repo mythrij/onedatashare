@@ -142,14 +142,21 @@ public class StorkScheduler extends Ad {
             throw new FatalEx("invalid command: "+req.cmd);
 
           // Check if the handler requires a logged in user.
-          if (handler.requiresLogin())
-            req.user = StorkUser.login(req.ad);
+          if (getBoolean("env.registration")) {
+            if (handler.requiresLogin()) try {
+              req.user = StorkUser.login(req.ad);
+            } catch (RuntimeException e) {
+              throw new FatalEx("action requires login: "+e.getMessage());
+            }
+          }
+
+          req.ad.remove("pass_hash");
 
           // Let the magic happen.
           req.done(handler.handle(req));
         } catch (Exception e) {
           e.printStackTrace();
-          req.done(new ResponseAd("error", e.getMessage()));
+          req.done(new Ad("error", e.getMessage()));
         } finally {
           System.out.println("Done with request!");
         }
@@ -161,9 +168,9 @@ public class StorkScheduler extends Ad {
   static abstract class StorkCommand {
     public abstract Ad handle(RequestContext req);
 
-    // Override for commands that don't require logon.
+    // Override this for commands that don't require logon.
     public boolean requiresLogin() {
-      return false;
+      return true;
     }
   }
 
@@ -173,7 +180,8 @@ public class StorkScheduler extends Ad {
       boolean missed = false;
 
       // Show all jobs in range matching filter.
-      List<StorkJob> jobs = job_queue.get(ad.get("range"), ad.get("status"));
+      JobQueue q = (req.user != null) ? req.user.queue() : job_queue;
+      List<StorkJob> jobs = q.get(ad.get("range"), ad.get("status"));
       int count = jobs.size();
 
       if (count < 1)
@@ -199,6 +207,10 @@ public class StorkScheduler extends Ad {
         if (sess != null) sess.close();
       }
     }
+
+    public boolean requiresLogin() {
+      return false;
+    }
   }
 
   // Handle user registration.
@@ -207,6 +219,10 @@ public class StorkScheduler extends Ad {
       System.out.println("Got registration ad: "+req.ad);
       StorkUser user = StorkUser.register(req.ad);
       return user;
+    }
+
+    public boolean requiresLogin() {
+      return false;
     }
   }
 
@@ -219,6 +235,8 @@ public class StorkScheduler extends Ad {
 
       // Add job to the job queue.
       job_queue.add(job);
+      if (req.user != null)
+        req.user.queue().add(job);
 
       Ad res = new ResponseAd("success");
       res.put("job_id", job.jobId());
@@ -290,6 +308,10 @@ public class StorkScheduler extends Ad {
       if (type.equals("server"))
         return sendServerInfo(req);
       return new ResponseAd("error", "invalid type: "+type);
+    }
+
+    public boolean requiresLogin() {
+      return false;
     }
   }
 

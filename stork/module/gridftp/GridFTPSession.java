@@ -51,8 +51,6 @@ public class GridFTPSession extends StorkSession {
       cred = CredManager.instance().getCred(opts.get("cred_token"));
     if (cred == null && has("x509_proxy"))
       cred = StorkGSSCred.fromBytes(get("x509_proxy").getBytes());
-    if (cred == null)
-      throw new FatalEx("still no cred: "+opts);
 
     // Check if we've been given an optimizer to use.
     // TODO: Replace with query to optimizer manager.
@@ -88,16 +86,11 @@ public class GridFTPSession extends StorkSession {
   }
 
   // Recusively list directories and return as an ad.
-  protected Ad listImpl(final String path, Ad opts) {
-    try {
-      return listImpl2(path, opts);
-    } catch (Exception e) {
-      throw new FatalEx(e);
-    }
-  } protected Ad listImpl2(final String path, Ad opts) throws Exception {
+  // TODO: If depth is zero, only return information about one file.
+  protected Ad listImpl(String path, Ad opts) {
     int depth = 0;
     int cur_depth = 0;
-    final Ad list = new Ad("path", path);
+    final Ad list = new Ad("name", path);
     final LinkedList<String> work = new LinkedList<String>();
     final LinkedList<Ad> work_ads = new LinkedList<Ad>();
     final String cmd;
@@ -117,11 +110,12 @@ public class GridFTPSession extends StorkSession {
     final ChannelPair cp = new ChannelPair(cc);
 
     // Check if we can do MLSD or should use LIST instead.
-    if (cp.rc.supports("MLST")) {
+    // FIXME: JGlobus' MLSD parser sucks.
+    /*if (cp.rc.supports("MLST")) {
       cmd = "MLSD ";
       is_mlsd = true;
       cp.rc.write("OPTS MLST type;size;", true);
-    } else if (cp.rc.supports("LIST")) {
+    } else */if (cp.rc.supports("LIST")) {
       cmd = "LIST ";
       is_mlsd = false;
     } else {
@@ -139,7 +133,14 @@ public class GridFTPSession extends StorkSession {
       cp.rc.write("DCAU N", true);
     }
 
-    work.add("");
+    // Make sure we can access the directory first.
+    try {
+      cc.execute("CWD "+path+"/");
+    } catch (Exception e) {
+      throw new TempEx(e.getMessage());
+    }
+
+    work.add("/");
     work_ads.add(list);
 
     // Keep listing and building subdirectory lists.
@@ -152,25 +153,35 @@ public class GridFTPSession extends StorkSession {
 
         total++;
         cp.pipePassive();
-        cp.rc.write(cmd+path+"/"+p, true, cp.rc.new XferHandler(null) {
+        cp.rc.write(cmd+"."+p, true, cp.rc.new XferHandler(null) {
           public Reply handleReply() {
             ListAdSink sink = new ListAdSink(ad, is_mlsd);
             cp.oc.facade.store(sink);
             Reply r = super.handleReply();
-            D("Got reply: "+r+", waiting for sink...");
+            D("Got reply: "+r);
+            System.out.println("Waiting for: "+cmd+"."+p);
             sink.waitFor();
-            D("Ad is: "+ad);
 
+            // Sort the dirs and the files.
+            if (ad.has("dirs"))
+              ad.put("dirs", AdSorter.sort(ad.getAd("dirs"), "name"));
+            if (ad.has("files"))
+              ad.put("files", AdSorter.sort(ad.getAd("files"), "name"));
+
+            // Add dirs to the working set.
             if (ad.has("dirs")) for (Ad a : ad.getAd("dirs")) {
-              work.add(p+"/"+a.get("name"));
+              work.add(p+a.get("name")+"/");
               work_ads.add(a);
             } return r;
           }
         });
       } try {
+        System.out.println("Syncing...");
         cp.sync();
       } catch (Exception e) {
-        System.out.println(e.getMessage());
+        if (total < 2)
+          throw new TempEx(e.getMessage());
+        e.printStackTrace();
       }
     }
 
