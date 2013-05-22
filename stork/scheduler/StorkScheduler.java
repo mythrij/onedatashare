@@ -214,11 +214,12 @@ public class StorkScheduler extends Ad {
   }
 
   // Handle user registration.
-  class StorkRegisterHandler extends StorkCommand {
+  class StorkUserHandler extends StorkCommand {
     public Ad handle(RequestContext req) {
-      System.out.println("Got registration ad: "+req.ad);
-      StorkUser user = StorkUser.register(req.ad);
-      return user;
+      System.out.println("Regitration ad: "+req.ad);
+      if (req.ad.get("action", "").equals("register"))
+        return StorkUser.register(req.ad);
+      return StorkUser.login(req.ad);
     }
 
     public boolean requiresLogin() {
@@ -430,7 +431,7 @@ public class StorkScheduler extends Ad {
     cmd_handlers.put("stork_submit", new StorkSubmitHandler());
     cmd_handlers.put("stork_rm", new StorkRmHandler());
     cmd_handlers.put("stork_info", new StorkInfoHandler());
-    cmd_handlers.put("stork_register", new StorkRegisterHandler());
+    cmd_handlers.put("stork_user", new StorkUserHandler());
 
     // Initialize transfer module set
     xfer_modules = TransferModuleTable.instance();

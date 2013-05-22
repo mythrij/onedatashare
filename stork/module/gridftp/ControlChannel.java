@@ -46,11 +46,11 @@ public class ControlChannel extends Pipeline<String, Reply> {
 
   // Quick hack to handle JGlobus race condition during recursive listing.
   static class HackedFTPServerFacade extends GridFTPServerFacade {
-    public TransferThreadManager createTransferThreadManager() {
+    public HackedFTPServerFacade(GridFTPControlChannel cc) {
+      super(cc);
+    } public TransferThreadManager createTransferThreadManager() {
       return new HackedThreadManager(
         socketPool, this, localControlChannel, gSession);
-    } public HackedFTPServerFacade(GridFTPControlChannel cc) {
-      super(cc);
     }
   } static class HackedThreadManager extends TransferThreadManager {
     public HackedThreadManager(SocketPool sp, GridFTPServerFacade f,

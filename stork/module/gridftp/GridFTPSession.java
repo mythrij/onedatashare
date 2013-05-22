@@ -137,6 +137,7 @@ public class GridFTPSession extends StorkSession {
     try {
       cc.execute("CWD "+path+"/");
     } catch (Exception e) {
+      cp.oc.close();
       throw new TempEx(e.getMessage());
     }
 
@@ -179,11 +180,14 @@ public class GridFTPSession extends StorkSession {
         System.out.println("Syncing...");
         cp.sync();
       } catch (Exception e) {
-        if (total < 2)
+        if (total < 2) {
+          cp.oc.close();
           throw new TempEx(e.getMessage());
-        e.printStackTrace();
+        } e.printStackTrace();
       }
     }
+
+    cp.oc.close();
 
     return list;
   }

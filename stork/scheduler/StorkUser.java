@@ -92,12 +92,11 @@ public class StorkUser extends Ad {
     // synchronized on the map.
     Ad map = map();
     synchronized (map) {
-      StorkUser u2 = lookup(su.user_id());
-      if (u2 != null) {
-        if (u2.equals(su))
-          return u2;
+      if (map.has(su.user_id())) try {
+        return login(ad);
+      } catch (Exception e) {
         throw new FatalEx("this user id is already in use");
-      } map.put(su.get("user_id"), su);
+      } map.put(su.user_id(), su);
     } return su;
   }
 
