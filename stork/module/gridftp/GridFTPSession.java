@@ -42,19 +42,21 @@ public class GridFTPSession extends StorkSession {
 
   // Create a new session connected to an end-point specified by a URL.
   // opts may be null.
-  public GridFTPSession(URI uri, Ad opts) {
+  public GridFTPSession(URI uri) {
+    this(uri, null);
+  } public GridFTPSession(URI uri, Ad opts) {
     super(uri, new Ad(DEFAULT_CONFIG, opts));
 
     // Check if we've been given a credential to use.
     // TODO: Automatic instantiation from MyProxy as well.
     if (has("cred_token"))
-      cred = CredManager.instance().getCred(opts.get("cred_token"));
+      cred = CredManager.instance().getCred(get("cred_token"));
     if (cred == null && has("x509_proxy"))
       cred = StorkGSSCred.fromBytes(get("x509_proxy").getBytes());
 
     // Check if we've been given an optimizer to use.
     // TODO: Replace with query to optimizer manager.
-    String optim = opts.get("optimizer", "none");
+    String optim = get("optimizer", "none");
     if (optim.equals("full_2nd"))
       optimizer = new Full2ndOptimizer();
     else if (optim.equals("full_c"))
@@ -94,7 +96,7 @@ public class GridFTPSession extends StorkSession {
     final LinkedList<String> work = new LinkedList<String>();
     final LinkedList<Ad> work_ads = new LinkedList<Ad>();
     final String cmd;
-    final boolean is_mlsd;
+    final boolean is_mlsd, use_cc;
 
     // Get options from passed ad.
     if (opts != null) {
@@ -108,23 +110,6 @@ public class GridFTPSession extends StorkSession {
 
     // Use channel pair until we have a time to do things better.
     final ChannelPair cp = new ChannelPair(cc);
-
-    // Check if we can do MLSD or should use LIST instead.
-    // FIXME: JGlobus' MLSD parser sucks.
-    /*if (cp.rc.supports("MLST")) {
-      cmd = "MLSD ";
-      is_mlsd = true;
-      cp.rc.write("OPTS MLST type;size;", true);
-    } else */if (cp.rc.supports("LIST")) {
-      cmd = "LIST ";
-      is_mlsd = false;
-    } else {
-      // Boy I sure hope this can never happen.
-      cmd = "LIST ";
-      is_mlsd = false;
-    }
-
-    D("Doing list command: "+cmd);
 
     // Turn off DCAU.
     if (cp.rc.supports("DCAU")) {
@@ -141,7 +126,7 @@ public class GridFTPSession extends StorkSession {
       throw new TempEx(e.getMessage());
     }
 
-    work.add("/");
+    work.add("");
     work_ads.add(list);
 
     // Keep listing and building subdirectory lists.
@@ -153,26 +138,23 @@ public class GridFTPSession extends StorkSession {
         final Ad ad = work_ads.pop();
 
         total++;
+
         cp.pipePassive();
-        cp.rc.write(cmd+"."+p, true, cp.rc.new XferHandler(null) {
+        cp.rc.write("LIST ."+p, true, cp.rc.new XferHandler(null) {
           public Reply handleReply() {
-            ListAdSink sink = new ListAdSink(ad, is_mlsd);
+            ListAdSink sink = new ListAdSink(ad, false);
             cp.oc.facade.store(sink);
             Reply r = super.handleReply();
             D("Got reply: "+r);
-            System.out.println("Waiting for: "+cmd+"."+p);
+            System.out.println("Waiting for: ."+p);
             sink.waitFor();
 
-            // Sort the dirs and the files.
-            if (ad.has("dirs"))
-              ad.put("dirs", AdSorter.sort(ad.getAd("dirs"), "name"));
-            if (ad.has("files"))
-              ad.put("files", AdSorter.sort(ad.getAd("files"), "name"));
-
             // Add dirs to the working set.
-            if (ad.has("dirs")) for (Ad a : ad.getAd("dirs")) {
-              work.add(p+a.get("name")+"/");
-              work_ads.add(a);
+            if (ad.has("files")) for (Ad a : ad.getAd("files")) {
+              if (a.getBoolean("dir")) {
+                work.add(p+a.get("name")+"/");
+                work_ads.add(a);
+              }
             } return r;
           }
         });
@@ -346,5 +328,20 @@ public class GridFTPSession extends StorkSession {
       cc.pipeXfer(xl.pop(), progress);
     } cc.sync();
     return;
+  }
+
+  // Tester method for testing listing.
+  public static void main(String[] args) {
+    GridFTPSession sess = null;
+    try {
+      URI u = new URI(args[0]);
+      sess = new GridFTPSession(u);
+      System.out.println(sess.list(u.getPath()));
+    } catch (Exception e) {
+      e.printStackTrace();
+    } finally {
+      if (sess != null)
+        sess.close();
+    }
   }
 }

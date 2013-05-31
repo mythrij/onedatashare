@@ -72,19 +72,62 @@ public class ChannelPair {
     return cp;
   }
 
+  // Our slightly better HostPort.
+  private static class BetterHostPort extends HostPort {
+    public byte[] bytes;  // Only the first four bytes of this are used.
+    public int port;
+    public BetterHostPort(String csv) {
+      try {
+        bytes = new byte[6];
+        int i = 0;
+        for (String s : csv.split(","))
+          bytes[i++] = (byte) Short.parseShort(s);
+        if (i != 6)
+          throw new Exception(""+i);
+        port = ((bytes[4]&0xFF)<<8) + (bytes[5]&0xFF);
+        D("Port: "+port);
+        D("      "+(port&0xFFFF));
+      } catch (Exception e) {
+        throw new FatalEx("malformed PASV reply", e);
+      }
+    } public int getPort() {
+      return port & 0xFFFF;
+    } public String getHost() {
+      return (bytes[0]&0xFF)+"."+(bytes[1]&0xFF)+
+         "."+(bytes[2]&0xFF)+"."+(bytes[3]&0xFF);
+    } public String toFtpCmdArgument() {
+      return (bytes[0]&0xFF)+","+(bytes[1]&0xFF)+
+         ","+(bytes[2]&0xFF)+","+(bytes[3]&0xFF)+
+         ","+((port&0xFF00)>>8)+","+(port&0xFF);
+    }
+  }
+
   // Pipe a PASV command to remote channel and set local channel active.
   // We should ignore the returned IP in case of a malicious server, and
   // simply subtitute the remote server's IP.
+  // TODO: EPSV support.
   public void pipePassive() {
     String cmd = rc.fc.isIPv6() ? "EPSV" : "PASV";
     rc.write(cmd, rc.new Handler() {
       public Reply handleReply() {
         Reply r = rc.readChannel();
         String s = r.getMessage().split("[()]")[1];
-        HostPort hp = new HostPort(s);
+        BetterHostPort hp = new BetterHostPort(s);
 
-        // Fake the IP address.
-        hp = new HostPort(rc.getIP(), hp.getPort());
+        // Make sure the IP is "close" enough to the control channel IP
+        // that we should trust it. If not, change to channel IP.
+        byte[] hpb = hp.bytes;
+        byte[] ccb = rc.getIP().getAddress();
+
+        D("Current HostPort: "+hp.getHost()+":"+hp.getPort());
+        D("                  "+s);
+
+        try {
+          if (hpb[0] != ccb[0] || hpb[1] != ccb[1] || hpb[2] != ccb[2])
+            hp.bytes = ccb;
+        } catch (Exception e) {
+          hp.bytes = ccb;
+        }
 
         D("Making active connection to: "+hp.getHost()+":"+hp.getPort());
 

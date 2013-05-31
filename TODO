@@ -1,0 +1,5 @@
+(About time we had one of these...)
+
+- Support more listing formats. (5/27/13)
+- Fix GridFTP list method detection. (5/27/13)
+- Better logging solution. (5/26/13)

@@ -132,13 +132,14 @@ public class StorkUser extends Ad {
   // Check a login request. Returns the user object if the login was
   // successful. Throws an exception if there's a problem.
   public static StorkUser login(Ad ad) {
-    ad.model(reg_require, null);
+    ad.model("user_id", null);
 
     String user = normalize(ad.get("user_id"));
     String pass = ad.get("password");
+    String hash = ad.get("pass_hash");
 
-    if (pass.length() < PASS_LEN)
-      throw new FatalEx("invalid username or password");
+    if (pass == null && hash == null)
+      throw new FatalEx("no password or password hash supplied");
 
     StorkUser su = lookup(user);
 
@@ -146,7 +147,11 @@ public class StorkUser extends Ad {
       throw new FatalEx("invalid username or password");
     if (!su.has("pass_hash"))
       throw new FatalEx("user's password has not been set");
-    if (!su.hash(pass).equals(su.get("pass_hash")))
+
+    if (hash == null)
+      hash = su.hash(pass);
+
+    if (!hash.equals(su.get("pass_hash")))
       throw new FatalEx("invalid username or password");
     if (su.getBoolean("disabled"))
       throw new FatalEx("user is disabled");

@@ -33,7 +33,6 @@ public class RequestContext {
   // Put an ad in the reply queue.
   public synchronized void putReply(Ad ad) {
     if (!is_done) {
-      ad = new Ad(ad).mode(this.ad.mode());
       replies.add(ad);
       if (reply_bell != null) reply_bell.ring(ad);
       notifyAll();
@@ -62,7 +61,7 @@ public class RequestContext {
   // Called when the request is done being served.
   public synchronized void done(Ad last) {
     if (!is_done) {
-      status_ad = new Ad(last).mode(ad.mode());
+      status_ad = last;
       if (end_bell != null)
         end_bell.ring(status_ad);
       is_done = true;

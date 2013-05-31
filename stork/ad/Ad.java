@@ -92,8 +92,16 @@ public class Ad implements Iterable<Ad> {
     }
   }
 
+  // Create a new ad, plain and simple.
   public Ad() {
-    map = new LinkedHashMap<String, Object>();
+    this(true, null);
+  }
+
+  // Allows subclasses to take maps from input ads directly to prevent
+  // needless copying.
+  protected Ad(boolean copy, Ad ad) {
+    map = (ad == null) ? new LinkedHashMap<String, Object>() :
+          (copy) ? new LinkedHashMap<String, Object>(ad.map) : ad.map;
   }
 
   // Create an ad with given key and value.
@@ -116,12 +124,6 @@ public class Ad implements Iterable<Ad> {
   // Merges all of the ads passed into this ad.
   public Ad(Ad... bases) {
     this(); merge(bases);
-  }
-
-  // Allows subclasses to take maps from input ads directly to prevent
-  // needless copying.
-  protected Ad(boolean copy, Ad ad) {
-    map = copy ? new LinkedHashMap<String, Object>(ad.map) : ad.map;
   }
 
   // Convenient method for throwing parse errors.
@@ -368,19 +370,34 @@ public class Ad implements Iterable<Ad> {
   static Pattern AD_END = Pattern.compile("(?<=\\])");
 
   // Parse an input stream into this ad. XXX This is hacky and bad.
-  public synchronized Ad parseInto(InputStream is) throws IOException {
-    StringBuilder sb = new StringBuilder(1024);
-    Parser p = new Parser(this);
+  public synchronized Ad parseInto(InputStream is) {
+    try {
+      StringBuilder sb = new StringBuilder(1024);
+      Parser p = new Parser(this);
 
-    for (int c = is.read(); c >= 0; c = is.read()) {
-      sb.append((char)c);
-      if (c != ']' && c != '}') continue;
-      Ad ad = p.write(sb);
-      if (ad != null) return this;
-      sb = new StringBuilder(1024);
-    } return null;
-  } public static Ad parse(InputStream is) throws IOException {
+      for (int c = is.read(); c >= 0; c = is.read()) {
+        sb.append((char)c);
+        if (c != ']' && c != '}') continue;
+        Ad ad = p.write(sb);
+        if (ad != null) return this;
+        sb = new StringBuilder(1024);
+      } return null;
+    } catch (Exception e) {
+      throw new RuntimeException("couldn't parse: "+e.getMessage(), e);
+    }
+  } public static Ad parse(InputStream is) {
     return new Ad().parseInto(is);
+  }
+
+  // Parse from a file.
+  public synchronized Ad parseInto(File f) {
+    try {
+      return parseInto(new FileInputStream(f));
+    } catch (Exception e) {
+      throw new RuntimeException("couldn't parse: "+e.getMessage(), e);
+    }
+  } public static Ad parse(File f) {
+    return new Ad().parseInto(f);
   }
 
   // Access methods
@@ -659,7 +676,7 @@ public class Ad implements Iterable<Ad> {
       if (o == null)
         throw new RuntimeException("missing required field: "+s);
       ad.putObject(s, o);
-    } for (String s : required) {
+    } for (String s : optional) {
       Object o = getObject(s);
       if (o == null)
         continue;

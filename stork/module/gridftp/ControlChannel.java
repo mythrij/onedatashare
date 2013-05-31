@@ -38,9 +38,9 @@ public class ControlChannel extends Pipeline<String, Reply> {
       super(host, port);
     }
 
-    String getIP() {
+    InetAddress getIP() {
       SocketAddress sa = socket.getRemoteSocketAddress();
-      return ((InetSocketAddress)sa).getAddress().getHostAddress();
+      return ((InetSocketAddress)sa).getAddress();
     }
   }
 
@@ -229,6 +229,30 @@ public class ControlChannel extends Pipeline<String, Reply> {
     }
   }
 
+  // A handler for reading lists over the control channel.
+  class StatHandler extends Handler {
+    private Ad ad;
+
+    public StatHandler(Ad ad) {
+      this.ad = ad;
+    }
+
+    public Reply handleReply() {
+      Reply r = readChannel();
+      ListAdSink sink = new ListAdSink(ad, false);
+
+      System.out.println(r.getMessage());
+
+      if (!Reply.isPositiveCompletion(r))
+        throw new FatalEx("couldn't list: "+r);
+      sink.write(r.getMessage().getBytes());
+      try {
+        sink.close();
+      } catch (Exception e) { }
+      return r;
+    }
+  }
+
   // Special handler for doing file transfers.
   class XferHandler extends Handler {
     ProgressListener pl = null;
@@ -311,7 +335,7 @@ public class ControlChannel extends Pipeline<String, Reply> {
   }
 
   // Get the IP from the remote server as a string.
-  public String getIP() {
+  public InetAddress getIP() {
     return fc.getIP();
   }
 }
