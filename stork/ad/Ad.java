@@ -464,9 +464,9 @@ public class Ad implements Iterable<Ad> {
     if (o instanceof Boolean)
       return ((Boolean)o).booleanValue();
     if (o instanceof String)
-      return Boolean.getBoolean((String)o);
+      return ((String)o).toLowerCase().equals("true");
     if (o instanceof Number)
-      return ((Number)o).intValue() != 0;
+      return ((Number)o).intValue() > 0;
     return def;
   }
 

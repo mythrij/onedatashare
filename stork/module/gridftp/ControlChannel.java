@@ -255,10 +255,12 @@ public class ControlChannel extends Pipeline<String, Reply> {
 
   // Special handler for doing file transfers.
   class XferHandler extends Handler {
-    ProgressListener pl = null;
+    ProgressListener pl = new ProgressListener();
+    GridFTPSession sess;
 
-    public XferHandler(TransferProgress p) {
-      if (p != null) pl = new ProgressListener(p);
+    // Hack until we get something better.
+    public XferHandler(GridFTPSession sess) {
+      this.sess = sess;
     }
 
     public synchronized Reply handleReply() {
@@ -270,11 +272,8 @@ public class ControlChannel extends Pipeline<String, Reply> {
         case 111:  // Restart marker
           break;   // Just ignore for now...
         case 112:  // Progress marker
-          if (pl != null)
-            pl.markerArrived(new PerfMarker(r.getMessage()));
           D("Got marker:", r);
-          if (pl == null)
-            D("But no progress listener...");
+          sess.reportProgress(pl.parseMarker(r));
           break;
         case 226:  // Transfer complete!
           return r;

@@ -19,7 +19,7 @@ public class StorkTransfer implements Runnable {
     run(null);
   } public void run(Pipe<Ad> pipe) {
     try {
-      sess.setPipe(pipe);
+      sess.setPipe(pipe.new End());
       sess.transfer(ad.src.getPath(), ad.dest.getPath());
       done(0);
     } catch (Throwable e) {

@@ -144,7 +144,7 @@ public class StorkClient {
   }
 
   static class StorkQHandler extends StorkCommand {
-    private int received = 0;
+    boolean count_only = false;
 
     GetOpts parser(GetOpts base) {
       GetOpts opts = new GetOpts(base);
@@ -183,6 +183,12 @@ public class StorkClient {
 
       ad.put("command", "stork_q");
 
+      // Check command line options.
+      if (env.getBoolean("count"))
+        ad.put("count", count_only = true);
+      if (env.getBoolean("reverse"))
+        ad.put("reverse", true);
+
       // Parse arguments
       for (String s : args) {
         Range r = Range.parseRange(s);
@@ -204,41 +210,38 @@ public class StorkClient {
     }
 
     public boolean handle(Ad ad) {
-      // If it's not a response ad, print it.
-      // TODO: Presentation.
-      if (!ResponseAd.is(ad)) {
-        received += ad.count();
-        System.out.println(ad+"\n\n");
-        return true;
+      // Check if we just wanted the count.
+      if (count_only) {
+        if (ad.has("error"))  // Should we print instead?
+          System.out.println(0);
+        else if (ad.has("count"))
+          System.out.println(ad.getInt("count"));
+        else
+          System.out.println(ad.count());
+        return false;
       }
-
-      ResponseAd res = new ResponseAd(ad);
 
       // Check if there was an error.
-      if (res.error())
-        throw new FatalEx(res.message());
+      if (ad.has("error"))
+        throw new FatalEx(ad.get("error"));
 
-      int expecting = res.getInt("count");
-      String not_found = res.get("not_found");
-      String msg = null;
+      // Print all the job ads. TODO: Better formatting.
+      System.out.println(ad);
 
       // Report how many ads we received.
-      if (expecting >= 0 && received != expecting) {
-        msg = "Warning: expecting "+expecting+" job ad(s), "+
-              "but received "+received+"!\n";
-      } else if (received > 0) {
-        msg = "Received "+received+" job ad(s)";
+      int count = ad.count();
+      String not_found = ad.get("not_found");
+
+      if (count > 0) {
+        String msg = "Received "+count+" job ad(s)";
         if (not_found != null)
-          msg += ", but some jobs not found: "+not_found+"\n";
+          msg += ", but some jobs were not found: "+not_found;
         else
-          msg += ".\n";
-      } else if (res.success()) {
-        msg = "No jobs found...\n";
-      }
-
-      if (msg != null) System.out.println(msg);
-
-      return false;
+          msg += ".";
+        System.out.println(msg);
+      } else {
+        System.out.println("No jobs found...");
+      } return false;
 
       // If we're watching, keep resending every interval.
       // TODO: Make sure clearing is portable.

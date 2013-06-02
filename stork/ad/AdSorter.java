@@ -43,8 +43,10 @@ public class AdSorter {
 
     public int compare(Ad a1, Ad a2) {
       for (String k : keys) {
+        int m = (k.charAt(0) == '-') ? -1 : 1;
+        if (m == -1) k = k.substring(1);
         int c = compareObjects(a1.getObject(k), a2.getObject(k));
-        if (c != 0) return (k.charAt(0) == '-') ? -c : c;
+        if (c != 0) return c*m;
       } return 0;
     }
   }
@@ -76,17 +78,12 @@ public class AdSorter {
   // Get the sorted linked ad from the sorter.
   public Ad getAd() {
     Ad first = null, ad = null;
-    if (reverse) {
-      for (Ad a : set) if (ad == null)
-        first = ad = new Ad(false, a);
-      else
-        first = new Ad(false, ad).next(first);
-    } else {
-      for (Ad a : set) if (ad == null)
-        first = ad = new Ad(false, a);
-      else
-        ad = ad.next(new Ad(false, a));
-    } return first;
+    Set<Ad> s = reverse ? set.descendingSet() : set;
+    for (Ad a : s) if (ad == null)
+      first = ad = new Ad(false, a);
+    else
+      ad = ad.next(new Ad(false, a));
+    return first;
   }
 
   // Get the number of ads in the sorter.

@@ -1,7 +1,6 @@
 [ src = "ftp://didclab-ws9/home/globus/stuff/";
-  dest = "ftp://didclab-ws9/home/globus/stuff2/";
+  dest = "ftp://didclab-ws8/home/globus/stuff/";
   #optimization = "full_2nd";
   #parallelism = "5-20";
   pipelining = 3;
-  x509_file = "/tmp/x509up_u1000";
 ]

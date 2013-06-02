@@ -42,12 +42,16 @@ public class XferList implements Iterable<XferList.Entry> {
   }
 
   private void translateAd(String path, Ad ad) {
-    if (ad.has("dirs")) for (Ad d : ad.getAd("dirs"))
-      if (d.has("name")) add(d.get("name"));
-    if (ad.has("files")) for (Ad f : ad.getAd("files"))
-      if (f.has("name")) add(f.get("name"), f.getInt("size"));
-    if (ad.has("dirs")) for (Ad d : ad.getAd("dirs"))
-      if (d.has("name")) translateAd(path+"/"+d.get("name"), d);
+    if (!ad.has("files")) return;
+
+    for (Ad a : ad.getAd("files")) if (!a.has("name")) {
+      continue;
+    } else if (a.getBoolean("file")) {
+      add(a.get("name"), a.getLong("size"));
+    } else if (a.getBoolean("dir")) {
+      add(a.get("name"));
+      translateAd(path+"/"+a.get("name"), a);
+    }
   }
 
   // An entry (file or directory) in the list.

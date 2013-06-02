@@ -146,6 +146,7 @@ public class ChannelPair {
   }
 
   // Set the mode and type for the pair.
+  // TODO: We should check to make sure both succeeded.
   void setTypeAndMode(char t, char m) {
     if (t > 0 && type != t) {
       type = t; sc.type(t); dc.type(t);
@@ -202,14 +203,14 @@ public class ChannelPair {
   }
 
   // Prepare the channels to transfer an XferEntry.
-  // TODO: Check for extended mode support.
-  void pipeXfer(XferList.Entry e, TransferProgress p) {
+  // TODO: Check for extended mode support and remove session param.
+  void pipeXfer(XferList.Entry e, GridFTPSession sess) {
     System.out.println("Piping: "+e);
     if (e.dir) {
       pipeMkdir(e.dpath(), true);
     } else {
-      ControlChannel.XferHandler hs = sc.new XferHandler(p);
-      ControlChannel.XferHandler hd = dc.new XferHandler(p);
+      ControlChannel.XferHandler hs = sc.new XferHandler(sess);
+      ControlChannel.XferHandler hd = dc.new XferHandler(sess);
 
       String path = e.path(), dpath = e.dpath();
       long off = e.off, len = e.len;

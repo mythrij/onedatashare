@@ -57,13 +57,24 @@ public abstract class StorkSession extends Ad {
 
   // Set an ad sink to write update ads into.
   // TODO: This is a temporary hack, remove me.
-  public void setPipe(Pipe<Ad> pipe) {
-    this.pipe = pipe.new End();
+  public void setPipe(Pipe<Ad>.End pipe) {
+    this.pipe = pipe;
+  }
+
+  // This should only be used by transfer modules themselves to report
+  // progress. TODO: Make protected once we get gridftp settled.
+  //protected void reportProgress(Ad... ad) {
+  public void reportProgress(Ad... ad) {
+    System.out.println("Reporting: "+ad[0]);
+    if (pipe != null) pipe.put(ad);
   }
 
   // Public interfaces to abstract methods.
-  public Ad list(String path, Ad opts) {
+  public Ad list(String path) {
+    return list(path, null);
+  } public Ad list(String path, Ad opts) {
     checkConnected();
+    path = StorkUtil.normalizePath(path);
     return listImpl(path, opts);
   }
 
@@ -76,6 +87,8 @@ public abstract class StorkSession extends Ad {
     checkConnected();
     if (pair == null)
       throw new FatalEx("session is not paired");
+    src = StorkUtil.normalizePath(src);
+    dest = StorkUtil.normalizePath(dest);
     transferImpl(src, dest, opts);
   }
 
@@ -127,11 +140,6 @@ public abstract class StorkSession extends Ad {
   // Get the paired session.
   public synchronized StorkSession pair() {
     return pair;
-  }
-
-  // Get a directory listing of a path from the session.
-  public Ad list(String path) {
-    return list(path, null);
   }
 
   // Transfer a file from this session to a paired session. Throws an

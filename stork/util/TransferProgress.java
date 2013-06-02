@@ -53,17 +53,6 @@ public class TransferProgress {
     btq = blq = 0;
   }
 
-  // Attach an AdSink to publish progress information to.
-  public synchronized void attach(Pipe<Ad>.End pipe) {
-    this.pipe = pipe;
-  }
-
-  // Publish an ad to the AdSink, if there is one.
-  private synchronized void updateAd() { 
-    if (pipe != null)
-      pipe.put(getAd());
-  }
-
   // Get the Ad representation of this transfer progress.
   public Ad getAd() {
     return getAd(new Ad());
@@ -86,7 +75,6 @@ public class TransferProgress {
     byte_progress.done = file_progress.done = 0;
     byte_progress.total = bytes;
     file_progress.total = files;
-    updateAd();
   }
 
   // Called when a transfer ends. If successful, assume any unreported
@@ -96,8 +84,6 @@ public class TransferProgress {
       end_time = now();
       if (success)
         done(byte_progress.remaining(), (int) file_progress.remaining());
-      else  // done() will update ad, so only do it if we didn't call...
-        updateAd();
     }
   }
 
@@ -123,8 +109,6 @@ public class TransferProgress {
 
     if (bytes > 0) byte_progress.add(bytes);
     if (files > 0) file_progress.add(files);
-
-    updateAd();
   }
 
   // Get the throughput in bytes per second. When doing instantaneous

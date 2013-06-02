@@ -191,7 +191,7 @@ public class StorkScheduler extends Ad {
       if (req.ad.getBoolean("count"))
         return new Ad("count", count);
       else
-        return sorter.getAd().put("count", count);
+        return sorter.getAd();
     }
   }
 

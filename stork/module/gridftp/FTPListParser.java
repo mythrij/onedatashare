@@ -34,7 +34,7 @@ public class FTPListParser {
     Pattern.compile("[\\s\\00]*([^\\n\\r\\00]+)");
   public Ad parse(String data) {
     Matcher m = line_pattern.matcher(data);
-    AdSorter sorter = new AdSorter("dir", "name");
+    AdSorter sorter = new AdSorter("-dir", "name");
 
     while (m.find()) {
       String line = m.group(1);

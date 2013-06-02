@@ -20,25 +20,23 @@ import org.gridforum.jgss.*;
 // Listens for markers from GridFTP servers and updates transfer
 // progress statistics accordingly.
 
-public class ProgressListener implements MarkerListener {
+public class ProgressListener {
   long last_bytes = 0;
-  TransferProgress prog;
 
-  public ProgressListener(TransferProgress prog) {
-    this.prog = prog;
-  }
-
-  // When we've received a marker from the server.
-  public void markerArrived(Marker m) {
+  // When we've received a marker from the server. Return ad
+  // describing progress.
+  public Ad parseMarker(Reply r) {
+    return parseMarker(new PerfMarker(r.getMessage()));
+  } public Ad parseMarker(Marker m) {
     if (m instanceof PerfMarker) try {
       PerfMarker pm = (PerfMarker) m;
       long cur_bytes = pm.getStripeBytesTransferred();
       long diff = cur_bytes-last_bytes;
 
       last_bytes = cur_bytes;
-      prog.done(diff);
+      return new Ad("bytes_done", diff);
     } catch (Exception e) {
       // Couldn't get bytes transferred...
-    }
+    } return null;
   }
 }

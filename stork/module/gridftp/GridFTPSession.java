@@ -32,7 +32,6 @@ public class GridFTPSession extends StorkSession {
     .put("concurrency", 1)
     .put("pipelining", 20);
   
-  private TransferProgress progress = null;
   private FTPServerFacade local;
 
   private int parallelism = 1;
@@ -140,7 +139,7 @@ public class GridFTPSession extends StorkSession {
         total++;
 
         cp.pipePassive();
-        cp.rc.write("LIST ."+p, true, cp.rc.new XferHandler(null) {
+        cp.rc.write("LIST ./"+p, true, cp.rc.new XferHandler(null) {
           public Reply handleReply() {
             ListAdSink sink = new ListAdSink(ad, false);
             cp.oc.facade.store(sink);
@@ -209,16 +208,11 @@ public class GridFTPSession extends StorkSession {
       xl = new XferList(src, dest, sizeImpl(src));
     }
 
-    // Create a new progress tracker.
-    progress = new TransferProgress();
-    if (pipe != null)
-      progress.attach(pipe);
-
     // Pass the list off to the transfer() which handles lists.
     try {
       transfer(xl);
     } catch (Exception e) {
-      throw new FatalEx(e.getMessage());
+      throw new FatalEx(e.getMessage(), e);
     }
   }
 
@@ -228,7 +222,7 @@ public class GridFTPSession extends StorkSession {
     ControlChannel pcc = ((GridFTPSession) pair()).cc;
     ChannelPair cc = new ChannelPair(this.cc, pcc);
 
-    System.out.println("Setting mode and type...");
+    D("Setting mode and type...");
     //if (cc.dc.local || !cc.gridftp)
     if (cc.dc.local)
       cc.setTypeAndMode('I', 'S');
@@ -236,7 +230,7 @@ public class GridFTPSession extends StorkSession {
       cc.setTypeAndMode('I', 'E'); 
 
     // Initialize optimizer.
-    System.out.println("Initializing optimizer...");
+    D("Initializing optimizer...");
     if (optimizer == null) {
       optimizer = new Optimizer();
     } else if (xl.size() >= 1E7 || xl.size() <= 0) {
@@ -255,10 +249,11 @@ public class GridFTPSession extends StorkSession {
 
     // mkdir dest directory.
     D("Piping root transfer...");
-    cc.pipeXfer(xl.root, null);
+    cc.pipeXfer(xl.root, this);
 
-    // Let the progress monitor know we're starting.
-    progress.transferStarted(xl.size(), xl.count());
+    // Report transfer information to upper level.
+    reportProgress(new Ad("bytes_total", xl.size()).
+                      put("files_total", xl.count()));
     
     // Begin transferring according to optimizer.
     while (!xl.isEmpty()) {
@@ -314,7 +309,7 @@ public class GridFTPSession extends StorkSession {
     }
 
     // Now let it know we've ended.
-    progress.transferEnded(true);
+    reportProgress(new Ad("complete", true));
   }
 
   // Split the list over all control channels and call
@@ -325,7 +320,7 @@ public class GridFTPSession extends StorkSession {
 
     while (!xl.isEmpty()) {
       //if (!extended mode) cc.pipePassive();
-      cc.pipeXfer(xl.pop(), progress);
+      cc.pipeXfer(xl.pop(), this);
     } cc.sync();
     return;
   }

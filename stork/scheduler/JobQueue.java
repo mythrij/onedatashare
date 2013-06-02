@@ -54,11 +54,11 @@ public class JobQueue extends Ad {
   }
 
   // Search jobs by job id range and/or filter. Either can be null.
-  public List<StorkJob> get(String range, String status) {
+  public List<Ad> get(String range, String status) {
     return get((range  != null) ? Range.parseRange(range)  : null,
                (status != null) ? JobStatus.byName(status) : null);
-  } public List<StorkJob> get(Range range, JobStatus status) {
-    List<StorkJob> list = new LinkedList<StorkJob>();
+  } public List<Ad> get(Range range, JobStatus status) {
+    List<Ad> list = new LinkedList<Ad>();
 
     if (status == null && range != null)
       status = JobStatus.pending;
@@ -69,18 +69,18 @@ public class JobQueue extends Ad {
       EnumSet<JobStatus> filter = status.filter();
       if (range != null) for (int i : range) {
         StorkJob j = get(i);
-        if (j != null && filter.contains(j.status())) list.add(j);
+        if (j != null && filter.contains(j.status())) list.add(j.getAd());
       } else for (int i = 1; i <= all_jobs.size(); i++) {
         StorkJob j = get(i);
-        if (j != null && filter.contains(j.status())) list.add(j);
+        if (j != null && filter.contains(j.status())) list.add(j.getAd());
       }
     } else {
       if (range != null) for (int i : range) {
         StorkJob j = get(i);
-        if (j != null) list.add(j);
+        if (j != null) list.add(j.getAd());
       } else for (int i = 1; i <= all_jobs.size(); i++) {
         StorkJob j = get(i);
-        if (j != null) list.add(j);
+        if (j != null) list.add(j.getAd());
       }
     } return list;
   }

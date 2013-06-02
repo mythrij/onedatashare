@@ -9,12 +9,21 @@ import java.net.URI;
 
 // A representation of a transfer job submitted to Stork. The entire
 // state of the job should be stored in the ad representing this job.
-// This includes the start time
+//
+// At the start of a transfer, the transfer code may 
+//
+// As transfers progress, update ads will be sent by the underlying
+// transfer code. These update ads may contain:
+//
+// The following fields can come from the transfer module in an update ad:
+//   bytes_total - the number of bytes that will be transferred
+//   bytes_done
 
 public class StorkJob extends Ad {
   private JobStatus status = null;
   private EndPoint src, dest;
   private String x509_proxy = null;
+  private TransferProgress tp = new TransferProgress();
 
   Watch queue_timer = new Watch(), run_timer = new Watch();
 
@@ -48,9 +57,9 @@ public class StorkJob extends Ad {
     status(scheduled);
   }
 
-  // Gets the job info as an ad.
+  // Gets the job info as an ad, merged with progress ad.
   public synchronized Ad getAd() {
-    return new Ad(this);
+    return new Ad(this, tp.getAd());
   }
 
   // Get the user_id of the user who owns this job.
@@ -171,19 +180,29 @@ public class StorkJob extends Ad {
       // Create a pipe to process progress ads from the module.
       Pipe<Ad> pipe = new Pipe<Ad>();
       pipe.new End(false) {
-        void store(Ad ad) {
+        public void store(Ad ad) {
           System.out.println("Got aux ad: "+ad);
-          merge(ad);
+          if (ad.has("bytes_total") || ad.has("files_total"))
+            tp.transferStarted(ad.getLong("bytes_total"),
+                               ad.getInt("files_total"));
+          if (ad.has("bytes_done") || ad.has("files_done"))
+            tp.done(ad.getLong("bytes_done"), ad.getInt("files_done"));
+          if (ad.getBoolean("complete"))
+            tp.transferEnded(ad.get("error") == null);
         }
       };
 
       // Begin the transfer after attaching pipe.
-      ss.setPipe(pipe);
+      pipe.new End().put(new Ad());
+      ss.setPipe(pipe.new End());
       ss.transfer(src.path, dest.path);
 
       // We made it!
       status(complete);
     } catch (Exception e) {
+      // Tell the transfer progress we're done.
+      tp.transferEnded(false);
+
       if (e instanceof FatalEx || !shouldReschedule()) {
         status(failed);
       } else {

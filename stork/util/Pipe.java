@@ -22,7 +22,7 @@ public class Pipe<T> {
 
     // Put messages from this end into the pipe.
     public final void put(T... msgs) {
-      for (T t : msgs)
+      for (T t : msgs) if (t != null)
         broadcast(this, t);
     }
       
@@ -47,7 +47,7 @@ public class Pipe<T> {
     // This is called when a message is broadcast into the pipe.
     private void store(End sender, T msg) {
       store(msg);
-    } void store(T msg) {
+    } public void store(T msg) {
       if (queue != null) try {
         queue.put(msg);
       } catch (Exception e) {
@@ -119,16 +119,12 @@ public class Pipe<T> {
 
   public static void test3() {
     Pipe<String> pipe = new Pipe<String>();
-    Pipe<String>.End p1 = pipe.new End();
-    Pipe<String>.End p2 = pipe.new End(false) {
-      void store(String s) {
+    pipe.new End(false) {
+      public void store(String s) {
         System.out.println(s);
       }
     };
-
-    p1.put("hello");
-    p2.put("yatta");
-    System.out.println(p1.get());
-    p1.put("this is automatic");
+    pipe.new End().put("hello");
+    pipe.new End().put("yatta");
   }
 }

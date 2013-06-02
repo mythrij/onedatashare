@@ -193,6 +193,18 @@ public class StorkUtil {
     }
   }
 
+  // Normalize a path. Squash /'s, resolve .'s and ..'s, and fix
+  // home directory shorthand.
+  public static String normalizePath(String path) {
+    try {
+      path = new URI(null, null, path, null).normalize().getPath();
+    } catch (Exception e) {
+      throw new FatalEx("invalid path");
+    } if (path.startsWith("/~")) {
+      path = path.substring(1);
+    } return path;
+  }
+
   // Convert a byte array into a formatted string.
   public static String formatBytes(byte[] bytes, String fmt) {
     StringBuilder sb = new StringBuilder();
