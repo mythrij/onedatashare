@@ -36,7 +36,7 @@ import java.io.*;
 //   ads    -> '[' decls ('|' decls)* ']'
 //   decls  -> decl (';' decl?)*
 //   decl   -> name '=' value
-//   name   -> (a-z_) (0-9a-z_)*
+//   name   -> [0-9a-z_-]*
 //   value  -> number | string | bool | ad
 //   number -> [-+]?[0-9]* '.' [0-9]+expo?
 //           | [-+]?[0-9]+expo?
@@ -49,7 +49,7 @@ import java.io.*;
 // the first character. The syntax for JSON representations of ads is:
 //   ad     -> '{' decl (',' decl?)* '}'
 //   decl   -> '"' name '"' ':' value
-//   name   -> (a-z_) (0-9a-z_)*
+//   name   -> [0-9a-z_-]*
 //   value  -> number | string | bool | ad
 //   number -> [-+]?[0-9]* '.' [0-9]+expo?
 //           | [-+]?[0-9]+expo?
@@ -62,11 +62,11 @@ import java.io.*;
 // the case of comments indicated with a # (in which case it discards
 // everything until the end of the line).
 //
-// Why LiteAds? We originally considered using Condor's Ad library
-// for serializable, human-readable communication. However, the Ad
-// language has a very rich feature set which makes one-to-one translation
-// with JSON and XML somewhat less predicatable, and being able to
-// effectively convert between formats easily is something we wanted
+// Why LiteAds? We originally considered using Condor's ClassAd library
+// for serializable, human-readable communication. However, the ClassAd
+// language has a very rich feature set which makes translation
+// to JSON somewhat difficult, and being able to
+// easily convert between formats is something we wanted
 // for StorkCloud. Hence, we opted to implement a language that is
 // essentially a lighter version of the ClassAd language and is backwards
 // compatible.
@@ -81,7 +81,7 @@ public class Ad implements Iterable<Ad> {
   public static final Pattern
     IGNORE = Pattern.compile("(\\s*((#|//).*$)?)+", Pattern.MULTILINE),
     PRINTABLE = Pattern.compile("[\\p{Print}\r\n]*"),
-    DECL_ID = Pattern.compile("[a-z_]\\w*", Pattern.CASE_INSENSITIVE);
+    DECL_ID = Pattern.compile("[\\w_-]+", Pattern.CASE_INSENSITIVE);
 
   public static final int
     AD = 0, JSON = 1, STRING = 1, NUMBER = 2, BOOL = 3;
@@ -140,7 +140,7 @@ public class Ad implements Iterable<Ad> {
     T_STR("\"[^\\\\\"]*(?:\\\\.[^\\\\\"]*)*?\""),
     T_TF ("(true|false)"),
     T_SLB("\\[", "\\{"),
-    T_SC (";", ","),
+    T_SC ("[;\\w]", ","),  // Includes newlines.
     T_JP ("\\|"),  // "joiner pipe"
     T_RB ("\\]", "\\}");
 
@@ -482,7 +482,7 @@ public class Ad implements Iterable<Ad> {
   }
     
   // Look up an object by its key. Handles recursive ad lookups.
-  protected synchronized Object getObject(Object key) {
+  public synchronized Object getObject(Object key) {
     if (key == null)
       throw PE("null key given");
     return getObject(key.toString().toLowerCase());
@@ -615,9 +615,48 @@ public class Ad implements Iterable<Ad> {
     };
   }
 
+  // Casting methods
+  // ---------------
+  // Methods for automatically converting members of ads into special
+  // ads. Mostly for deserializing object state.
+
+  // Cast either this ad or a member object into a special ad type.
+  // Checks the passed class for a method called deserialize() that
+  // takes either the target's type or the Object type, and calls
+  // that method with the target. If a key was specified, stores the
+  // cast target back into this ad.
+  public <T extends Ad> T cast(Class<T> c) {
+    return cast(c, null);
+  } public <T extends Ad> T cast(Class<T> c, Object key) {
+    Object o = (key != null) ? getObject(key) : this;
+    T t;
+
+    if (o == null) {
+      return null;
+    } if (c.isInstance(o)) {
+      return c.cast(o);
+    } try {
+      try {
+        t = c.cast(c.getMethod("deserialize", o.getClass()).invoke(null, o));
+      } catch (NoSuchMethodException e) {
+        t = c.cast(c.getMethod("deserialize", Object.class).invoke(null, o));
+      }
+    } catch (Exception e) {
+      throw new RuntimeException("could not cast to "+c, e);
+    }
+
+    if (key != null) put(key, t);
+    return t;
+  }
+
   // Other methods
   // -------------
   // Methods to get information about and perform operations on the ad.
+
+  // Check if the ad has any fields.
+  public synchronized boolean isEmpty() {
+    return map.isEmpty();
+  }
   
   // Get the number of fields in this ad.
   public synchronized int size() {

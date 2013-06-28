@@ -167,6 +167,8 @@ public class StorkClient {
       opts.add('w', "watch",
                "retrieve list every T seconds (default 2)").parser =
         opts.new SimpleParser("watch", "T", true);
+      opts.add("daglog", "output results to FILE in DAGMan log format")
+        .parser = opts.new SimpleParser("daglog", "FILE", false);
 
       return opts;
     }
@@ -262,6 +264,9 @@ public class StorkClient {
       */
     }
   }
+
+  // Kind of stupidly hacked together thing that periodicially checks the
+  // status of 
 
   static class StorkRmHandler extends StorkCommand {
     GetOpts parser(GetOpts base) {
@@ -372,20 +377,20 @@ public class StorkClient {
         "read the proxy file, and include its contents in the job ad "+
         "as \"x509_proxy\". This may be removed in the future.)"
       };
+      opts.add('b', "brief", "print only submitted job IDs");
 
       return opts;
     }
 
     // Print the submission response ad in a nice way.
-    private void print_response(ResponseAd ad) {
-      // Make sure we have a response ad.
-      if (ad == null)
-        ad = new ResponseAd("error", "couldn't parse server response");
-      else if (!ad.has("response"))
-        ad = new ResponseAd("error", "invalid response from server");
+    private void print_response(Ad ad) {
+      // If we're in Condor compatibility mode, print only the line Condor
+      // expects and that's it.
+      if (env.getBoolean("condor_mode"))
+        System.out.println("Request assigned id: "+ad.get("job_id"));
 
       // Check if the job was successfully submitted.
-      else if (ad.success()) {
+      else if (!ad.has("error")) {
         System.out.print("Job accepted and assigned id: ");
         System.out.println(ad.get("job_id"));
         System.out.println(ad);
@@ -472,19 +477,25 @@ public class StorkClient {
       }
 
       // Print the command sent if we're echoing.
-      if (echo)
-        System.out.println(ad+"\n\n");
+      //if (echo)
+        //System.out.print(ad+"\n\n");
       return ad;
     }
 
     public boolean handle(Ad ad) {
-      ResponseAd res = new ResponseAd(ad);
       submitted++;
-      if (res.error())
-        System.out.println(res.toDisplayString());
-      else
+      if (!ad.has("error")) {
         accepted++;
-      return false;
+      } if (env.getBoolean("quiet")) {
+        // Do nothing.
+      } else if (env.getBoolean("brief")) {
+        for (Ad a : ad)
+          System.out.println(a.getInt("job_id"));
+      } else {
+        System.out.println(
+          (accepted > 0 ? "Success: " : "Error: ") +
+          accepted+" of "+submitted+" jobs successfully submitted");
+      } return false;
     }
 
     public void complete() {
@@ -492,9 +503,7 @@ public class StorkClient {
         stream.close();
       } catch (Exception e) {
         // Who cares...
-      } System.out.println(
-        (accepted > 0 ? "Success: " : "Error: ") +
-        accepted+" of "+submitted+" jobs successfully submitted");
+      }
     }
   }
 
@@ -589,9 +598,9 @@ public class StorkClient {
     // Execute the command handler.
     try {
       Ad ad = scmd.handle(server_sock);
-      System.out.println("Done: "+ad);
+      System.err.println("Done: "+ad);
     } catch (Exception e) {
-      System.out.println("Error: "+e.getMessage());
+      System.err.println("Error: "+e.getMessage());
     }
   }
 

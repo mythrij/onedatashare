@@ -10,14 +10,15 @@ import java.net.URI;
 // A representation of a transfer job submitted to Stork. The entire
 // state of the job should be stored in the ad representing this job.
 //
-// At the start of a transfer, the transfer code may 
-//
 // As transfers progress, update ads will be sent by the underlying
-// transfer code. These update ads may contain:
+// transfer code.
 //
 // The following fields can come from the transfer module in an update ad:
-//   bytes_total - the number of bytes that will be transferred
-//   bytes_done
+//   bytes_total - the number of bytes to transfer
+//   files_total - the number of files to transfer
+//   bytes_done  - indication that some bytes have been transferred
+//   files_done  - indication that some files have been transferred
+//   complete    - true if success, false if failure
 
 public class StorkJob extends Ad {
   private JobStatus status = null;
@@ -28,9 +29,13 @@ public class StorkJob extends Ad {
   Watch queue_timer = new Watch(), run_timer = new Watch();
 
   // Create a job from a submit ad.
-  public StorkJob(Ad ad) {
+  private StorkJob(Ad ad) {
     super(false, ad);
     //filter("src", "dest", "module", "cred_token", "max_attempts");
+
+    // Rename deprecated aliases.
+    rename("src_url", "src.url");
+    rename("dest_url", "dest.url");
 
     // Check for required src and dest.
     String req = ad.require("src", "dest");
@@ -41,25 +46,31 @@ public class StorkJob extends Ad {
     if (ad.hasNext())
       throw new FatalEx("chained ads are not allowed");
 
-    // Pull this out if it's there.
-    x509_proxy = ad.get("x509_proxy");
-    try {
-      remove("x509_proxy");
-    } catch (Throwable e) {
-      e.printStackTrace();
-      System.exit(1);
-    }
+    // Parse the endpoints and store them as ads.
+    src = cast(EndPoint.class, "src");
+    dest = cast(EndPoint.class, "dest");
+  }
 
-    // Parse them into URIs.
-    src = getEndPoint("src");
-    dest = getEndPoint("dest");
-    
-    status(scheduled);
+  // Create and enqueue a new job from a user input ad.
+  // TODO: Strict filtering and checking.
+  public static StorkJob create(Ad ad) {
+    ad.remove("status", "job_id");
+    return new StorkJob(ad).status(scheduled);
+  }
+
+  // Load a job from a serialized job ad.
+  // TODO: Check for corruption.
+  public static StorkJob deserialize(Ad ad) {
+    StorkJob j = new StorkJob(ad);
+    if (j.status() == processing)
+      j.status(scheduled);
+    return j;
   }
 
   // Gets the job info as an ad, merged with progress ad.
+  // TODO: More proper filtering.
   public synchronized Ad getAd() {
-    return new Ad(this, tp.getAd());
+    return new Ad(this, tp.getAd()).remove("x509_proxy");
   }
 
   // Get the user_id of the user who owns this job.
@@ -67,24 +78,11 @@ public class StorkJob extends Ad {
     return get("user_id");
   }
 
-  // Determine either the src or dest end-point. Checks the 
-  private EndPoint getEndPoint(String w) {
-    Ad ea = new Ad("module", get("module"))
-              .put("cred_token", get("cred_token"))
-              .put("x509_proxy", x509_proxy);
-    Object o = getObject(w);
-    if (o instanceof Ad)
-      return new EndPoint(ea.merge((Ad)o));
-    if (o instanceof String)
-      return new EndPoint(ea.put("uri", (String)o));
-    throw new FatalEx(w+" is not a string or ad");
-  }
-
   // Sets the status of the job, updates ad, and adjusts state
   // according to the status.
   public synchronized JobStatus status() {
     return status;
-  } public synchronized void status(JobStatus s) {
+  } public synchronized StorkJob status(JobStatus s) {
     assert !s.isFilter;
 
     status = s;
@@ -101,7 +99,7 @@ public class StorkJob extends Ad {
       case complete:
         queue_timer.stop();
         run_timer.stop();
-    }
+    } return this;
   }
 
   // Get/set the job id.

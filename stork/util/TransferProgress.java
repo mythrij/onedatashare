@@ -28,7 +28,7 @@ public class TransferProgress {
       case 'k': return prettyThrp(tp/1000, 'M');
       case 'M': return prettyThrp(tp/1000, 'G');
       case 'G': return prettyThrp(tp/1000, 'T');
-    } return String.format("%.2f%cB/sec", tp, pre);
+    } return String.format("%.2f%cB/s", tp, pre);
   }
 
   // Pretty format a duration (in milliseconds);
@@ -62,10 +62,13 @@ public class TransferProgress {
     ad.put("byte_progress", byte_progress.toString());
     ad.put("progress", byte_progress.toPercent());
     ad.put("file_progress", file_progress.toString());
-    ad.put("throughput", throughput(false));
-    if (duration() >= 1000)
+    if (end_time == -1) {
+      ad.put("throughput", throughput(false));
+      if (duration() >= 1000)
+        ad.put("avg_throughput", throughput(true));
+    } else {
       ad.put("avg_throughput", throughput(true));
-    return ad;
+    } return ad;
   }
 
   // Called when a transfer starts.

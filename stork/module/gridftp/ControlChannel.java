@@ -272,10 +272,11 @@ public class ControlChannel extends Pipeline<String, Reply> {
         case 111:  // Restart marker
           break;   // Just ignore for now...
         case 112:  // Progress marker
-          D("Got marker:", r);
-          sess.reportProgress(pl.parseMarker(r));
+          //D("Got marker:", r);
+          if (sess != null) sess.reportProgress(pl.parseMarker(r));
           break;
         case 226:  // Transfer complete!
+          if (sess != null) sess.reportProgress(new Ad("files_done", 1));
           return r;
         default:
           throw new FatalEx("unexpected reply: "+r.getCode());

@@ -24,6 +24,7 @@ import java.util.concurrent.*;
 //                                  v
 public class StorkScheduler extends Ad {
   // Singleton instance of the scheduler.
+  // TODO: Remove.
   private static StorkScheduler instance = null;
 
   private Thread[] thread_pool;
@@ -95,7 +96,7 @@ public class StorkScheduler extends Ad {
           // If job is scheduled, put it back in the schedule queue.
           case scheduled:
             System.out.println("Job "+job.jobId()+" rescheduling...");
-            job_queue.add(job); break;
+            job_queue.schedule(job); break;
           // If the job was paused, put it in limbo until it's resumed.
           case paused:  // This can't happen yet!
             break;
@@ -125,6 +126,7 @@ public class StorkScheduler extends Ad {
         try {
           req = req_queue.take();
           System.out.println("Pulled request from queue");
+          System.out.println("Thread count: "+getAllStackTraces().size());
         } catch (Exception e) {
           System.out.println("Something bad happened in StorkWorkerThread...");
           e.printStackTrace();
@@ -159,6 +161,9 @@ public class StorkScheduler extends Ad {
           req.done(new Ad("error", e.getMessage()));
         } finally {
           System.out.println("Done with request!");
+          System.out.println("Thread count: "+getAllStackTraces().size());
+          for (Thread t : getAllStackTraces().keySet())
+            System.out.println(t);
         }
       }
     }
@@ -177,12 +182,11 @@ public class StorkScheduler extends Ad {
   class StorkQHandler extends StorkCommand {
     public Ad handle(RequestContext req) {
       AdSorter sorter = new AdSorter("job_id");
-      JobQueue q = (req.user != null) ? req.user.queue() : job_queue;
 
       sorter.reverse(req.ad.getBoolean("reverse"));
 
       // Add jobs to the ad sorter.
-      sorter.add(q.get(req.ad.get("id"), req.ad.get("status")));
+      sorter.add(job_queue.get(req.ad));
       int count = sorter.size();
 
       if (count < 1)
@@ -228,21 +232,10 @@ public class StorkScheduler extends Ad {
     }
   }
 
+  // I cannot believe how simple this thing is for what it does.
   class StorkSubmitHandler extends StorkCommand {
     public Ad handle(RequestContext req) {
-      StorkJob job;
-
-      // Make sure the request has everything a StorkJob needs.
-      job = new StorkJob(req.ad);
-
-      // Add job to the job queue.
-      job_queue.add(job);
-      if (req.user != null)
-        req.user.queue().add(job);
-
-      Ad res = new ResponseAd("success");
-      res.put("job_id", job.jobId());
-      return res;
+      return job_queue.add(StorkJob.create(req.ad)).getAd();
     }
   }
 
@@ -322,6 +315,7 @@ public class StorkScheduler extends Ad {
     // Load built-in modules.
     // TODO: Not this...
     xfer_modules.register(new GridFTPModule());
+    xfer_modules.register(new SFTPModule());
 
     // Iterate over and populate external module list.
     // TODO: Do this in parallel and detect misbehaving externals.
@@ -520,9 +514,14 @@ public class StorkScheduler extends Ad {
   // Initialize or reinitialize the Stork scheduler from configuration.
   // Run this after setting a state file.
   public StorkScheduler init() {
+    // Temporarily store old environment.
+    Ad env = getAd("env");
+
     // Load state if present.
-    if (has("env.state_file"))
+    if (has("env.state_file")) {
       merge(loadServerState(get("env.state_file")));
+      if (env != null) put("env", env);
+    }
 
     // Initialize command handlers
     cmd_handlers = new HashMap<String, StorkCommand>();
@@ -538,7 +537,10 @@ public class StorkScheduler extends Ad {
     xfer_modules = TransferModuleTable.instance();
 
     // Initialize queues
-    job_queue = new JobQueue();
+    job_queue = cast(JobQueue.class, "job_queue");
+    if (job_queue == null)
+      put("job_queue", job_queue = new JobQueue());
+
     req_queue = new LinkedBlockingQueue<RequestContext>();
 
     // Initialize workers

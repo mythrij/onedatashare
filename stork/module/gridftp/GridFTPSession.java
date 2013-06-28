@@ -145,7 +145,7 @@ public class GridFTPSession extends StorkSession {
             cp.oc.facade.store(sink);
             Reply r = super.handleReply();
             D("Got reply: "+r);
-            System.out.println("Waiting for: ."+p);
+            D("Waiting for: ."+p);
             sink.waitFor();
 
             // Add dirs to the working set.
@@ -158,12 +158,12 @@ public class GridFTPSession extends StorkSession {
           }
         });
       } try {
-        System.out.println("Syncing...");
+        D("Syncing...");
         cp.sync();
       } catch (Exception e) {
         if (total < 2) {
           cp.oc.close();
-          throw new TempEx(e.getMessage());
+          throw new TempEx(e.getMessage(), e);
         } e.printStackTrace();
       }
     }
@@ -198,12 +198,16 @@ public class GridFTPSession extends StorkSession {
     if (dest == null || dest.isEmpty())
       throw new FatalEx("dest path is empty");
 
-    System.out.println("Transferring: "+src+" -> "+dest);
+    D("Transferring: ", src, " -> ", dest);
 
     // See if we're doing a directory transfer and need to build
     // a directory list.
+    // FIXME: Something is bad here.
     if (src.endsWith("/")) {
-      xl = mlsr(src, dest);
+      if (dest.endsWith("/"))  // Transfer the directory to dest.
+        xl = mlsr(src, dest+StorkUtil.basename(src.replaceAll("/+$", ""))+'/');
+      else  // Transfer the directory CONTENTS to dest.
+        xl = mlsr(src, dest);
     } else {  // Otherwise it's just one file.
       xl = new XferList(src, dest, sizeImpl(src));
     }
@@ -236,12 +240,12 @@ public class GridFTPSession extends StorkSession {
     } else if (xl.size() >= 1E7 || xl.size() <= 0) {
       optimizer.initialize(xl.size(), new Range(1,64));  // FIXME
     } else {
-      System.out.println("File size < 1M, not optimizing...");
+      D("File size < 1M, not optimizing...");
       optimizer = new Optimizer();
     } pipe.put(new Ad("optimizer", optimizer.name()));
 
     // Connect source and destination server.
-    System.out.println("Setting passive mode...");
+    D("Setting passive mode...");
     cc.pipePassive();
 
     // Make sure we were able to set passive mode.
@@ -265,8 +269,8 @@ public class GridFTPSession extends StorkSession {
       long len = b.getLong("size");
       XferList xs;
 
-      System.out.println("Sample ad: "+b);
-      System.out.println("Sample size: "+len);
+      D("Sample ad: "+b);
+      D("Sample size: "+len);
 
       update = b.filter("pipelining", "parallelism", "concurrency");
 
@@ -276,7 +280,7 @@ public class GridFTPSession extends StorkSession {
       // FIXME: Parallelism and concurrency don't work well together.
       /*
       if (p > 0) {
-        System.out.println("Got parallelism: "+p);
+        D("Got parallelism: "+p);
         if (p != parallelism) {
           cc.parallelism = p;
           cc.close();
@@ -297,8 +301,6 @@ public class GridFTPSession extends StorkSession {
         xs = xl.split(len);
       else
         xs = xl.split(-1);
-      System.out.println("xl size: "+xl.size());
-      System.out.println("xs size: "+xs.size());
 
       prog.transferStarted(xs.size(), xs.count());
       transferList(cc, xs);
@@ -316,7 +318,7 @@ public class GridFTPSession extends StorkSession {
   // transferList(cc, xl).
   // FIXME: This will wait on the slowest thread.
   void transferList(ChannelPair cc, XferList xl) throws Exception {
-    System.out.println("Transferring list! size: "+xl.size());
+    D("Transferring list! size: "+xl.size());
 
     while (!xl.isEmpty()) {
       //if (!extended mode) cc.pipePassive();
@@ -331,7 +333,7 @@ public class GridFTPSession extends StorkSession {
     try {
       URI u = new URI(args[0]);
       sess = new GridFTPSession(u);
-      System.out.println(sess.list(u.getPath()));
+      D(sess.list(u.getPath()));
     } catch (Exception e) {
       e.printStackTrace();
     } finally {

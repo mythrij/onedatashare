@@ -95,7 +95,7 @@ public class StorkMain {
     return file.canRead() ? file : null;
   }
 
-  // Parse config file, where each line is either a comment or a
+  // Parse config file, where each line is either a comment or an
   // Ad expression which gets merged into the returned ad.
   private static Ad parseConfig(String path) throws Exception {
     File file = (path != null) ? checkPath(path) : defaultConfig();
@@ -163,9 +163,9 @@ public class StorkMain {
     // Try to parse config file and arguments.
     try {
       env = env.merge(parseConfig(env.get("conf")));
-      env = env.merge(opts.parse(args));
+      env = env.merge(opt2.parse(args));
     } catch (Exception e) {
-      System.out.println("Error: "+e.getMessage());
+      opt2.usageAndExit(1, e.getMessage());
     }
 
     // XXX: Stupid way to remove options from args to pass to Stork

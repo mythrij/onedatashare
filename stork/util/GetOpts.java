@@ -138,11 +138,11 @@ public class GetOpts {
     o.c = c; o.desc = desc;
 
     if (n == null || n.isEmpty())
-      throw new Error("Option name cannot be null or empty!");
+      throw new FatalEx("Option name cannot be null or empty!");
     if (c != 0 && by_char.containsKey(c))
-      throw new Error("Option already exists with short name: "+c);
+      throw new FatalEx("Option already exists with short name: "+c);
     if (n != null && by_name.containsKey(n))
-      throw new Error("Option already exists with name: "+n);
+      throw new FatalEx("Option already exists with name: "+n);
     if (c != 0)
       by_char.put(c, o);
     by_name.put(n, o);
@@ -152,7 +152,7 @@ public class GetOpts {
   // Check we're not forming a loop with the chain.
   private void checkChain(GetOpts n) {
     if (n == this)  // no no NO NO
-      throw new Error("Trying to create a loop in the GetOpt chain!");
+      throw new FatalEx("Trying to create a loop in the GetOpt chain!");
     if (next != null)
       next.checkChain(n);
   }

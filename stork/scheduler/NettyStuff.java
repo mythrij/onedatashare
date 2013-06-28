@@ -43,7 +43,7 @@ public final class NettyStuff {
   public static class AdEncoder extends MessageToByteEncoder<Ad> {
     protected void encode(ChannelHandlerContext ctx, Ad ad, ByteBuf out)
     throws Exception {
-      System.out.println("Writing ad: "+ad);
+      //System.out.println("Writing ad: "+ad);
       out.writeBytes(ad.serialize(true));
     }
   }

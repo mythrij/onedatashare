@@ -1,5 +1,6 @@
 package stork.cred;
 
+import stork.ad.*;
 import java.util.*;
 
 // Maintains a mapping between credential tokens and credentials.
@@ -11,7 +12,7 @@ public class CredManager {
   private Map<UUID, StorkCred> cred_map;
 
   public CredManager() {
-    cred_map = new HashMap<UUID, StorkCred>();
+    cred_map = new LinkedHashMap<UUID, StorkCred>();
   }
 
   // Get an instance of the credential manager.
@@ -30,6 +31,17 @@ public class CredManager {
     }
   } public synchronized StorkCred getCred(UUID token) {
     return (token == null) ? null : cred_map.get(token);
+  }
+
+  // Get all the credentials as ads.
+  public synchronized Ad allCreds() {
+    AdSorter sorter = new AdSorter("uuid");
+    for (UUID u : cred_map.keySet()) {
+      sorter.add(
+        new Ad("uuid", u.toString())
+          .put("type", cred_map.get(u).type())
+      );
+    } return sorter.getAd();
   }
 
   // Put a credential into the map and return an automatically

@@ -12,6 +12,8 @@ import java.net.URI;
 // TODO: Support for multiple end-points?
 
 public class EndPoint extends Ad {
+  private Ad parent;
+
   public final URI uri;
   public final String proto;
   public final String path;
@@ -21,7 +23,11 @@ public class EndPoint extends Ad {
   private static TransferModuleTable tmt = TransferModuleTable.instance();
   private static CredManager cm = CredManager.instance();
 
-  public EndPoint(Ad ad) {
+  // Create a new endpoint, optionally with a parent ad to reference
+  // missing fields from.
+  public EndPoint(String uri) {
+    this(new Ad("uri", uri));
+  } public EndPoint(Ad ad) {
     super(false, ad);
     //filter("uri", "module", "cred_token");
 
@@ -35,8 +41,28 @@ public class EndPoint extends Ad {
       throw new FatalEx("could not find transfer module for: "+proto);
   }
 
+  // Create a URI from either
+  public static EndPoint deserialize(String uri) {
+    return new EndPoint(uri);
+  } public static EndPoint deserialize(Ad ad) {
+    return new EndPoint(ad);
+  }
+
   // Create a session for this end-point.
   public StorkSession session() {
     return tm.session(uri, this);
+  }
+
+  // Get or set the parent ad.
+  public synchronized Ad parent() {
+    return parent;
+  } public synchronized void parent(Ad p) {
+    parent = p;
+  }
+
+  // Delegate to the parent ad if the requested key is missing.
+  public synchronized Object getObject(Object key) {
+    Object o = super.getObject(key);
+    return (o == null || parent == null) ? o : parent.getObject(key);
   }
 }

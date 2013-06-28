@@ -83,7 +83,7 @@ public class AdSorter {
       first = ad = new Ad(false, a);
     else
       ad = ad.next(new Ad(false, a));
-    return first;
+    return (first != null) ? first : new Ad();
   }
 
   // Get the number of ads in the sorter.

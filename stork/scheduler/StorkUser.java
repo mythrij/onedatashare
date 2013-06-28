@@ -62,6 +62,11 @@ public class StorkUser extends Ad {
     put("user_id", user);
   }
 
+  // Recreate a user from a serialized ad.
+  public static StorkUser serialize(Ad ad) {
+    return new StorkUser(ad);
+  }
+
   // Set the password for this user. Checks password length and handles
   // hashing and whatnot. Throws if there's an error.
   public synchronized void setPassword(String pass) {
@@ -163,22 +168,7 @@ public class StorkUser extends Ad {
   public static StorkUser lookup(String id) {
     if ((id = normalize(id)) == null)
       return null;
-    Ad ad = map().getAd(id);
-
-    if (ad == null)
-      return null;
-    if (ad instanceof StorkUser)
-      return (StorkUser) ad;
-
-    // This happens if server state has been serialized. Might throw
-    // exception if the serialization was tampered with.
-    try {
-      StorkUser user = new StorkUser(ad);
-      map().put(user.user_id(), user);
-      return user;
-    } catch (Exception e) {
-      return null;
-    }
+    return map().cast(StorkUser.class, id);
   }
 
   // Generate a random salt using a secure random number generator.

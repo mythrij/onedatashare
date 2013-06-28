@@ -19,7 +19,7 @@ public abstract class StorkSession extends Ad {
   // The following methods should be implemented by subclasses: //
   ////////////////////////////////////////////////////////////////
 
-  // Get a directory listing of a path from the session. opts may be null.
+  // Get a directory listing of a path from the session.
   protected abstract Ad listImpl(String path, Ad opts);
 
   // Get the size of a file given by a path.
@@ -29,7 +29,7 @@ public abstract class StorkSession extends Ad {
   // Returns whether or not the command succeeded.
   //protected abstract boolean mkdirImpl(String path);
 
-  // Transfer from this session to a paired session. opts can be null.
+  // Transfer from this session to a paired session.
   protected abstract void transferImpl(String src, String dest, Ad opts);
 
   // Close the session and free any resources.
@@ -51,7 +51,7 @@ public abstract class StorkSession extends Ad {
 
   // Create a session from a URL. Generally the path is ignored.
   public StorkSession(URI url, Ad config) {
-    super(config);
+    super(config == null ? new Ad() : config);
     this.url = url;
   }
 
@@ -75,6 +75,8 @@ public abstract class StorkSession extends Ad {
   } public Ad list(String path, Ad opts) {
     checkConnected();
     path = StorkUtil.normalizePath(path);
+    if (opts == null)
+      opts = new Ad();
     return listImpl(path, opts);
   }
 
@@ -87,6 +89,8 @@ public abstract class StorkSession extends Ad {
     checkConnected();
     if (pair == null)
       throw new FatalEx("session is not paired");
+    if (opts == null)
+      opts = new Ad();
     src = StorkUtil.normalizePath(src);
     dest = StorkUtil.normalizePath(dest);
     transferImpl(src, dest, opts);

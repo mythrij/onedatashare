@@ -32,6 +32,9 @@ public class Range implements Iterable<Integer> {
     int s = -1, e = -1;
     Range r = new Range();
 
+    if (str == null)
+      return null;
+
     for (String a : str.split(",")) try {
       String[] b = a.split("-", 3);
       switch (b.length) {
