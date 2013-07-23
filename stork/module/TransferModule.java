@@ -2,6 +2,7 @@ package stork.module;
 
 import stork.ad.*;
 import stork.util.*;
+import stork.scheduler.*;
 import java.net.URI;
 
 // Abstract base class for a Stork transfer module.
@@ -19,34 +20,53 @@ public abstract class TransferModule {
     return infoAd().protocols;
   }
 
+  // Unmarshal transfer modules by name.
+  public static TransferModule unmarshal(String s) {
+    return byHandle(s);
+  }
+
+  // Lookup a transfer module by name.
+  public static TransferModule byHandle(String s) {
+    return TransferModuleTable.instance().byHandle(s);
+  }
+
+  // Lookup a transfer module by protocol.
+  public static TransferModule byProtocol(String s) {
+    return TransferModuleTable.instance().byProtocol(s);
+  }
+
   // Start a session and perform a transfer.
   // TODO: Remove this.
   public StorkTransfer transfer(SubmitAd ad) {
-    StorkSession src = session(ad.src, ad);
-    StorkSession dest = session(ad.dest, ad);
+    StorkSession src = session(ad.src);
+    StorkSession dest = session(ad.dest);
     src.pair(dest);
     return new StorkTransfer(src, ad);
   }
 
   // Start a session and perform a listing.
-  public Ad list(URI uri, Ad opts) {
+  public Ad list(URI uri) {
+    return list(new EndPoint(uri));
+  } public Ad list(EndPoint ep) {
     try {
-      return session(uri, opts).list(uri.getPath(), opts);
+      return session(ep).list(ep.path(), null);
     } catch (Exception e) {
       throw new FatalEx("couldn't list: "+e.getMessage());
     }
   }
 
   // Create a new session capable of interacting with a URI.
-  public StorkSession session(String url) throws Exception {
-    return session(new URI(url), null);
-  } public StorkSession session(String url, Ad opts) throws Exception {
-    return session(new URI(url), opts);
-  } public StorkSession session(URI url) {
-    return session(url, null);
-  } public abstract StorkSession session(URI url, Ad opts);
+  public StorkSession session(String uri) {
+    return session(new EndPoint(uri));
+  } public StorkSession session(URI uri) {
+    return session(new EndPoint(uri));
+  } public abstract StorkSession session(EndPoint e);
+
+  public String name() {
+    return infoAd().full_name;
+  }
 
   public String toString() {
-    return infoAd().full_name;
+    return infoAd().handle;
   }
 }

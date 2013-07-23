@@ -82,7 +82,7 @@ public class SFTPSession extends StorkSession {
         sorter.add(a);
       }
 
-      return ad.put("files", sorter.getAd());
+      return ad.put("files", sorter.getAds());
     } catch (Exception e) {
       throw new FatalEx("could not list: "+path, e);
     }

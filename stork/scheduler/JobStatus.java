@@ -18,6 +18,10 @@ public enum JobStatus {
     isFilter = !real;
   }
 
+  public static JobStatus unmarshal(String s) {
+    return byName(s);
+  }
+
   // Get a filter for a status.
   public static EnumSet<JobStatus> filter(String s) {
     return byName(s).filter();

@@ -44,7 +44,7 @@ public final class NettyStuff {
     protected void encode(ChannelHandlerContext ctx, Ad ad, ByteBuf out)
     throws Exception {
       //System.out.println("Writing ad: "+ad);
-      out.writeBytes(ad.serialize(true));
+      out.writeBytes(ad.serialize());
     }
   }
 

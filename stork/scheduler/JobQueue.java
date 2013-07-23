@@ -7,30 +7,15 @@ import java.util.*;
 
 // A blocking queue for Stork jobs. Allows for scheduling of jobs and
 // searching of past jobs.
-// TODO: Serializability.
-//
-// TODO: This whole thing is one big code smell. Refactor this.
 
-public class JobQueue extends Ad {
-  private LinkedList<StorkJob> new_jobs;
+public class JobQueue {
   private ArrayList<StorkJob> all_jobs;
-  private Ad last = this;  // Kind of ugh...
+  private transient LinkedList<StorkJob> new_jobs;
 
+  // Initialize all the queues and stuff.
   public JobQueue() {
-    this(null);
-  } private JobQueue(Ad ad) {
-    super(false, ad);
-    new_jobs = new LinkedList<StorkJob>();
     all_jobs = new ArrayList<StorkJob>();
-
-    // Hack hack hack...
-    if (ad != null && !ad.isEmpty()) for (Ad a : this)
-      add(a.cast(StorkJob.class));
-  }
-
-  // Reload a job queue from a serialized ad, one at a time.
-  public static JobQueue deserialize(Ad ad) {
-    return new JobQueue(ad);
+    new_jobs = new LinkedList<StorkJob>();
   }
 
   // Take a new job from the queue, blocking until one is available.
@@ -55,12 +40,6 @@ public class JobQueue extends Ad {
     } else {
       all_jobs.add(job.jobId(), job);
     } notifyAll();
-
-    // More hackish ugh...
-    if (isEmpty())
-      merge(job);
-    else
-      last = last.next(new Ad(job));
 
     return job;
   }

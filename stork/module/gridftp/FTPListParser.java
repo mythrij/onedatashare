@@ -32,7 +32,7 @@ public class FTPListParser {
   // Split the data so that each entry can be parsed individually.
   private static Pattern line_pattern =
     Pattern.compile("[\\s\\00]*([^\\n\\r\\00]+)");
-  public Ad parse(String data) {
+  public List<Ad> parse(String data) {
     Matcher m = line_pattern.matcher(data);
     AdSorter sorter = new AdSorter("-dir", "name");
 
@@ -41,7 +41,7 @@ public class FTPListParser {
       Ad ad = parseEntry(line);
       if (ad != null && !ignoreName(ad.get("name")))
         sorter.add(ad);
-    } return sorter.getAd();
+    } return sorter.getAds();
   }
 
   // Parse a line from the listing, return as an ad.

@@ -109,7 +109,7 @@ public abstract class Pipeline<C,R> extends Thread {
 
   // Write a command to the queue to be piped. If ignore is specified, the
   // command's result will not be posted to the done queue.
-  public synchronized void write(C c, boolean i, Handler h) {
+  public synchronized <H extends Handler> void write(C c, boolean i, H h) {
     while (level > 0 && sent.size() >= level) waitFor();
     handleWrite(c);
     PipedCommand cmd = new PipedCommand(c, i, h);

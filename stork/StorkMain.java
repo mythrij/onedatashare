@@ -116,7 +116,7 @@ public class StorkMain {
 
     if (!sc.hasNext())
       throw new Exception("couldn't read from config file: '"+file+"'");
-    return Ad.parse("[\n"+sc.next()+"\n]");
+    return Ad.parse("[\n"+sc.next().replace("\n", ";\n")+"\n]");
   }
 
   // Main entry point. The first argument should be the command to
@@ -185,7 +185,7 @@ public class StorkMain {
       String host = env.get("host", "127.0.0.1");
       int port = env.getInt("port", DEFAULT_PORT);
 
-      StorkScheduler s = new StorkScheduler(env).init();
+      StorkScheduler s = StorkScheduler.start(env);
       NettyStuff.TcpInterface si;
 
       try {
@@ -196,7 +196,7 @@ public class StorkMain {
         return;
       }
 
-      System.exit(s.waitFor());
+      //System.exit(s.waitFor());
     } else {
       StorkClient c = new StorkClient(env);
       c.execute(cmd, args);

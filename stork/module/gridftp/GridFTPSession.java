@@ -3,6 +3,7 @@ package stork.module.gridftp;
 import stork.ad.*;
 import stork.module.*;
 import stork.util.*;
+import stork.scheduler.*;
 import static stork.util.StorkUtil.Static.*;
 import stork.stat.*;
 import stork.cred.*;
@@ -41,30 +42,20 @@ public class GridFTPSession extends StorkSession {
 
   // Create a new session connected to an end-point specified by a URL.
   // opts may be null.
-  public GridFTPSession(URI uri) {
-    this(uri, null);
-  } public GridFTPSession(URI uri, Ad opts) {
-    super(uri, new Ad(DEFAULT_CONFIG, opts));
+  public GridFTPSession(EndPoint e) {
+    super(e);
 
     // Check if we've been given a credential to use.
     // TODO: Automatic instantiation from MyProxy as well.
+    /*
     if (has("cred_token"))
       cred = CredManager.instance().getCred(get("cred_token"));
     if (cred == null && has("x509_proxy"))
       cred = StorkGSSCred.fromBytes(get("x509_proxy").getBytes());
-
-    // Check if we've been given an optimizer to use.
-    // TODO: Replace with query to optimizer manager.
-    String optim = get("optimizer", "none");
-    if (optim.equals("full_2nd"))
-      optimizer = new Full2ndOptimizer();
-    else if (optim.equals("full_c"))
-      optimizer = new FullCOptimizer();
-    else
-      optimizer = new Optimizer();
+    */
 
     // Establish a control channel connection to remote server.
-    cc = new ControlChannel(new FTPURI(uri, cred));
+    cc = new ControlChannel(new FTPURI(e.uri, cred));
   }
 
   // StorkSession interface implementations
@@ -149,7 +140,7 @@ public class GridFTPSession extends StorkSession {
             sink.waitFor();
 
             // Add dirs to the working set.
-            if (ad.has("files")) for (Ad a : ad.getAd("files")) {
+            if (ad.has("files")) for (Ad a : ad.getAds("files")) {
               if (a.getBoolean("dir")) {
                 work.add(p+a.get("name")+"/");
                 work_ads.add(a);
@@ -325,20 +316,5 @@ public class GridFTPSession extends StorkSession {
       cc.pipeXfer(xl.pop(), this);
     } cc.sync();
     return;
-  }
-
-  // Tester method for testing listing.
-  public static void main(String[] args) {
-    GridFTPSession sess = null;
-    try {
-      URI u = new URI(args[0]);
-      sess = new GridFTPSession(u);
-      D(sess.list(u.getPath()));
-    } catch (Exception e) {
-      e.printStackTrace();
-    } finally {
-      if (sess != null)
-        sess.close();
-    }
   }
 }

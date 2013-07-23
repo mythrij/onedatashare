@@ -2,6 +2,7 @@ package stork.module;
 
 import stork.ad.*;
 import stork.util.*;
+import stork.scheduler.*;
 import java.net.URI;
 
 public class SFTPModule extends TransferModule {
@@ -37,7 +38,7 @@ public class SFTPModule extends TransferModule {
   }
 
   // Create a new connection to an FTP server.
-  public StorkSession session(URI url, Ad opts) {
-    return null; //new SFTPSession(url, opts);
+  public StorkSession session(EndPoint e) {
+    return null;
   }
 }

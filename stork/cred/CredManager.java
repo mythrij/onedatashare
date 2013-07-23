@@ -34,14 +34,14 @@ public class CredManager {
   }
 
   // Get all the credentials as ads.
-  public synchronized Ad allCreds() {
+  public synchronized List<Ad> allCreds() {
     AdSorter sorter = new AdSorter("uuid");
     for (UUID u : cred_map.keySet()) {
       sorter.add(
         new Ad("uuid", u.toString())
           .put("type", cred_map.get(u).type())
       );
-    } return sorter.getAd();
+    } return sorter.getAds();
   }
 
   // Put a credential into the map and return an automatically

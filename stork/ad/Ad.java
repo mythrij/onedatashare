@@ -3,93 +3,19 @@ package stork.ad;
 import static stork.util.StorkUtil.splitCSV;
 
 import java.util.*;
-import java.util.regex.*;
-import java.math.BigDecimal;
-//import java.nio.*;
 import java.io.*;
+import java.lang.reflect.*;
 
-// TODO: Chained ads break compatibility with ClassAds. Update
-// documentation to reflect this. Also remove "LiteAd" references and just
-// call them ads. Also remove XML references.
-//
-// This file defines the stucture and grammar of our key-value store
-// utility and language, hereforth referred to as LiteAds, as well as an
-// implementation which includes a parser and composer for three different
-// representations: LiteAd/Ad, XML, and JSON. LiteAds are intended to
-// be a subset of Condor's Ad language -- that is, anything that can
-// parse Ads can parse LiteAds.
-//
-// Ads contain case-insensitive keys and corresponding values of the
-// following five types: number, string, boolean, null, and ad. This means
-// LiteAds (like Ads) can be nested. There is no distinction between
-// null and undefined values except in cases of representation and set
-// operations (e.g., merging).
-//
-// The parser must be robust enough to handle possibly erroneous input! It
-// will be fed user input directly from files and sockets, and should be
-// able to withstand any attempts of foulery or badness.
-// 
-// The syntax of a LiteAd will now be described. The details of encoding
-// are assumed to be handled by Java; the data type of characters in the
-// grammar is assumed to be Java chars. Declaration names are case
-// insensitive (internally, all names are lowercased).
-//   ads    -> '[' decls ('|' decls)* ']'
-//   decls  -> decl (';' decl?)*
-//   decl   -> name '=' value
-//   name   -> [0-9a-z_-]*
-//   value  -> number | string | bool | ad
-//   number -> [-+]?[0-9]* '.' [0-9]+expo?
-//           | [-+]?[0-9]+expo?
-//   expo   -> e[-+]?[0-9]+
-//   string -> '"' ('\'.|(^"))* '"'
-//   bool   -> 'true' | 'false'
-//
-// The parser can also handle a subset of JSON (everything excluding arrays,
-// essentially). The parser determines what format it is parsing based on
-// the first character. The syntax for JSON representations of ads is:
-//   ad     -> '{' decl (',' decl?)* '}'
-//   decl   -> '"' name '"' ':' value
-//   name   -> [0-9a-z_-]*
-//   value  -> number | string | bool | ad
-//   number -> [-+]?[0-9]* '.' [0-9]+expo?
-//           | [-+]?[0-9]+expo?
-//   expo   -> e[-+]?[0-9]+
-//   string -> '"' ('\'.|(^"))* '"'
-//   bool   -> 'true' | 'false'
-//
-// The parser will discard whitespace between tokens (except for whitespace
-// within strings, of course). It also will disregard newlines, except in
-// the case of comments indicated with a # (in which case it discards
-// everything until the end of the line).
-//
-// Why LiteAds? We originally considered using Condor's ClassAd library
-// for serializable, human-readable communication. However, the ClassAd
-// language has a very rich feature set which makes translation
-// to JSON somewhat difficult, and being able to
-// easily convert between formats is something we wanted
-// for StorkCloud. Hence, we opted to implement a language that is
-// essentially a lighter version of the ClassAd language and is backwards
-// compatible.
-
-public class Ad implements Iterable<Ad> {
+public class Ad {
   // The heart of the structure.
-  protected final Map<String, Object> map;
-  Ad next = null;
-  int mode = AD;
+  protected final Map<Object, AdObject> map;
 
-  // Some compiled patterns used for parsing.
-  public static final Pattern
-    IGNORE = Pattern.compile("(\\s*((#|//).*$)?)+", Pattern.MULTILINE),
-    PRINTABLE = Pattern.compile("[\\p{Print}\r\n]*"),
-    DECL_ID = Pattern.compile("[\\w_-]+", Pattern.CASE_INSENSITIVE);
-
-  public static final int
-    AD = 0, JSON = 1, STRING = 1, NUMBER = 2, BOOL = 3;
-
-  public static class ParseError extends RuntimeException {
-    public ParseError(String m) {
-      super(m);
-    }
+  private static class AdKey {
+    Object v;
+    AdKey(String k)  { v = k; }
+    AdKey(Integer k) { v = k; }
+    public int hashCode() { return v.hashCode(); }
+    public boolean equals(Object o) { return v.equals(o); }
   }
 
   // Create a new ad, plain and simple.
@@ -100,8 +26,16 @@ public class Ad implements Iterable<Ad> {
   // Allows subclasses to take maps from input ads directly to prevent
   // needless copying.
   protected Ad(boolean copy, Ad ad) {
-    map = (ad == null) ? new LinkedHashMap<String, Object>() :
-          (copy) ? new LinkedHashMap<String, Object>(ad.map) : ad.map;
+    map = (ad == null) ? new LinkedHashMap<Object, AdObject>() :
+          (copy) ? new LinkedHashMap<Object, AdObject>(ad.map) : ad.map;
+  }
+
+  // Create a new ad from a list or map.
+  public Ad(List<?> list) {
+    this(true, null);
+    int i = 0;
+    for (Object o : list)
+      put(Integer.valueOf(i++), o);
   }
 
   // Create an ad with given key and value.
@@ -119,6 +53,8 @@ public class Ad implements Iterable<Ad> {
     this(); put(key, value);
   } public Ad(String key, Ad value) {
     this(); put(key, value);
+  } public Ad(String key, List value) {
+    this(); put(key, value);
   }
 
   // Merges all of the ads passed into this ad.
@@ -126,278 +62,19 @@ public class Ad implements Iterable<Ad> {
     this(); merge(bases);
   }
 
-  // Convenient method for throwing parse errors.
-  private static ParseError PE(String m) { return new ParseError(m); }
-
-  // The set of tokens for the parser.
-  public static enum Token {
-    // Tokens and their patterns. The optional second argument specifies
-    // the token in JSON format.
-    T_LB ("\\[", "\\{"),
-    T_ID ("[\\w\\.]+", "\"[\\w\\.]+\""),
-    T_EQ ("=", ":"),
-    T_NUM("([-+]?(\\d*\\.\\d+)|(\\d+))(e[-+]?\\d+)?"),
-    T_STR("\"[^\\\\\"]*(?:\\\\.[^\\\\\"]*)*?\""),
-    T_TF ("(true|false)"),
-    T_SLB("\\[", "\\{"),
-    T_SC ("[;\\w]", ","),  // Includes newlines.
-    T_JP ("\\|"),  // "joiner pipe"
-    T_RB ("\\]", "\\}");
-
-    static {
-      T_LB.next (T_ID, T_SC, T_JP, T_RB);
-      T_JP.next (T_ID, T_SC, T_JP, T_RB);
-      T_ID.next (T_EQ);
-      T_EQ.next (T_NUM, T_STR, T_TF, T_SLB);
-      T_NUM.next(T_SC, T_JP, T_RB);
-      T_STR.next(T_SC, T_JP, T_RB);
-      T_TF.next (T_SC, T_JP, T_RB);
-      T_SLB.next(T_SC, T_JP, T_RB);
-      T_SC.next (T_ID, T_JP, T_RB);
-    }
-
-    EnumSet<Token> next = null;
-    Pattern pattern = null;
-    Pattern js_pattern = null;
-
-    void next(Token t1, Token... r) {
-      next = EnumSet.of(t1, r);
-    }
-
-    // Get the pattern given the mode.
-    Pattern pattern(int mode) {
-      if (mode == JSON && js_pattern != null)
-        return js_pattern;
-      return pattern;
-    }
-
-    // Constructor
-    Token(String re, String jre) {
-      pattern = Pattern.compile(re,  Pattern.CASE_INSENSITIVE);
-      if (jre != null)
-        js_pattern = Pattern.compile(jre, Pattern.CASE_INSENSITIVE);
-    } Token(String re) {
-      this(re, null);
-    }
-  }
-
-  // The parser itself. Can be fed bytes/chars incrementally, buffering
-  // input, and tossing it as it is processed.
-  public static class Parser {
-    Ad main_ad;           // The ad we're going to return.
-    Ad ad;                // The ad to put declarations into.
-    StringBuilder sb;
-    Matcher m;
-    Token token = null;   // Current token.
-    int mode = AD;        // Parser mode. (AD or JSON)
-    Parser sub = null;    // The sub-parser for recursive ad parsing.
-    String cid = null;    // Current identifier we're parsing.
-    boolean dws = false;  // True if we discarded whitespace already.
-    boolean hitEnd = false, requireEnd = false;
-
-    public Parser(CharSequence c) {
-      this(new Ad(), c);
-    } public Parser(Ad ad, CharSequence c) {
-      sb = new StringBuilder();
-      sb.append(c.toString());
-      m = IGNORE.matcher(sb);
-      this.ad = main_ad = ad;
-    } public Parser(Matcher m) {
-      this(new Ad(), m);
-    } public Parser(Ad ad, Matcher m) {
-      this.m = m;
-      this.ad = main_ad = ad;
-    } public Parser(Ad ad) {
-      this(ad, "");
-    } public Parser() {
-      this("");
-    }
-
-    // Return a string explaining what is expected after a token.
-    private static String expectStringFor(Token t, int m) {
-      if (t == null) return "beginning of ad: [ or {";
-      char a = (m == JSON) ? ':' : '=';
-      char s = (m == JSON) ? ',' : ';';
-      char e = (m == JSON) ? '}' : ']';
-      switch (t) {
-        case T_JP :
-        case T_LB : return "identifier or terminator";
-        case T_ID : return "assignment operator: "+a;
-        case T_EQ : return "value (number, string, boolean, or ad)";
-        case T_SLB:
-        case T_NUM:
-        case T_STR:
-        case T_TF : return "separator ("+s+") or end of ad: "+e;
-        case T_SC : return "identifier or end of ad: "+e;
-        case T_RB : return "nothing!";
-      } return "unknown";
-    }
-
-    // "Chomp" off a piece of the input using the matcher, returning the
-    // matched piece, or null if none was found. Adjusts the matcher
-    // position if a match was found.
-    private synchronized String chomp(Token t, int m) {
-      return chomp(t.pattern(m));
-    } private synchronized String chomp(Token t) {
-      return chomp(t.pattern(mode));
-    } private synchronized String chomp(Pattern p) {
-      m.usePattern(p);
-      if (!m.lookingAt()) return null;
-      String g = m.group();
-      hitEnd = m.hitEnd();
-      requireEnd = m.requireEnd();
-      m.region(m.end(), m.regionEnd());
-      return g;
-    }
-
-    // Handle parsing a token and potentially changing the ad.
-    private synchronized Token handleToken(Token t, String s) { 
-      // Hack for T_ID in JSON mode to handle quotes.
-      if (mode == JSON && t == Token.T_ID) {
-        cid = s.substring(1, s.length()-1).toLowerCase();
-      } else switch (t) {
-        case T_ID : cid = s.toLowerCase(); break;
-        case T_SLB: Parser p = new Parser(m);
-                    p.token = Token.T_LB; p.mode = mode;
-                    ad.putObject(cid, p.getAd()); break;
-        case T_NUM: ad.putObject(cid, new BigDecimal(s)); break;
-        case T_STR: s = unescapeString(s.substring(1, s.length()-1));
-                    ad.putObject(cid, s); break;
-        case T_TF : ad.putObject(cid, Boolean.valueOf(s)); break;
-        case T_JP : ad = ad.next(new Ad()); break;
-        case T_LB : m.region(m.regionStart()-1, m.regionEnd());
-                    Ad ad = Ad.parse(m);
-                    // TODO: Check for null here!!
-                    ad.putObject(cid, ad);
-      } return t;
-    }
-
-    // Look for T_LB, and return the character found so we know what parse
-    // mode to use.
-    private synchronized int findStart() {
-      if (chomp(Token.T_LB, AD) != null)
-        return AD;
-      if (chomp(Token.T_LB, JSON) != null)
-        return JSON;
-      return -1;
-    }
-
-    // Check the sequence for the the next token and return it.
-    private synchronized Token nextToken() {
-      // See if we need to discard ignored space first. If we hit
-      // the end, we need more input to do anything.
-      while (!dws) {
-        String s = chomp(IGNORE);
-        //System.out.println("Tossed: "+s.length());
-        if (m.hitEnd()) return null;
-        if (s == null || s.isEmpty()) dws = true;
-      }
-
-      if (token == null) {
-        // If no pattern set, look for the opening bracket.
-        if ((mode = findStart()) >= 0)
-          return token = Token.T_LB;
-      } else if (token.next == null) {
-        Token t = token;
-        token = null;
-        return t;
-      } else for (Token t : token.next) {
-        // Otherwise look for the next token.
-        String s = chomp(t);
-        //System.out.println("Token: "+s);
-        //System.out.println("region: "+m.regionStart()+" "+m.regionEnd());
-        if (requireEnd) return null;
-        if (s != null) return token = handleToken(t, s);
-      } throw PE("expecting "+expectStringFor(token, mode));
-    }
-
-    // Return an ad from the parser. Returns null if ad is not yet
-    // finished. Throws exception if syntax error occurs.
-    private synchronized Ad getAd() {
-      while (true) {
-        Token t = nextToken();
-        if (t == null) 
-          return null;
-        dws = false;
-        if (t.next == null)
-          return main_ad.mode(mode);
-      }
-    }
-
-    // Buffer some characters and attempt to parse the whole buffer
-    // as an ad. Throws a ParseError if the data is not a valid ad,
-    // otherwise returns null to indicate more information is needed.
-    // XXX This isn't very good.
-    public synchronized Ad write(CharSequence b) {
-      sb.append(b);
-      m.region(m.regionStart(), sb.length());
-      Ad ad;
-
-      try {
-        ad = getAd();
-        //System.out.println("Ad is: "+ad);
-      } catch (ParseError e) {
-        if (hitEnd)
-          return null;
-        throw e;
-      }
-
-      if (ad != null)
-        sb.delete(m.regionEnd(), sb.length());
-      m.reset();
-      token = null;
-
-      return ad;
-    }
-  }
-
-  // Parse an ad using a matcher.
-  public synchronized Ad parseInto(Matcher m) {
-    Parser p = new Parser(this, m);
-    return p.getAd();
-  } public static Ad parse(Matcher m) {
-    return new Ad().parseInto(m);
-  }
-
-  // Parse a character sequence.
-  public synchronized Ad parseInto(CharSequence cs) {
-    Parser p = new Parser(this, cs);
-    return p.getAd();
-  } public static Ad parse(CharSequence cs) {
-    return new Ad().parseInto(cs);
-  }
-
-  static Pattern AD_END = Pattern.compile("(?<=\\])");
-
-  // Parse an input stream into this ad. XXX This is hacky and bad.
-  public synchronized Ad parseInto(InputStream is) {
-    try {
-      StringBuilder sb = new StringBuilder(1024);
-      Parser p = new Parser(this);
-
-      for (int c = is.read(); c >= 0; c = is.read()) {
-        sb.append((char)c);
-        if (c != ']' && c != '}') continue;
-        Ad ad = p.write(sb);
-        if (ad != null) return this;
-        sb = new StringBuilder(1024);
-      } return null;
-    } catch (Exception e) {
-      throw new RuntimeException("couldn't parse: "+e.getMessage(), e);
-    }
+  // Static parser methods.
+  public static Ad parse(CharSequence cs) {
+    return new AdParser(cs).parseAd();
   } public static Ad parse(InputStream is) {
-    return new Ad().parseInto(is);
-  }
-
-  // Parse from a file.
-  public synchronized Ad parseInto(File f) {
-    try {
-      return parseInto(new FileInputStream(f));
-    } catch (Exception e) {
-      throw new RuntimeException("couldn't parse: "+e.getMessage(), e);
-    }
+    return new AdParser(is).parseAd();
   } public static Ad parse(File f) {
-    return new Ad().parseInto(f);
+    try {
+      return new AdParser(f).parseAd();
+    } catch (RuntimeException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
   }
 
   // Access methods
@@ -410,32 +87,32 @@ public class Ad implements Iterable<Ad> {
   public String get(Object s) {
     return get(s, null);
   } public String get(Object s, String def) {
-    Object o = getObject(s);
-    return (o != null) ? o.toString() : def;
+    AdObject o = getObject(s);
+    return (o != null) ? o.asString() : def;
   }
 
   // Get an entry from the ad as an integer. Defaults to -1.
   public int getInt(Object s) {
     return getInt(s, -1);
   } public int getInt(Object s, int def) {
-    Number n = getNumber(s);
-    return (n != null) ? n.intValue() : def;
+    AdObject o = getObject(s);
+    return (s != null) ? o.asInt() : def;
   }
 
   // Get an entry from the ad as a long. Defaults to -1.
   public long getLong(Object s) {
     return getLong(s, -1);
   } public long getLong(Object s, long def) {
-    Number n = getNumber(s);
-    return (n != null) ? n.longValue() : def;
+    AdObject o = getObject(s);
+    return (s != null) ? o.asLong() : def;
   }
 
   // Get an entry from the ad as a double. Defaults to -1.
   public double getDouble(Object s) {
     return getDouble(s, -1);
   } public double getDouble(Object s, double def) {
-    Number n = getNumber(s);
-    return (n != null) ? n.doubleValue() : def;
+    AdObject o = getObject(s);
+    return (s != null) ? o.asDouble() : def;
   }
 
   // Get an entry from the ad as a Number object. Attempts to cast to a
@@ -443,15 +120,8 @@ public class Ad implements Iterable<Ad> {
   public Number getNumber(Object s) {
     return getNumber(s, null);
   } public Number getNumber(Object s, Number def) {
-    Object o = getObject(s);
-    if (s != null) try {
-      if (o instanceof Number)
-        return (Number) o;
-      if (o instanceof String)
-        return new BigDecimal((String)o);
-    } catch (Exception e) {
-      // Parse error, fall through.
-    } return def;
+    AdObject o = getObject(s);
+    return (s != null) ? o.asNumber() : def;
   }
 
   // Get an entry from the ad as a boolean. Returns true if the value is
@@ -460,51 +130,68 @@ public class Ad implements Iterable<Ad> {
   public boolean getBoolean(Object s) {
     return getBoolean(s, false);
   } public boolean getBoolean(Object s, boolean def) {
-    Object o = getObject(s);
-    if (o instanceof Boolean)
-      return ((Boolean)o).booleanValue();
-    if (o instanceof String)
-      return ((String)o).toLowerCase().equals("true");
-    if (o instanceof Number)
-      return ((Number)o).intValue() > 0;
-    return def;
+    AdObject o = getObject(s);
+    return (s != null) ? o.asBooleanValue() : def;
   }
 
-  // Get an inner ad from this ad. Defaults to null. Should this
-  // parse strings?
+  // Get an inner ad from this ad. Defaults to null.
   public Ad getAd(Object s) {
     return getAd(s, null);
   } public Ad getAd(Object s, Ad def) {
-    Object o = getObject(s);
-    if (s != null && o instanceof Ad)
-      return (Ad)o;
-    return def;
+    AdObject o = getObject(s);
+    return (s != null) ? o.asAd() : def;
+  } public Ad[] getAds(Object s) {
+    return getAll(Ad.class, s);
+  }
+
+  // Get a value as a list of a given type. If the value is not an ad,
+  // return a list containing just that value. If the key does not
+  // exist, returns null.
+  public AdObject[] getAll(Object s) {
+    return getAll(null, s);
+  } public <C> C[] getAll(Class<C> c, Object s) {
+    AdObject o = getObject(s);
+    return (o != null) ? o.asList(c) : null;
   }
     
   // Look up an object by its key. Handles recursive ad lookups.
-  public synchronized Object getObject(Object key) {
-    if (key == null)
-      throw PE("null key given");
-    return getObject(key.toString().toLowerCase());
-  } private synchronized Object getObject(String key) {
-    // XXX Call only after sanity checks.
+  synchronized AdObject getObject(Object okey) {
     int i;
     Ad ad = this;
 
-    // Keep traversing ads until we find ad we need.
-    while ((i = key.indexOf('.')) > 0) synchronized (ad) {
-      String k1 = key.substring(0, i);
-      Object o = ad.map.get(k1);
-      if (o instanceof Ad)
-        ad = (Ad) o;
-      else return null;
-      key = key.substring(i+1);
-    }
+    if (okey == null) {
+      throw new RuntimeException("null key given");
+    } if (okey instanceof Number) {
+      i = ((Number)okey).intValue();
+      AdObject o = map.get(i);
+      if (o != null)
+        return o;
+      return getEntry(i).getValue();
+    } else {
+      String key = okey.toString();
+      while ((i = key.indexOf('.')) > 0) synchronized (ad) {
+        String k1 = key.substring(0, i);
+        AdObject o = ad.map.get(k1);
+        if (o == null)
+          return null;
+        ad = o.asAd();
+        key = key.substring(i+1);
+      }
 
-    // No more ads to traverse, get value.
-    synchronized (ad) {
-      return ad.map.get(key);
+      // No more ads to traverse, get value.
+      synchronized (ad) {
+        return ad.map.get(key);
+      }
     }
+  }
+
+  // Get an entry from the map.
+  private Map.Entry<Object, AdObject> getEntry(int i) {
+    if (i < 0 || i >= size())
+      throw new IndexOutOfBoundsException();
+    for (Map.Entry<Object, AdObject> e : map.entrySet())
+      if (i-- == 0) return e;
+    return null;
   }
 
   // Insertion methods
@@ -533,13 +220,7 @@ public class Ad implements Iterable<Ad> {
     return putObject(key, Boolean.valueOf(value));
   }
 
-  public Ad put(Object key, Number value) {
-    return putObject(key, value);
-  }
-
-  public Ad put(Object key, String value) {
-    if (value != null && !PRINTABLE.matcher(value).matches())
-      throw PE("non-printable characters in string");
+  public Ad put(Object key, Object value) {
     return putObject(key, value);
   }
 
@@ -548,114 +229,78 @@ public class Ad implements Iterable<Ad> {
     return putObject(key, value);
   }
 
+  public Ad put(Object key, List value) {
+    return putObject(key, new Ad(value));
+  }
+
+  public Ad put(Object value) {
+    return putObject(null, value);
+  }
+
   // Use this to insert objects in the above methods. This takes care
   // of validating the key so accidental badness doesn't occur.
-  private synchronized Ad putObject(Object okey, Object value) {
+  synchronized Ad putObject(Object value) {
+    return putObject(null, value);
+  } synchronized Ad putObject(Object okey, Object value) {
     int i;
     Ad ad = this;
 
-    if (okey == null)
-      throw PE("null key given");
-    String key = okey.toString().toLowerCase().trim();
-    if (key.isEmpty())
-      throw PE("empty key given");
-
-    // Keep traversing ads until we find ad we need to insert into.
-    while ((i = key.indexOf('.')) > 0) synchronized (ad) {
-      String k1 = key.substring(0, i);
-      if (!DECL_ID.matcher(k1).matches())
-        throw PE("invalid key name: "+key);
-      Object o = ad.map.get(k1);
-      if (o == null)
-        ad.map.put(k1, ad = new Ad());
-      else if (o instanceof Ad)
-        ad = (Ad) o;
-      else
-        throw PE("key path contains non-ad");
-      key = key.substring(i+1);
-    }
-
-    // No more ads to traverse, insert key.
-    synchronized (ad) {
-      if (!DECL_ID.matcher(key).matches())
-        throw PE("invalid key name: "+key);
-      if (value != null)
-        ad.map.put(key, value);
-      else
-        ad.map.remove(key);
-    } return this;
-  }
-
-  // Chaining methods
-  // ----------------
-  // Insert an ad after this ad in the chain. If null, "cuts" the chain.
-  // Returns the inserted ad.
-  public synchronized Ad next(Ad ad) {
-    next = ad;
-    return ad;
-  }
-
-  // Get the next ad in the chain.
-  public synchronized Ad next() {
-    return next;
-  }
-
-  // Return whether or not there is another ad in the chain.
-  public synchronized boolean hasNext() {
-    return next != null;
-  }
-
-  // Get an iterator which goes over each ad in the chain.
-  public synchronized Iterator<Ad> iterator() {
-    return new Iterator<Ad>() {
-      Ad ad = Ad.this;
-      public boolean hasNext() { return ad != null; }
-      public Ad next() { Ad a = ad; ad = a.next; return a; }
-      public void remove() { }
-    };
-  }
-
-  // Casting methods
-  // ---------------
-  // Methods for automatically converting members of ads into special
-  // ads. Mostly for deserializing object state.
-
-  // Cast either this ad or a member object into a special ad type.
-  // Checks the passed class for a method called deserialize() that
-  // takes either the target's type or the Object type, and calls
-  // that method with the target. If a key was specified, stores the
-  // cast target back into this ad.
-  public <T extends Ad> T cast(Class<T> c) {
-    return cast(c, null);
-  } public <T extends Ad> T cast(Class<T> c, Object key) {
-    Object o = (key != null) ? getObject(key) : this;
-    T t;
-
-    if (o == null) {
-      return null;
-    } if (c.isInstance(o)) {
-      return c.cast(o);
-    } try {
-      try {
-        t = c.cast(c.getMethod("deserialize", o.getClass()).invoke(null, o));
-      } catch (NoSuchMethodException e) {
-        t = c.cast(c.getMethod("deserialize", Object.class).invoke(null, o));
+    if (okey == null) {
+      map.put(size(), new AdObject(value));
+    } else if (okey instanceof Number) {
+      i = ((Number)okey).intValue();
+      getEntry(i).setValue(new AdObject(value));
+    } else {
+      String key = okey.toString();
+      // Keep traversing ads until we find the ad we need to insert into.
+      while ((i = key.indexOf('.')) > 0) synchronized (ad) {
+        String k1 = key.substring(0, i);
+        AdObject o = ad.map.get(k1);
+        if (o == null)
+          ad.map.put(k1, new AdObject(ad = new Ad()));
+        else 
+          ad = o.asAd();
+        key = key.substring(i+1);
       }
-    } catch (Exception e) {
-      throw new RuntimeException("could not cast to "+c, e);
-    }
-
-    if (key != null) put(key, t);
-    return t;
+      
+      // No more ads to traverse, insert object.
+      synchronized (ad) {
+        if (value != null)
+          ad.map.put(key, new AdObject(value));
+        else
+          ad.map.remove(key);
+      }
+    } return this;
   }
 
   // Other methods
   // -------------
   // Methods to get information about and perform operations on the ad.
 
-  // Check if the ad has any fields.
   public synchronized boolean isEmpty() {
     return map.isEmpty();
+  }
+
+  public synchronized void clear() {
+    map.clear();
+  }
+
+  public synchronized void putAll(Map<String, Object> m) {
+    for (Map.Entry<String, Object> e : m.entrySet()) {
+      putObject(e.getKey(), e.getValue());
+    }
+  }
+
+  public synchronized Set<Object> keySet() {
+    return map.keySet();
+  }
+
+  public synchronized Collection<AdObject> values() {
+    return map.values();
+  }
+
+  public synchronized Set<Map.Entry<Object, AdObject>> entrySet() {
+    return map.entrySet();
   }
   
   // Get the number of fields in this ad.
@@ -663,16 +308,15 @@ public class Ad implements Iterable<Ad> {
     return map.size();
   }
 
-  // Get the number of sub ads in this ad.
-  public int count() {
-    int i = 1;
-    if (hasNext()) for (Ad a : next) i++;
-    return i;
+  // Check if fields or values are present in the ad.
+  public synchronized boolean containsKey(Object key) {
+    return has(key.toString());
+  } public synchronized boolean has(String... keys) {
+    return require(keys) == null;
   }
 
-  // Check if fields are present in the ad.
-  public synchronized boolean has(String... keys) {
-    return require(keys) == null;
+  public synchronized boolean containsValue(Object val) {
+    return map.containsValue(val);
   }
 
   // Ensure that all fields are present in the ad. Returns the first
@@ -683,50 +327,19 @@ public class Ad implements Iterable<Ad> {
     return null;
   }
 
-  // Get the type of an entry in this ad. Returns -1 if the key is not in
-  // the ad or if a catastrophe happened and something weird was found.
-  public int typeOf(String key) {
-    Object o = getObject(key);
-    return (o == null)            ? -1 :
-           (o instanceof Ad)      ? AD :
-           (o instanceof String)  ? STRING :
-           (o instanceof Number)  ? NUMBER :
-           (o instanceof Boolean) ? BOOL : -1;
-  }
-
   // Merge ads into this one.
   // XXX Possible race condition? Just don't do crazy stuff like try
   // to insert two ads into each other at the same time.
-  // FIXME: Doesn't work quite right for chained ads.
   public synchronized Ad merge(Ad... ads) {
-    for (Ad a : ads) if (a != null) synchronized (a) {
-      map.putAll(a.map);
-    } return this;
-  }
-
-  // Return a new ad containing only the given keys. Any required key that
-  // is missing will result in an error being thrown.
-  public Ad model(String required, String optional) {
-    return model(splitCSV(required), splitCSV(optional));
-  } public Ad model(String[] required, String[] optional) {
-    Ad ad = new Ad();
-    for (String s : required) {
-      Object o = getObject(s);
-      if (o == null)
-        throw new RuntimeException("missing required field: "+s);
-      ad.putObject(s, o);
-    } for (String s : optional) {
-      Object o = getObject(s);
-      if (o == null)
-        continue;
-      ad.putObject(s, o);
-    } return ad;
+    for (Ad a : ads) if (a != null)
+      synchronized (a) { map.putAll(a.map); }
+    return this;
   }
 
   // Remove fields from this ad.
-  public synchronized Ad remove(String... keys) {
-    for (String k : keys)
-      removeKey(k);
+  public synchronized Ad remove(String... k) {
+    for (String s : k)
+      removeKey(s);
     return this;
   }
 
@@ -734,7 +347,7 @@ public class Ad implements Iterable<Ad> {
   // How should this handle sub ads?
   public synchronized Ad filter(String... keys) {
     Ad a = new Ad();
-    for (String k : keys)
+    for (Object k : keys)
       a.putObject(k, getObject(k));
     return a;
   }
@@ -749,17 +362,19 @@ public class Ad implements Iterable<Ad> {
 
   // Trim strings in this ad, removing empty strings.
   public synchronized Ad trim() {
-    Iterator<Map.Entry<String,Object>> it = map.entrySet().iterator();
+    Iterator<Map.Entry<Object, AdObject>> it = map.entrySet().iterator();
     while (it.hasNext()) {
-      Map.Entry<String,Object> e = it.next();
-      Object o = e.getValue();
+      Map.Entry<Object, AdObject> e = it.next();
+      AdObject o = e.getValue();
 
-      if (o instanceof String) {
+      if (o.asObject() instanceof String) {
         String s = o.toString().trim();
         if (s.isEmpty())
           it.remove();
-        else e.setValue(s);
-      } else if (o instanceof Ad) ((Ad)o).trim();
+        else o.setObject(s);
+      } else if (o.asObject() instanceof Ad) {
+        o.asAd().trim();
+      }
     } return this;
   }
 
@@ -798,79 +413,183 @@ public class Ad implements Iterable<Ad> {
     return map.hashCode();
   }
 
+  // Quick hack thing. Check if everything is anonymous.
+  public boolean isList() {
+    for (Object o : map.keySet())
+      if (!(o instanceof Number)) return false;
+    return true;
+  }
+
+  // Marshalling
+  // -----------
+  // Methods for serializing and deserializing Java objects as Ads/JSON.
+
+  // Unmarshal an object from this ad.
+  public <T> T unmarshalAs(Class<T> c, Object key) {
+    Object o = (key != null) ? getObject(key).asObject() : this;
+    T t = null;  // The object we return.
+
+    if (o == null) {
+      // If there's no object with the given key, return null.
+      return null;
+    } if (c.isInstance(o)) {
+      // If it's already the desired class, just return it.
+      return c.cast(o);
+    } try {
+      // If it's declared unmarshallable, look for an unmarshal method.
+      try {
+        // Look for a unmarshalling method which takes the stored type.
+        t = c.cast(c.getMethod("unmarshal", o.getClass()).invoke(null, o));
+      } catch (NoSuchMethodException e) {
+        // Look for a unmarshalling method that takes an object.
+        t = c.cast(c.getMethod("unmarshal", Object.class).invoke(null, o));
+      }
+    } catch (NoSuchMethodException e) {
+      /* fall through */
+    } catch (RuntimeException e) {
+      // Something bad happened while unmarshalling.
+      throw e;
+    } catch (Exception e) {
+      // Something bad happened while unmarshalling. Wrap it.
+      throw new RuntimeException(e);
+    } if (o instanceof Ad && t == null) {
+      // If the stored object is an ad, try unmarshalling the ad.
+      t = ((Ad)o).unmarshal(c);
+    }
+
+    return t;
+  }
+
+  // Unmarshal this ad into an object. This operation can throw a runtime
+  // exception.
+  public synchronized <O> O unmarshal(O o) {
+    try {
+      if (o.getClass() == Ad.class) {
+        ((Ad)o).merge(this);
+        return o;
+      } else for (Field f : o.getClass().getFields()) synchronized (f) {
+        // Iterate over class fields and see if there's anything in the ad.
+        // Ignore certain types of fields.
+        int m = f.getModifiers();
+        if (f.isSynthetic() ||
+            Modifier.isTransient(m) ||
+            Modifier.isStatic(m)) continue;
+
+        Class<?> c = f.getType();
+        String n = f.getName();
+
+        // Ignore nulls.
+        if (!has(n)) continue;
+
+        // Make the field accessible for our purposes.
+        boolean accessible = f.isAccessible();
+        f.setAccessible(true);
+
+        if (c == String.class) {
+          f.set(o, get(n));
+        } else if (c == int.class || c == Integer.class) {
+          f.setInt(o, getInt(n));
+        } else if (c == boolean.class || c == Boolean.class) {
+          f.setBoolean(o, getBoolean(n));
+        } else if (c == double.class || c == Double.class) {
+          f.setDouble(o, getDouble(n));
+        } else if (c == Ad.class) {
+          f.set(o, getAd(n));
+        } else if (c == java.net.URI.class) {
+          f.set(o, java.net.URI.create(get(n)));
+        } else {
+          // Try to unmarshal this weird thing as an object.
+          f.set(o, unmarshalAs(c, n));
+        }
+
+        // Replace original access permissions.
+        f.setAccessible(accessible);
+      }
+    } catch (RuntimeException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    } return o;
+  }
+
+  // For objects to be used with this, they must implement a zero-arg
+  // constructor.
+  public <O> O unmarshal(Class<O> clazz) {
+    try {
+      O o = clazz.newInstance();
+      unmarshal(o);
+      return o;
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  // Marshal an object into this ad.
+  public synchronized Ad fromObject(Object o) {
+    try {
+      if (o instanceof Ad) {
+        ((Ad)o).merge(this);
+      } else if (o instanceof Map) {
+        fromMap((Map) o);
+      } else if (o instanceof Collection) {
+        fromList((Collection) o);
+      } else if (o.getClass().isArray()) {
+        fromArray(o);
+      } else for (Field f : o.getClass().getFields()) {
+        if (f.get(o) != null)
+          putObject(f.getName(), f.get(o));
+      } return this;
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  private void fromMap(Map<?,?> m) {
+    for (Map.Entry<?,?> e : m.entrySet())
+      putObject(e.getKey(), e.getValue());
+  } private void fromList(Collection<?> l) {
+    for (Object o : l) putObject(o);
+  } private void fromArray(Object o) {
+    for (int i = 0; i < Array.getLength(o); i++)
+      putObject(Array.get(o, i));
+  }
+
+  // Marshal an object into a new ad.
+  public static Ad marshal(Object o) {
+    return new Ad().fromObject(o);
+  }
+
   // Composition methods
   // ------------------
-  // Methods for presenting and serializing ads.
-
-  // Change the default rendering mode of the ad.
-  public Ad mode(int m) {
-    if (m == JSON)
-      mode = JSON;
-    else mode = AD;
-    return this;
+  // Represent this ad in ClassAd format.
+  public synchronized String toString(boolean pretty) {
+    if (pretty)
+      return AdPrinter.PRETTY.toString(this);
+    return AdPrinter.MIN.toString(this);
+  } public synchronized String toString() {
+    return toString(true);
   }
 
-  // Get the default rendering mode of the ad.
-  public int mode() {
-    return mode;
+  // Represent this ad as a nicely-formatted JSON string.
+  public synchronized String toJSON(boolean pretty) {
+    if (pretty)
+      return AdPrinter.JSON.toString(this);
+    return AdPrinter.JSON_MIN.toString(this);
+  } public synchronized String toJSON() {
+    return toJSON(true);
   }
 
-  // Reinventing wheels because replace() doesn't work for this. Translates
-  // an escaped string parsed from a text ad into a proper Java string.
-  private static String unescapeString(String s) {
-    boolean esc = false;
-    StringBuilder sb = new StringBuilder(s.length());
-    for (int i = 0; i < s.length(); i++) {
-      char c = s.charAt(i);
-      if (c == '\n' || c == '\r') {  // Ignore newlines.
-        continue;
-      } if (esc) switch (c) {
-        case '"' :
-        case '\\': sb.append(c);    break;
-        case 'n' : sb.append('\n'); break;
-        default  : sb.append('\\').append(c);
-      } else if (c == '\\') {
-        esc = true;
-        continue;
-      } else {
-        sb.append(c);
-      } esc = false;
-    } return sb.toString();
-  }
-
-  // Represent this ad as a nicely-formatted string.
-  public synchronized String toString() {
-    return (mode == JSON) ?
-      AdPrinter.JSON.toString(this) :
-      AdPrinter.PRETTY.toString(this);
-  }
-
-  // Represent this ad in a compact way for serialization.
+  // Serialize as bytes.
   public synchronized byte[] serialize() {
-    return serialize(true);
-  } public synchronized byte[] serialize(boolean decor) {
-    AdPrinter p;
-    if (mode == JSON)
-      p = (decor) ? AdPrinter.JSON : AdPrinter.BARE_JSON;
-    else
-      p = (decor) ? AdPrinter.COMPACT : AdPrinter.BARE;
-    return p.toBytes(this);
-  }
-
-  // Represent this ad as a JSON string.
-  public synchronized String toJSON() {
-    return AdPrinter.JSON.toString(this);
+    return toString(false).getBytes();
   }
 
   public static void main(String args[]) {
     System.out.println("Type an ad:");
-    try {
-      Ad ad = Ad.parse(System.in);
-      System.out.println("Got ad: "+ad);
-      System.out.println("    or: "+new String(ad.serialize()));
-      System.out.println("    or: "+ad.toJSON());
-    } catch (Exception e) {
-      e.printStackTrace();
-    }
+    Ad ad = Ad.parse(System.in);
+    System.out.println("Got ad: \n"+ad);
+    System.out.println("------\n"+ad.toString(false));
+    System.out.println("------\n"+ad.toJSON());
+    System.out.println("------\n"+ad.toJSON(false));
   }
 }

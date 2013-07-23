@@ -45,7 +45,7 @@ public class StorkClient {
       this.args = args;
     }
 
-    final ResponseAd handle(Socket sock) {
+    final Ad handle(Socket sock) {
       try {
         this.sock = sock;
         is = sock.getInputStream();
@@ -72,12 +72,10 @@ public class StorkClient {
           } while (ad != null && handle(ad));
 
           // Return response ad if last handled ad was one.
-          if (ResponseAd.is(ad))
-            return new ResponseAd(ad);
-          return new ResponseAd("success");
+          return ad;
         } while (hasMoreCommands());
       } catch (Exception e) {
-        return new ResponseAd("error", e.getMessage());
+        return new Ad("error", e.getMessage());
       } finally {
         complete();
       }
@@ -126,9 +124,9 @@ public class StorkClient {
 
       // Check args.
       if (args.length < 1)
-        return new ResponseAd("error", "not enough arguments");
+        return new Ad("error", "not enough arguments");
       else if (args.length > 1)
-        return new ResponseAd("error", "too many arguments");
+        return new Ad("error", "too many arguments");
       ad.put("uri", args[0]);
 
       // Check for options.
@@ -175,7 +173,7 @@ public class StorkClient {
 
     public Ad command() {
       Ad ad = new Ad();
-      ResponseAd res;
+      Ad res;
       Range range = new Range();
       String status = null;
       int watch = -1;
@@ -198,7 +196,7 @@ public class StorkClient {
           if (s == args[0])
             status = s;
           else
-            return new ResponseAd("error", "invalid argument: "+s);
+            return new Ad("error", "invalid argument: "+s);
         } else {
           range.swallow(r);
         }
@@ -218,8 +216,6 @@ public class StorkClient {
           System.out.println(0);
         else if (ad.has("count"))
           System.out.println(ad.getInt("count"));
-        else
-          System.out.println(ad.count());
         return false;
       }
 
@@ -231,7 +227,7 @@ public class StorkClient {
       System.out.println(ad);
 
       // Report how many ads we received.
-      int count = ad.count();
+      int count = ad.getInt("count");
       String not_found = ad.get("not_found");
 
       if (count > 0) {
@@ -489,7 +485,7 @@ public class StorkClient {
       } if (env.getBoolean("quiet")) {
         // Do nothing.
       } else if (env.getBoolean("brief")) {
-        for (Ad a : ad)
+        for (Ad a : ad.getAds("jobs"))
           System.out.println(a.getInt("job_id"));
       } else {
         System.out.println(

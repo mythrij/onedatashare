@@ -3,6 +3,7 @@ package stork.module.gridftp;
 import stork.ad.*;
 import stork.module.*;
 import stork.util.*;
+import stork.scheduler.*;
 import static stork.util.StorkUtil.Static.*;
 import stork.stat.*;
 import stork.cred.*;
@@ -51,7 +52,7 @@ public class GridFTPModule extends TransferModule {
   }
 
   // Create a new connection to an FTP server.
-  public StorkSession session(URI url, Ad opts) {
-    return new GridFTPSession(url, opts);
+  public StorkSession session(EndPoint e) {
+    return new GridFTPSession(e);
   }
 }

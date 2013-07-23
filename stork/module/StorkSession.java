@@ -2,15 +2,16 @@ package stork.module;
 
 import stork.ad.*;
 import stork.util.*;
+import stork.scheduler.*;
 import java.net.URI;
 
 // Represents a connection to a remote end-point. A session should
 // provide methods for starting a transfer, listing directories, and
 // performing other operations on the end-point.
 
-public abstract class StorkSession extends Ad {
-  protected Ad config;
-  protected URI url;
+public abstract class StorkSession {
+  public EndPoint ep = null;
+
   protected Pipe<Ad>.End pipe = null;
   protected StorkSession pair = null;
   protected boolean closed = false;
@@ -50,9 +51,12 @@ public abstract class StorkSession extends Ad {
   ////////////////////////////////////////////////////////////////////
 
   // Create a session from a URL. Generally the path is ignored.
-  public StorkSession(URI url, Ad config) {
-    super(config == null ? new Ad() : config);
-    this.url = url;
+  public StorkSession(String u) {
+    this(new EndPoint(u));
+  } public StorkSession(URI u, Ad opts) {
+    this(new EndPoint(u));
+  } public StorkSession(EndPoint e) {
+    ep = e;
   }
 
   // Set an ad sink to write update ads into.
@@ -154,11 +158,11 @@ public abstract class StorkSession extends Ad {
 
   // Get the protocol used by the session.
   public String protocol() {
-    return url.getScheme();
+    return ep.proto();
   }
 
   // Get the authority for the session.
   public String authority() {
-    return url.getAuthority();
+    return ep.uri.getAuthority();
   }
 }

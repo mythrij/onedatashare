@@ -18,32 +18,21 @@ import java.util.concurrent.*;
 // program and be given commands directly (or both).
 //
 // The entire state of the scheduler can be serialized and saved to disk,
-// and subsequently recovered if so desired. Its entire state is stored as
-// an ad, which is the reason for THIS. Is this the worst abuse of a data
-// structure ever, or the best? :)  |
-//                                  v
-public class StorkScheduler extends Ad {
-  // Singleton instance of the scheduler.
-  // TODO: Remove.
-  private static StorkScheduler instance = null;
+// and subsequently recovered if so desired.
+public class StorkScheduler {
+  public Ad env = new Ad();
+  public JobQueue job_queue = new JobQueue();
+  public Map<String, StorkUser> users = new HashMap<String, StorkUser>();
 
-  private Thread[] thread_pool;
-  private Thread[] worker_pool;
-  private Thread   dump_state_thread;
+  private transient Thread[] thread_pool;
+  private transient Thread[] worker_pool;
+  private transient Thread   dump_state_thread;
 
-  private Map<String, StorkCommand> cmd_handlers;
-  private TransferModuleTable xfer_modules;
+  private transient Map<String, StorkCommand> cmd_handlers;
+  private transient TransferModuleTable xfer_modules;
 
-  private JobQueue job_queue;
-  private LinkedBlockingQueue<RequestContext> req_queue;
-
-  private Bell<Integer> shutdown_bell = new Bell<Integer>();
-
-  // Initialize the server state to a fresh state.
-  public void initializeState() {
-    //put("queue", new AdList());
-    //put("users", StorkUser.globalMap());
-  }
+  private transient LinkedBlockingQueue<RequestContext> req_queue =
+    new LinkedBlockingQueue<RequestContext>();
 
   // Construct and return a usage/options parser object.
   public static GetOpts getParser(GetOpts base) {
@@ -67,10 +56,6 @@ public class StorkScheduler extends Ad {
 
     return opts;
   }
-
-  // Configuration variables
-  private boolean daemon = false;
-  private Ad env;
 
   // A thread which runs continuously and starts jobs as they're found.
   private class StorkQueueThread extends Thread {
@@ -144,7 +129,7 @@ public class StorkScheduler extends Ad {
             throw new FatalEx("invalid command: "+req.cmd);
 
           // Check if the handler requires a logged in user.
-          if (getBoolean("env.registration")) {
+          if (env.getBoolean("registration")) {
             if (handler.requiresLogin()) try {
               req.user = StorkUser.login(req.ad);
             } catch (RuntimeException e) {
@@ -171,7 +156,7 @@ public class StorkScheduler extends Ad {
 
   // Stork command handlers should implement this interface.
   static abstract class StorkCommand {
-    public abstract Ad handle(RequestContext req);
+    public abstract Object handle(RequestContext req);
 
     // Override this for commands that don't require logon.
     public boolean requiresLogin() {
@@ -192,10 +177,11 @@ public class StorkScheduler extends Ad {
       if (count < 1)
         throw new FatalEx("no jobs found");
 
-      if (req.ad.getBoolean("count"))
-        return new Ad("count", count);
-      else
-        return sorter.getAd();
+      Ad ad = new Ad("count", count);
+
+      if (!req.ad.getBoolean("count"))
+        ad.put("jobs", sorter.getAds());
+      return ad;
     }
   }
 
@@ -203,9 +189,9 @@ public class StorkScheduler extends Ad {
     public Ad handle(RequestContext req) {
       StorkSession sess = null;
       try {
-        EndPoint ep = new EndPoint(req.ad);
+        EndPoint ep = req.ad.unmarshal(EndPoint.class);
         sess = ep.session();
-        return sess.list(ep.path, ep);
+        return sess.list(ep.path());
       } finally {
         if (sess != null) sess.close();
       }
@@ -218,12 +204,12 @@ public class StorkScheduler extends Ad {
 
   // Handle user registration.
   class StorkUserHandler extends StorkCommand {
-    public Ad handle(RequestContext req) {
+    public StorkUser handle(RequestContext req) {
       System.out.println("Regitration ad: "+req.ad);
-      if (req.ad.get("action", "").equals("register")) {
-        Ad ad = StorkUser.register(req.ad);
+      if ("register".equals(req.ad.get("action", ""))) {
+        StorkUser su = StorkUser.register(req.ad);
         dumpState();
-        return ad;
+        return su;
       } return StorkUser.login(req.ad);
     }
 
@@ -248,12 +234,12 @@ public class StorkScheduler extends Ad {
       Range r, cdr = new Range();
 
       if (!ad.has("range"))
-        return new ResponseAd("error", "no job_id range specified");
+        return new Ad("error", "no job_id range specified");
 
       r = Range.parseRange(ad.get("range"));
 
       if (r == null)
-        return new ResponseAd("error", "could not parse range");
+        return new Ad("error", "could not parse range");
 
       if (ad.has("reason"))
         reason = reason+" ("+ad.get("reason")+")";
@@ -265,16 +251,15 @@ public class StorkScheduler extends Ad {
       } catch (IndexOutOfBoundsException oobe) {
         cdr.swallow(job_id);
       } catch (Exception e) {
-        return new ResponseAd("error", e.getMessage());
+        return new Ad("error", e.getMessage());
       }
 
       // See if there's anything in our "couldn't delete" range.
       if (cdr.size() == 0)
-        return new ResponseAd("success");
+        return new Ad();
       if (cdr.size() == r.size())
-        return new ResponseAd("error", "no jobs were removed");
-      return new ResponseAd("success",
-                            "the following jobs weren't removed: "+cdr);
+        return new Ad("error", "no jobs were removed");
+      return new Ad("message", "the following jobs weren't removed: "+cdr);
     }
   }
 
@@ -285,14 +270,14 @@ public class StorkScheduler extends Ad {
         try {
           req.putReply(tm.infoAd());
         } catch (Exception e) {
-          return new ResponseAd("error", e.getMessage());
+          return new Ad("error", e.getMessage());
         }
-      } return new ResponseAd("success");
+      } return new Ad();
     }
 
     // TODO: Send server information.
     Ad sendServerInfo(RequestContext req) {
-      return new Ad(StorkScheduler.this);
+      return Ad.marshal(this);
     }
 
     public Ad handle(RequestContext req) {
@@ -302,7 +287,7 @@ public class StorkScheduler extends Ad {
         return sendModuleInfo(req);
       if (type.equals("server"))
         return sendServerInfo(req);
-      return new ResponseAd("error", "invalid type: "+type);
+      return new Ad("error", "invalid type: "+type);
     }
 
     public boolean requiresLogin() {
@@ -319,8 +304,8 @@ public class StorkScheduler extends Ad {
 
     // Iterate over and populate external module list.
     // TODO: Do this in parallel and detect misbehaving externals.
-    if (has("env.libexec")) {
-      File dir = new File(get("env.libexec"));
+    if (env.has("libexec")) {
+      File dir = new File(env.get("libexec"));
 
       if (dir.isDirectory()) for (File f : dir.listFiles()) {
         // Skip over things that obviously aren't transfer modules.
@@ -346,8 +331,8 @@ public class StorkScheduler extends Ad {
   // Initialize the thread pool according to config.
   // TODO: Replace worker threads with asynchronous I/O.
   public void initThreadPool() {
-    int jn = getInt("env.max_jobs", 10);
-    int wn = getInt("env.workers", 4);
+    int jn = env.getInt("max_jobs", 10);
+    int wn = env.getInt("workers", 4);
 
     if (jn < 1) {
       jn = 10;
@@ -388,31 +373,6 @@ public class StorkScheduler extends Ad {
     } return rc;
   }
 
-  // Shut the server down gracefully and discard the instance.
-  public synchronized void shutdown(int rv) {
-    shutdown_bell.ring(rv);
-    instance = null;
-  }
-
-  // Wait for the server to shutdown on its own, returning an error code
-  // suitable to System.exit() with.
-  public int waitFor() {
-    while (true) try {
-      return shutdown_bell.waitFor().intValue();
-    } catch (Exception e) {
-      // Just don't break.
-    }
-  }
-
-  // Get the global instance of the StorkScheduler. Make one if it
-  // doesn't exist.
-  // TODO: Remove this.
-  public static synchronized StorkScheduler instance(Ad env) {
-    if (instance == null)
-      instance = new StorkScheduler(env);
-    return instance;
-  }
-
   // Force the state dumping thread to dump the state.
   private synchronized StorkScheduler dumpState() {
     System.out.println("Forcing state dump...");
@@ -429,7 +389,7 @@ public class StorkScheduler extends Ad {
 
     public void run() {
       while (true) {
-        int delay = getInt("env.state_save_interval", 120);
+        int delay = env.getInt("state_save_interval", 120);
         if (delay < 1) delay = 1;
 
         // Wait for the delay, then dump the state. Can be interrupted
@@ -444,7 +404,7 @@ public class StorkScheduler extends Ad {
 
     // Dump the state to the state file.
     private synchronized void dumpState() {
-      String state_path = get("env.state_file");
+      String state_path = env.get("state_file");
       File state_file = null, temp_file = null;
       OutputStream fos = null;
 
@@ -465,8 +425,7 @@ public class StorkScheduler extends Ad {
 
         //System.out.println("Dumping server state: "+state_file);
 
-        fos.write(serialize());
-        fos.flush();
+        fos.write(Ad.marshal(this).serialize());
         fos.close();
         fos = null;
 
@@ -491,38 +450,50 @@ public class StorkScheduler extends Ad {
   // Set the path for the state file.
   public synchronized StorkScheduler setStateFile(File f) {
     if (f != null)
-      put("env.state_file", f.getAbsolutePath());
+      env.put("state_file", f.getAbsolutePath());
     else
-      remove("env.state_file");
+      env.remove("state_file");
     return this;
   }
 
-  // Load server state from a file, returning an empty ad if the file
-  // doesn't exist or null was passed.
-  private static Ad loadServerState(String f) {
+  // Load server state from a file.
+  public StorkScheduler loadServerState(String f) {
     return loadServerState(f != null ? new File(f) : null);
-  } private static Ad loadServerState(File f) {
-    try {
+  } public StorkScheduler loadServerState(File f) {
+    if (f != null && f.exists()) {
       System.out.println("Loading: "+f);
-      return (f != null && f.exists()) ? Ad.parse(f) : new Ad();
-    } catch (Exception e) {
-      System.out.println("Error: couldn't load state: "+e.getMessage());
-      throw new FatalEx(e);
-    }
+      return loadServerState(Ad.parse(f));
+    } return this;
+  } public StorkScheduler loadServerState(Ad state) {
+    return state.unmarshal(this);
   }
 
-  // Initialize or reinitialize the Stork scheduler from configuration.
-  // Run this after setting a state file.
-  public StorkScheduler init() {
-    // Temporarily store old environment.
-    Ad env = getAd("env");
+  // Restart a scheduler from saved state.
+  public static StorkScheduler restart(String s) {
+    return restart(new File(s));
+  } public static StorkScheduler restart(File f) {
+    return new StorkScheduler().loadServerState(f).init();
+  }
 
-    // Load state if present.
-    if (has("env.state_file")) {
-      merge(loadServerState(get("env.state_file")));
-      if (env != null) put("env", env);
-    }
+  // Start a new scheduler with an optional config environment.
+  public static StorkScheduler start() {
+    return new StorkScheduler().init();
+  } public static StorkScheduler start(File f) {
+    return start(Ad.parse(f));
+  } public static StorkScheduler start(Ad env) {
+    StorkScheduler s = new StorkScheduler();
 
+    if (env == null)
+      env = new Ad();
+    else if (env.has("state_file"))
+      s.loadServerState(env.get("state_file"));
+
+    s.env = env;
+
+    return s.init();
+  }
+
+  private StorkScheduler init() {
     // Initialize command handlers
     cmd_handlers = new HashMap<String, StorkCommand>();
     cmd_handlers.put("stork_q", new StorkQHandler());
@@ -536,35 +507,19 @@ public class StorkScheduler extends Ad {
     // Initialize transfer module set
     xfer_modules = TransferModuleTable.instance();
 
-    // Initialize queues
-    job_queue = cast(JobQueue.class, "job_queue");
-    if (job_queue == null)
-      put("job_queue", job_queue = new JobQueue());
-
-    req_queue = new LinkedBlockingQueue<RequestContext>();
-
     // Initialize workers
     populateModules();
     initThreadPool();
-
-    // Set/get the user map.
-    if (has("users") && typeOf("users") == AD)
-      StorkUser.map(getAd("users"));
-    put("users", StorkUser.map());
 
     dump_state_thread = new DumpStateThread();
     dump_state_thread.start();
     dumpState();
 
+    System.out.println(Ad.marshal(this));
+
     return this;
   }
 
-  // Create a new scheduler optionally with the given environment.
-  public StorkScheduler() {
-    this((Ad) null);
-  } public StorkScheduler(File env) {
-    this(env.exists() ? Ad.parse(env) : null);
-  } public StorkScheduler(Ad env) {
-    super("env", env);
-  }
+  // Don't allow these to be created willy-nilly.
+  private StorkScheduler() { }
 }

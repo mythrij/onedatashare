@@ -2,6 +2,8 @@ package stork.module;
 
 import stork.ad.*;
 import stork.util.*;
+import stork.scheduler.*;
+
 import java.util.*;
 import java.io.*;
 import java.net.URI;
@@ -26,8 +28,6 @@ public class ExternalModule extends TransferModule {
       this.job = job;
     }
 
-    // TODO: Rumor has it Java doesn't guarantee processes execute in
-    // parallel. Maybe have some additional checks?
     public void run() {
       // Get arguments from Ad
       String cmd, args = job.get("arguments", "");
@@ -73,7 +73,7 @@ public class ExternalModule extends TransferModule {
       if (proc != null && proc_is != null) try {
         return Ad.parse(proc_is);
       } catch (Exception e) {
-        Ad ad = new ResponseAd("error", e.getMessage());
+        Ad ad = new Ad("error", e.getMessage());
         try {
           proc_is.close();
         } catch (Exception ex) { }
@@ -127,7 +127,7 @@ public class ExternalModule extends TransferModule {
   }
 
   // Just to satisfy the interface for now.
-  public StorkSession session(URI uri, Ad ad) {
+  public StorkSession session(EndPoint e) {
     return null;
   }
 

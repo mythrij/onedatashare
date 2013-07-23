@@ -11,58 +11,37 @@ import java.net.URI;
 // lookup of cred token and transfer module.
 // TODO: Support for multiple end-points?
 
-public class EndPoint extends Ad {
-  private Ad parent;
-
-  public final URI uri;
-  public final String proto;
-  public final String path;
-  public final TransferModule tm;
-  public final StorkCred cred;
+public class EndPoint {
+  public URI uri = null;
+  public StorkCred cred_token = null;
+  public TransferModule module = null;
 
   private static TransferModuleTable tmt = TransferModuleTable.instance();
   private static CredManager cm = CredManager.instance();
 
-  // Create a new endpoint, optionally with a parent ad to reference
-  // missing fields from.
-  public EndPoint(String uri) {
-    this(new Ad("uri", uri));
-  } public EndPoint(Ad ad) {
-    super(false, ad);
-    //filter("uri", "module", "cred_token");
-
-    uri = StorkUtil.makeURI(get("uri"));
-    proto = uri.getScheme();
-    path = uri.getPath();
-    tm = tmt.byProtocol(proto);
-    cred = cm.getCred(get("cred_token"));
-
-    if (tm == null)
-      throw new FatalEx("could not find transfer module for: "+proto);
+  // Create a new endpoint from a URI.
+  public EndPoint(String s) {
+    this(StorkUtil.makeURI(s));
+  } public EndPoint(URI u) {
+    if (u == null)
+      throw new FatalEx("missing uri field from endpoint");
+    uri = u;
   }
 
-  // Create a URI from either
-  public static EndPoint deserialize(String uri) {
-    return new EndPoint(uri);
-  } public static EndPoint deserialize(Ad ad) {
-    return new EndPoint(ad);
+  public static EndPoint unmarshal(String s) {
+    return new EndPoint(s);
   }
 
-  // Create a session for this end-point.
+  public String proto() {
+    return uri.getScheme();
+  }
+
+  public String path() {
+    return uri.getPath();
+  }
+
+  // Create a session for this endpoint.
   public StorkSession session() {
-    return tm.session(uri, this);
-  }
-
-  // Get or set the parent ad.
-  public synchronized Ad parent() {
-    return parent;
-  } public synchronized void parent(Ad p) {
-    parent = p;
-  }
-
-  // Delegate to the parent ad if the requested key is missing.
-  public synchronized Object getObject(Object key) {
-    Object o = super.getObject(key);
-    return (o == null || parent == null) ? o : parent.getObject(key);
+    return module.session(this);
   }
 }

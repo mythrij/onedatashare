@@ -31,7 +31,8 @@ public class RequestContext {
   }
 
   // Put an ad in the reply queue.
-  public synchronized void putReply(Ad ad) {
+  public synchronized void putReply(Object obj) {
+    Ad ad = Ad.marshal(obj);
     if (!is_done) {
       replies.add(ad);
       if (reply_bell != null) reply_bell.ring(ad);
@@ -59,9 +60,9 @@ public class RequestContext {
   }
 
   // Called when the request is done being served.
-  public synchronized void done(Ad last) {
+  public synchronized void done(Object last) {
     if (!is_done) {
-      status_ad = last;
+      status_ad = Ad.marshal(last);
       if (end_bell != null)
         end_bell.ring(status_ad);
       is_done = true;

@@ -44,7 +44,7 @@ public class XferList implements Iterable<XferList.Entry> {
   private void translateAd(String path, Ad ad) {
     if (!ad.has("files")) return;
 
-    for (Ad a : ad.getAd("files")) if (!a.has("name")) {
+    for (Ad a : ad.getAds("files")) if (!a.has("name")) {
       continue;
     } else if (a.getBoolean("file")) {
       add(a.get("name"), a.getLong("size"));
