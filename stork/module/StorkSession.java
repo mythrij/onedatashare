@@ -81,7 +81,10 @@ public abstract class StorkSession {
     path = StorkUtil.normalizePath(path);
     if (opts == null)
       opts = new Ad();
-    return listImpl(path, opts);
+    //return listImpl(path, opts);
+    Ad ad = listImpl(path, opts);
+    System.out.println("Crap: "+ad);
+    return ad;
   }
 
   public long size(String path) {

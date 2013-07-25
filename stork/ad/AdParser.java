@@ -50,52 +50,43 @@ public class AdParser {
     return c >= from && c <= to;
   }
 
-  // Discard characters from the given set.
+  // Discard characters from the given set. Return the first thing that
+  // isn't part of the ignore set.
   private char discard() {
     // Discard whitespace by default.
     return discard("\t\n\r\b ");
   } private char discard(String s) {
-    for (char c = peek(); check(c, s); c = peek()) next();
-    return peek();
-  }
-
-  // Discard all until a character is found.
-  private char discardTo(String s) {
     char c;
-    for (c = next(); !check(c, s); c = next());
+    for (c = peek(); check(c, s); c = next());
     return c;
   }
 
-  // Discard all whitespace and comments.
-  private void discardIgnored() {
-    while (true) switch (discard()) {
-      default: return;
-      case '#': discardTo("\r\n");
-    }
+  // Discard ignored characters as well as comments.
+  private char discardIgnored() {
+    return discardIgnored("\t\n\r\b ");
+  } private char discardIgnored(String s) {
+    char c;
+    do switch (c = discard(s)) {
+      case '/': if (peek() != '/') return c;
+      case '#': for (c = peek(); check(c, s); c = next());
+    } while (check(c, s));
+    return c;
   }
 
-  // Ignore all whitespace and find a character in the given set. If
-  // something else is found, throws a parse error.
-  private char find(String s) {
-    discardIgnored();
-    char c = next();
+  // Ignore all whitespace and check for a character in the given set.
+  // If something else is found, throws a parse error.
+  private char expect(String s) {
+    return expect(s, "\t\n\r\b ");
+  } private char expect(String s, String i) {
+    char c = discardIgnored(i);
     if (!check(c, s))
-      throw new RuntimeException("unexpected character: "+c);
-    return c;
-  }
-
-  // Find a character in an inclusive range of characters.
-  private char findRange(char s, char e) {
-    discardIgnored();
-    char c = next();
-    if (!check(c, s, e))
       throw new RuntimeException("unexpected character: "+c);
     return c;
   }
 
   // Lowercase a character assuming it's an A-Z letter.
   private static char low(char c) {
-    return (char)((int)c | (int)' ');
+    return (char)((short)c | (short)' ');
   }
 
   // Parsing methods
@@ -105,26 +96,21 @@ public class AdParser {
   }
 
   public Ad parseInto(Ad ad) {
-    find("{[(<");
+    expect("{[(<");
     for (int i = 0; ; i++) {
-      discardIgnored();
+      char c = saved = discardIgnored();
 
-      // Check for end of ad or superfluous separators.
-      char c = peek();
-      if (check(c, "}])>")) {
-        next();
-        return ad;
-      } while (check(c, ",;")) {
-        next();
-        discardIgnored();
-        c = peek();
-      }
+      // Check for end of ad.
+      if (check(c, "}])>")) return ad;
+
+      // Discard any extraneous separators or newlines.
+      saved = discardIgnored(";,\t\n\r\b ");
 
       // Check if first token is an id or a string.
       Object o = readValue();
 
       // Check if it's anonymous or not.
-      switch (c = find(":=,;}])>")) {
+      switch (c = expect(":=,;\r\n}])>")) {
         case ':': // Check for assignment.
         case '=': ad.putObject(o, findValue()); break;
         case '}': // Check for end and push char back if found.
@@ -133,6 +119,8 @@ public class AdParser {
         case '>': saved = c;
         case ',': // Check for separator.
         case ';':
+        case '\r':
+        case '\n':
           if (o instanceof Atom)
             ad.putObject(null, ((Atom)o).eval());
           else
@@ -226,7 +214,7 @@ public class AdParser {
 
   // Find a value, and return it as a Java object.
   private Object findValue() {
-    discardIgnored();
+    saved = discardIgnored();
     return readValue();
   } private Object readValue() {
     char c = peek();

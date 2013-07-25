@@ -20,7 +20,9 @@ public class EndPoint {
   private static CredManager cm = CredManager.instance();
 
   // Create a new endpoint from a URI.
-  public EndPoint(String s) {
+  public EndPoint() {
+    // Does nothing.
+  } public EndPoint(String s) {
     this(StorkUtil.makeURI(s));
   } public EndPoint(URI u) {
     if (u == null)
@@ -42,6 +44,8 @@ public class EndPoint {
 
   // Create a session for this endpoint.
   public StorkSession session() {
+    if (module == null)
+      module = tmt.byProtocol(proto());
     return module.session(this);
   }
 }

@@ -189,7 +189,7 @@ public class StorkScheduler {
     public Ad handle(RequestContext req) {
       StorkSession sess = null;
       try {
-        EndPoint ep = req.ad.unmarshal(EndPoint.class);
+        EndPoint ep = req.ad.unmarshalAs(EndPoint.class);
         sess = ep.session();
         return sess.list(ep.path());
       } finally {
@@ -205,7 +205,7 @@ public class StorkScheduler {
   // Handle user registration.
   class StorkUserHandler extends StorkCommand {
     public StorkUser handle(RequestContext req) {
-      System.out.println("Regitration ad: "+req.ad);
+      System.out.println("Registration ad: "+req.ad);
       if ("register".equals(req.ad.get("action", ""))) {
         StorkUser su = StorkUser.register(req.ad);
         dumpState();

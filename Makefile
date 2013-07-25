@@ -6,10 +6,10 @@ VERSION = '0.0.2 (still alpha)'
 
 # =============
 PROJECT = stork
-#PACKAGES = stork stork/scheduler stork/util stork/module stork/stat stork/cred
 
 CLASSPATH = '.:lib/EXTRACTED/:build'
-JFLAGS = -J-Xmx512m -g -cp $(CLASSPATH) -verbose -Xlint:unchecked
+JFLAGS = -J-Xmx512m -g -cp $(CLASSPATH) -Xlint:unchecked \
+				 -target 1.5 -source 1.5
 JC = javac
 JAVA = java
 JAR = jar -J-Xmx512m

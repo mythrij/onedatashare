@@ -31,7 +31,10 @@ public class AdSorter {
       for (String k : keys) {
         int m = (k.charAt(0) == '-') ? -1 : 1;
         if (m == -1) k = k.substring(1);
-        int c = a1.getObject(k).compareTo(a2.getObject(k));
+        AdObject ao1 = a1.getObject(k), ao2 = a2.getObject(k);
+        if (ao1 == null) return 1;
+        if (ao2 == null) return -1;
+        int c = ao1.compareTo(ao2);
         if (c != 0) return c*m;
       } return 0;
     }

@@ -31,11 +31,11 @@ public class Ad {
   }
 
   // Create a new ad from a list or map.
-  public Ad(List<?> list) {
+  public Ad(Iterable<?> list) {
     this(true, null);
     int i = 0;
     for (Object o : list)
-      put(Integer.valueOf(i++), o);
+      put(o);
   }
 
   // Create an ad with given key and value.
@@ -96,7 +96,7 @@ public class Ad {
     return getInt(s, -1);
   } public int getInt(Object s, int def) {
     AdObject o = getObject(s);
-    return (s != null) ? o.asInt() : def;
+    return (o != null) ? o.asInt() : def;
   }
 
   // Get an entry from the ad as a long. Defaults to -1.
@@ -104,7 +104,7 @@ public class Ad {
     return getLong(s, -1);
   } public long getLong(Object s, long def) {
     AdObject o = getObject(s);
-    return (s != null) ? o.asLong() : def;
+    return (o != null) ? o.asLong() : def;
   }
 
   // Get an entry from the ad as a double. Defaults to -1.
@@ -112,7 +112,7 @@ public class Ad {
     return getDouble(s, -1);
   } public double getDouble(Object s, double def) {
     AdObject o = getObject(s);
-    return (s != null) ? o.asDouble() : def;
+    return (o != null) ? o.asDouble() : def;
   }
 
   // Get an entry from the ad as a Number object. Attempts to cast to a
@@ -121,7 +121,7 @@ public class Ad {
     return getNumber(s, null);
   } public Number getNumber(Object s, Number def) {
     AdObject o = getObject(s);
-    return (s != null) ? o.asNumber() : def;
+    return (o != null) ? o.asNumber() : def;
   }
 
   // Get an entry from the ad as a boolean. Returns true if the value is
@@ -131,7 +131,7 @@ public class Ad {
     return getBoolean(s, false);
   } public boolean getBoolean(Object s, boolean def) {
     AdObject o = getObject(s);
-    return (s != null) ? o.asBooleanValue() : def;
+    return (o != null) ? o.asBooleanValue() : def;
   }
 
   // Get an inner ad from this ad. Defaults to null.
@@ -425,7 +425,9 @@ public class Ad {
   // Methods for serializing and deserializing Java objects as Ads/JSON.
 
   // Unmarshal an object from this ad.
-  public <T> T unmarshalAs(Class<T> c, Object key) {
+  public <T> T unmarshalAs(Class<T> c) {
+    return unmarshalAs(c, null);
+  } public <T> T unmarshalAs(Class<T> c, Object key) {
     Object o = (key != null) ? getObject(key).asObject() : this;
     T t = null;  // The object we return.
 
@@ -476,31 +478,19 @@ public class Ad {
             Modifier.isStatic(m)) continue;
 
         Class<?> c = f.getType();
-        String n = f.getName();
+        AdObject a = getObject(f.getName());
 
         // Ignore nulls.
-        if (!has(n)) continue;
+        if (a == null) continue;
 
         // Make the field accessible for our purposes.
         boolean accessible = f.isAccessible();
         f.setAccessible(true);
 
-        if (c == String.class) {
-          f.set(o, get(n));
-        } else if (c == int.class || c == Integer.class) {
-          f.setInt(o, getInt(n));
-        } else if (c == boolean.class || c == Boolean.class) {
-          f.setBoolean(o, getBoolean(n));
-        } else if (c == double.class || c == Double.class) {
-          f.setDouble(o, getDouble(n));
-        } else if (c == Ad.class) {
-          f.set(o, getAd(n));
-        } else if (c == java.net.URI.class) {
-          f.set(o, java.net.URI.create(get(n)));
-        } else {
-          // Try to unmarshal this weird thing as an object.
-          f.set(o, unmarshalAs(c, n));
-        }
+        if (a.isAd())
+          f.set(o, unmarshal(c));
+        else
+          f.set(o, a.as(c));
 
         // Replace original access permissions.
         f.setAccessible(accessible);
@@ -525,38 +515,48 @@ public class Ad {
   }
 
   // Marshal an object into this ad.
-  public synchronized Ad fromObject(Object o) {
+  public static Ad marshal(Object o) {
     try {
       if (o instanceof Ad) {
-        ((Ad)o).merge(this);
+        return (Ad)o;
       } else if (o instanceof Map) {
-        fromMap((Map) o);
+        return fromMap((Map) o);
       } else if (o instanceof Collection) {
-        fromList((Collection) o);
+        return fromList((Collection) o);
       } else if (o.getClass().isArray()) {
-        fromArray(o);
-      } else for (Field f : o.getClass().getFields()) {
-        if (f.get(o) != null)
-          putObject(f.getName(), f.get(o));
-      } return this;
+        return fromArray(o);
+      } else {
+        return fromObject(o);
+      }
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
   }
 
-  private void fromMap(Map<?,?> m) {
+  private static Ad fromMap(Map<?,?> m) {
+    Ad ad = new Ad();
     for (Map.Entry<?,?> e : m.entrySet())
-      putObject(e.getKey(), e.getValue());
-  } private void fromList(Collection<?> l) {
-    for (Object o : l) putObject(o);
-  } private void fromArray(Object o) {
+      ad.putObject(e.getKey(), e.getValue());
+    return ad;
+  } private static Ad fromList(Collection<?> l) {
+    Ad ad = new Ad();
+    for (Object o : l) ad.putObject(o);
+    return ad;
+  } private static Ad fromArray(Object o) {
+    Ad ad = new Ad();
     for (int i = 0; i < Array.getLength(o); i++)
-      putObject(Array.get(o, i));
-  }
-
-  // Marshal an object into a new ad.
-  public static Ad marshal(Object o) {
-    return new Ad().fromObject(o);
+      ad.putObject(Array.get(o, i));
+    return ad;
+  } private static Ad fromObject(Object o) {
+    Ad ad = new Ad();
+    for (Field f : o.getClass().getFields()) try {
+      if (f.get(o) != null)
+        ad.putObject(f.getName(), f.get(o));
+    } catch (RuntimeException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    } return ad;
   }
 
   // Composition methods

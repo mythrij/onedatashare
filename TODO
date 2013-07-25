@@ -1,9 +1,5 @@
-- Streamable ads. (6/5/13)
-
-- Futures and better multitasking model. (5/31/13)
-- Cancelable listing operations. (5/31/13)
-- Detection of closed client connections. (5/31/13)
-- Proxy fallback for unsupported third party transfers. (5/31/13)
-- Support more listing formats. (5/27/13)
-- Fix GridFTP list method detection. (5/27/13)
-- Better logging solution. (5/26/13)
+Before August 30th
+------------------
+- Server state serialization.
+- Test GridFTP module.
+- Take a look at SFTP module.

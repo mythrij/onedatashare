@@ -13,11 +13,11 @@ import java.security.*;
 // user information, such as password hash.
 
 public class StorkUser {
-  private String user_id   = null;
-  private String pass_hash = null;
-  private String pass_salt = null;
-  private String name      = null;
-  private String email     = null;
+  public String user_id   = null;
+  public String pass_hash = null;
+  public String pass_salt = null;
+  public String name      = null;
+  public String email     = null;
 
   private transient CredManager cm;
   private transient JobQueue queue;
