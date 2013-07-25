@@ -191,7 +191,7 @@ public class StorkScheduler {
       try {
         EndPoint ep = req.ad.unmarshalAs(EndPoint.class);
         sess = ep.session();
-        return sess.list(ep.path());
+        return sess.list(ep.path(), req.ad);
       } finally {
         if (sess != null) sess.close();
       }
