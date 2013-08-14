@@ -2,6 +2,8 @@ package stork.ad;
 
 import stork.util.*;
 
+// TODO: Remove this.
+//
 // Special ad for module information.
 //
 // The following parameters are required:
@@ -46,25 +48,25 @@ public class ModuleInfoAd extends Ad {
 
   // Because we trim the ad at the beginning, all strings in this
   // ad are guaranteed to be trimmed and not empty. TODO: Sanitization.
-  public ModuleInfoAd(Ad ad) throws Exception {
+  public ModuleInfoAd(Ad ad) {
     super(ad.filter(fields).trim());
 
     // Check for required protocols.
     String p = require("name", "protocols");
 
     if (p != null)
-      throw new Exception("missing parameter: "+p);
+      throw new RuntimeException("missing parameter: "+p);
 
     name = get("name");
 
     protocols = StorkUtil.splitCSV(get("protocols"));
     if (protocols.length == 0)
-      throw new Exception("no supported protocols listed");
+      throw new RuntimeException("no supported protocols listed");
     put("protocols", StorkUtil.joinCSV((Object[]) protocols));
 
     handle = StorkUtil.normalize(get("handle", name));
     if (handle.isEmpty())
-      throw new Exception("invalid handle: "+handle);
+      throw new RuntimeException("invalid handle: "+handle);
     put("handle", handle);
 
     version = get("version", "");
@@ -75,7 +77,7 @@ public class ModuleInfoAd extends Ad {
     accepts = get("accepts", "none").toLowerCase();
     for (String s : accepts_vals) {
       if (s == null)
-        throw new Exception("invalid value for \"accepts\": "+accepts);
+        throw new RuntimeException("invalid value for \"accepts\": "+accepts);
       if (s.equals(accepts)) break;
     } put("accepts", accepts);
 

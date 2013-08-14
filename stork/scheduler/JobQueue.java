@@ -8,13 +8,11 @@ import java.util.*;
 // A blocking queue for Stork jobs. Allows for scheduling of jobs and
 // searching of past jobs.
 
-public class JobQueue {
-  private ArrayList<StorkJob> all_jobs;
+public class JobQueue extends ArrayList<StorkJob> {
   private transient LinkedList<StorkJob> new_jobs;
 
   // Initialize all the queues and stuff.
   public JobQueue() {
-    all_jobs = new ArrayList<StorkJob>();
     new_jobs = new LinkedList<StorkJob>();
   }
 
@@ -28,17 +26,17 @@ public class JobQueue {
   }
 
   // Put a new job into the queue.
-  public synchronized StorkJob add(StorkJob job) {
-    return add(job, false);
-  } public synchronized StorkJob add(StorkJob job, boolean first) {
+  public synchronized StorkJob put(StorkJob job) {
+    return put(job, false);
+  } public synchronized StorkJob put(StorkJob job, boolean first) {
     if (job.status() == JobStatus.scheduled)
       schedule(job);
 
     if (job.jobId() == -1) {
-      all_jobs.add(job);
-      job.jobId(all_jobs.size());
+      super.add(job);
+      job.jobId(super.size());
     } else {
-      all_jobs.add(job.jobId(), job);
+      add(job.jobId(), job);
     } notifyAll();
 
     return job;
@@ -55,7 +53,7 @@ public class JobQueue {
   // Get a job by its id.
   public synchronized StorkJob get(int job_id) {
     try {
-      return all_jobs.get(job_id-1);
+      return super.get(job_id-1);
     } catch (Exception e) {
       return null;
     }
@@ -74,7 +72,7 @@ public class JobQueue {
 
     // Filter fields.
     String user_id = null;
-    Range range = new Range(1, all_jobs.size());
+    Range range = new Range(1, super.size());
     EnumSet<JobStatus> status = JobStatus.all.filter();
 
     // Parse fields from input ad. These all return null if passed null.

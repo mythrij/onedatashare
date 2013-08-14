@@ -9,7 +9,6 @@ public class AdSink {
 
   public synchronized void close() {
     closed = true;
-    System.out.println("Closing ad sink...");
     notifyAll();
   }
 

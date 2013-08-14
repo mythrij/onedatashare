@@ -1,13 +1,60 @@
 #!/bin/sh
-DIR=`dirname $0`
-CLASS=stork.StorkMain
-BIN=`basename $0`
-CMD=stork_$1
 
-[ -z "$1" ] && {
-  echo "Usage: $BIN <command> [command args]"
+# These environment variables can be used to configure this script:
+#
+#   STORK_HOME     The Stork workspace directory.
+#                  Default: $(dirname $0)/../
+#
+#   JAVA_HOME      The Java Development Kit installation location.
+#                  Default: $(dirname $(which java))/
+#
+#   JAVA_OPTS      Additional Java runtime options.
+#
+#   STORK_CONFIG   The Stork config file location.
+#                  Default: $STORK_HOME/stork.conf
+#
+#   STORK_JAR      The stork.jar location.
+#                  Default: $STORK_HOME/bin/stork.jar
+#
+#   STORK_PID      The Stork server PID file location.
+#                  Default: $STORK_HOME/stork.pid
+
+CLASS=stork.StorkMain
+PROG=`basename $0`
+
+PROGDIR=$(readlink -f "$0")
+PROGDIR=$(dirname "$PROGDIR")
+
+# Determine the absolute location of STORK_HOME.
+[ -z "$STORK_HOME" ] && STORK_HOME=$(dirname "$PROGDIR")
+[ -d "$STORK_HOME" ] || {
+  echo "Error: STORK_HOME must be a directory."
   exit 1
 }
 
+# Check command syntax.
+[ -z "$1" ] && {
+  echo "Usage: $PROG <command> [command_args...]"
+  echo "       $PROG [--]help"
+  exit 1
+}
+
+# Set default variables if unset.
+[ -z "$JAVA_HOME" ] && JAVA_HOME=$(dirname $(which java))
+
+[ -z "$STORK_CONFIG" ] && STORK_CONFIG=$STORK_HOME/stork.conf
+[ -d "$STORK_CONFIG" ] && STORK_CONFIG=$STORK_CONFIG/stork.conf
+
+[ -z "$STORK_JAR" ] && STORK_JAR=$STORK_HOME/bin/stork.jar
+[ -d "$STORK_JAR" ] && STORK_JAR=$STORK_JAR/stork.jar
+
+[ -z "$STORK_PID" ] && STORK_PID=$STORK_HOME/stork.pid
+[ -d "$STORK_PID" ] && STORK_PID=$STORK_PID/stork.pid
+
+# Determine Java binary location.
+JAVA="$JAVA_HOME/bin/java"
+
+# Run it.
+CMD=$1
 shift
-java "-Dstork.exedir=$DIR" -Xmx512m -cp "$DIR/stork.jar" $CLASS "$CMD" $@
+$JAVA "-Dstork.home=$STORK_HOME" -Xmx512m -cp "$STORK_HOME/lib/*" $CLASS $CMD $@

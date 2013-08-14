@@ -10,6 +10,7 @@ import java.io.*;
 import java.net.*;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.logging.*;
 
 // The Stork transfer job scheduler. Maintains its own internal
 // configuration and state as an ad. Operates based on commands given
@@ -31,6 +32,9 @@ public class StorkScheduler {
   private transient Map<String, StorkCommand> cmd_handlers;
   private transient TransferModuleTable xfer_modules;
 
+  private static final Logger LOG =
+    Logger.getLogger(StorkScheduler.class.getName());
+
   private transient LinkedBlockingQueue<RequestContext> req_queue =
     new LinkedBlockingQueue<RequestContext>();
 
@@ -38,7 +42,7 @@ public class StorkScheduler {
   public static GetOpts getParser(GetOpts base) {
     GetOpts opts = new GetOpts(base);
 
-    opts.prog = "stork_server";
+    opts.prog = "server";
     opts.args = new String[] { "[option]..." };
     opts.desc = new String[] {
       "The Stork server is the core of the Stork system, handling "+
@@ -111,7 +115,7 @@ public class StorkScheduler {
         try {
           req = req_queue.take();
           System.out.println("Pulled request from queue");
-          System.out.println("Thread count: "+getAllStackTraces().size());
+          //System.out.println("Thread count: "+getAllStackTraces().size());
         } catch (Exception e) {
           System.out.println("Something bad happened in StorkWorkerThread...");
           e.printStackTrace();
@@ -143,12 +147,13 @@ public class StorkScheduler {
           req.done(handler.handle(req));
         } catch (Exception e) {
           e.printStackTrace();
-          req.done(new Ad("error", e.getMessage()));
+          String m = e.getMessage();
+          req.done(new Ad("error", m == null ? e.toString() : m));
         } finally {
           System.out.println("Done with request!");
-          System.out.println("Thread count: "+getAllStackTraces().size());
-          for (Thread t : getAllStackTraces().keySet())
-            System.out.println(t);
+          //System.out.println("Thread count: "+getAllStackTraces().size());
+          //for (Thread t : getAllStackTraces().keySet())
+            //System.out.println(t);
         }
       }
     }
@@ -205,9 +210,9 @@ public class StorkScheduler {
   // Handle user registration.
   class StorkUserHandler extends StorkCommand {
     public StorkUser handle(RequestContext req) {
-      System.out.println("Registration ad: "+req.ad);
       if ("register".equals(req.ad.get("action", ""))) {
         StorkUser su = StorkUser.register(req.ad);
+        System.out.println("Registering user: "+su.user_id);
         dumpState();
         return su;
       } return StorkUser.login(req.ad);
@@ -221,7 +226,7 @@ public class StorkScheduler {
   // I cannot believe how simple this thing is for what it does.
   class StorkSubmitHandler extends StorkCommand {
     public Ad handle(RequestContext req) {
-      return job_queue.add(StorkJob.create(req.ad)).getAd();
+      return job_queue.put(StorkJob.create(req.ad)).getAd();
     }
   }
 
@@ -375,7 +380,6 @@ public class StorkScheduler {
 
   // Force the state dumping thread to dump the state.
   private synchronized StorkScheduler dumpState() {
-    System.out.println("Forcing state dump...");
     dump_state_thread.interrupt();
     return this;
   }
@@ -406,7 +410,7 @@ public class StorkScheduler {
     private synchronized void dumpState() {
       String state_path = env.get("state_file");
       File state_file = null, temp_file = null;
-      OutputStream fos = null;
+      PrintWriter pw = null;
 
       if (state_path != null) try {
         state_file = new File(state_path).getAbsoluteFile();
@@ -421,13 +425,11 @@ public class StorkScheduler {
 
         temp_file = File.createTempFile(
           ".stork_state", "tmp", state_file.getParentFile());
-        fos = new FileOutputStream(temp_file);
+        pw = new PrintWriter(temp_file, "UTF-8");
 
-        //System.out.println("Dumping server state: "+state_file);
-
-        fos.write(Ad.marshal(this).serialize());
-        fos.close();
-        fos = null;
+        pw.print(Ad.marshal(StorkScheduler.this));
+        pw.close();
+        pw = null;
 
         if (!temp_file.renameTo(state_file))
           throw new FatalEx("could not rename temp file");
@@ -438,8 +440,8 @@ public class StorkScheduler {
         if (temp_file != null && temp_file.exists()) {
           temp_file.deleteOnExit();
           temp_file.delete();
-        } if (fos != null) try {
-          fos.close();
+        } if (pw != null) try {
+          pw.close();
         } catch (Exception e) {
           // Ignore.
         }
@@ -496,13 +498,13 @@ public class StorkScheduler {
   private StorkScheduler init() {
     // Initialize command handlers
     cmd_handlers = new HashMap<String, StorkCommand>();
-    cmd_handlers.put("stork_q", new StorkQHandler());
-    cmd_handlers.put("stork_ls", new StorkListHandler());
-    cmd_handlers.put("stork_status", new StorkQHandler());
-    cmd_handlers.put("stork_submit", new StorkSubmitHandler());
-    cmd_handlers.put("stork_rm", new StorkRmHandler());
-    cmd_handlers.put("stork_info", new StorkInfoHandler());
-    cmd_handlers.put("stork_user", new StorkUserHandler());
+    cmd_handlers.put("q", new StorkQHandler());
+    cmd_handlers.put("ls", new StorkListHandler());
+    cmd_handlers.put("status", new StorkQHandler());
+    cmd_handlers.put("submit", new StorkSubmitHandler());
+    cmd_handlers.put("rm", new StorkRmHandler());
+    cmd_handlers.put("info", new StorkInfoHandler());
+    cmd_handlers.put("user", new StorkUserHandler());
 
     // Initialize transfer module set
     xfer_modules = TransferModuleTable.instance();

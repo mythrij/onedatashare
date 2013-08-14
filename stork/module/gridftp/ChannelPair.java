@@ -205,7 +205,7 @@ public class ChannelPair {
   // Prepare the channels to transfer an XferEntry.
   // TODO: Check for extended mode support and remove session param.
   void pipeXfer(XferList.Entry e, GridFTPSession sess) {
-    System.out.println("Piping: "+e);
+    //System.out.println("Piping: "+e);
     if (e.dir) {
       pipeMkdir(e.dpath(), true);
     } else {
@@ -216,7 +216,7 @@ public class ChannelPair {
       long off = e.off, len = e.len;
 
       // Pipe RETR
-      System.out.println("RETR going to: "+sc.port);
+      //System.out.println("RETR going to: "+sc.port);
       if (sc.local) try {
         sc.facade.retrieve(new FileMap(path, off, len));
       } catch (Exception ex) {
@@ -230,7 +230,7 @@ public class ChannelPair {
       }
 
       // Pipe STOR
-      System.out.println("STOR going to: "+dc.port);
+      //System.out.println("STOR going to: "+dc.port);
       if (dc.local) try {
         dc.facade.store(new FileMap(dpath, off, len));
       } catch (Exception ex) {

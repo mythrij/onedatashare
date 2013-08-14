@@ -13,7 +13,7 @@ import java.util.*;
 public class StorkClient {
   private Socket server_sock;
 
-  private static Map<String, Class> cmd_handlers;
+  private static Map<String, Class<? extends StorkCommand>> cmd_handlers;
 
   // Configuration variables
   private Ad env = null;
@@ -21,14 +21,14 @@ public class StorkClient {
   // Some static initializations...
   static {
     // Initialize command handlers
-    cmd_handlers = new HashMap<String, Class>();
-    cmd_handlers.put("stork_q", StorkQHandler.class);
-    cmd_handlers.put("stork_status", StorkQHandler.class);
-    cmd_handlers.put("stork_submit", StorkSubmitHandler.class);
-    cmd_handlers.put("stork_rm", StorkRmHandler.class);
-    cmd_handlers.put("stork_info", StorkInfoHandler.class);
-    cmd_handlers.put("stork_ls", StorkLsHandler.class);
-    cmd_handlers.put("stork_raw", StorkRawHandler.class);
+    cmd_handlers = new HashMap<String, Class<? extends StorkCommand>>();
+    cmd_handlers.put("q", StorkQHandler.class);
+    cmd_handlers.put("status", StorkQHandler.class);
+    cmd_handlers.put("submit", StorkSubmitHandler.class);
+    cmd_handlers.put("rm", StorkRmHandler.class);
+    cmd_handlers.put("info", StorkInfoHandler.class);
+    cmd_handlers.put("ls", StorkLsHandler.class);
+    cmd_handlers.put("raw", StorkRawHandler.class);
   }
 
   // Client command handlers
@@ -63,7 +63,7 @@ public class StorkClient {
           ad = command();
 
           // Write command to server.
-          os.write(ad.serialize());
+          os.write((ad.toString()+"\n").getBytes("UTF-8"));
           os.flush();
 
           // Receive responses until we're done.
@@ -71,7 +71,7 @@ public class StorkClient {
             ad = Ad.parse(is);
           } while (ad != null && handle(ad));
 
-          // Return response ad if last handled ad was one.
+          // Return response.
           return ad;
         } while (hasMoreCommands());
       } catch (Exception e) {
@@ -106,7 +106,7 @@ public class StorkClient {
     GetOpts parser(GetOpts base) {
       GetOpts opts = new GetOpts(base);
 
-      opts.prog = "stork_ls";
+      opts.prog = "ls";
       opts.args = new String[] { "[option...] <url>" };
       opts.desc = new String[] {
         "This command can be used to list the contents of a remote "+
@@ -120,13 +120,13 @@ public class StorkClient {
     }
 
     public Ad command() {
-      Ad ad = new Ad("command", "stork_ls");
+      Ad ad = new Ad("command", "ls");
 
       // Check args.
       if (args.length < 1)
-        return new Ad("error", "not enough arguments");
+        throw new RuntimeException("not enough arguments");
       else if (args.length > 1)
-        return new Ad("error", "too many arguments");
+        throw new RuntimeException("too many argument arguments");
       ad.put("uri", args[0]);
 
       // Check for options.
@@ -136,7 +136,8 @@ public class StorkClient {
     }
 
     public boolean handle(Ad ad) {
-      System.out.println(ad);
+      if (!ad.has("error"))
+        System.out.println(ad);
       return false;
     }
   }
@@ -147,7 +148,7 @@ public class StorkClient {
     GetOpts parser(GetOpts base) {
       GetOpts opts = new GetOpts(base);
 
-      opts.prog = "stork_q";
+      opts.prog = "q";
       opts.args = new String[] { "[option...] [status] [job_id...]" };
       opts.desc = new String[] {
         "This command can be used to query a Stork server for information "+
@@ -181,7 +182,7 @@ public class StorkClient {
       if (env.has("watch"))
         watch = env.getInt("watch", 2);
 
-      ad.put("command", "stork_q");
+      ad.put("command", "q");
 
       // Check command line options.
       if (env.getBoolean("count"))
@@ -268,7 +269,7 @@ public class StorkClient {
     GetOpts parser(GetOpts base) {
       GetOpts opts = new GetOpts(base);
 
-      opts.prog = "stork_rm";
+      opts.prog = "rm";
       opts.args = new String[] { "[option...] [job_id...]" };
       opts.desc = new String[] {
         "This command can be used to cancel pending or running jobs on "+
@@ -283,7 +284,7 @@ public class StorkClient {
     public Ad command() {
       Range range = new Range();
       Ad ad = new Ad();
-      ad.put("command", "stork_rm");
+      ad.put("command", "rm");
 
       // Arg check.
       if (args.length < 1)
@@ -311,7 +312,7 @@ public class StorkClient {
     GetOpts parser(GetOpts base) {
       GetOpts opts = new GetOpts(base);
 
-      opts.prog = "stork_info";
+      opts.prog = "info";
       opts.args = new String[] { "[option...] [type]" };
       opts.desc = new String[] {
         "This command retrieves information about the server itself, "+
@@ -324,7 +325,7 @@ public class StorkClient {
 
     public Ad command() {
       Ad ad = new Ad();
-      ad.put("command", "stork_info");
+      ad.put("command", "info");
 
       // Set the type of info to get from the server
       if (args.length > 0)
@@ -346,11 +347,11 @@ public class StorkClient {
     GetOpts parser(GetOpts base) {
       GetOpts opts = new GetOpts(base);
 
-      opts.prog = "stork_submit";
+      opts.prog = "submit";
       opts.args = new String[] {
         "[option...]",
-        "[option...] [job_file]",
-        "[option...] [src_url] [dest_url]"
+        "[option...] <job_file>",
+        "[option...] <src_url> <dest_url>"
       };
       opts.desc = new String[] {
         "This command is used to submit jobs to a Stork server. ",
@@ -365,10 +366,10 @@ public class StorkClient {
         "and destination URL, which it parses and generates a job "+
         "ad for.",
 
-        "After each job is submitted, stork_submit outputs the job "+
+        "After each job is submitted, submit outputs the job "+
         "id, assuming it was submitted successfully.",
 
-        "(Note about x509 proxies: stork_submit will check if "+
+        "(Note about x509 proxies: submit will check if "+
         "\"x509_file\" is included in the submit ad, and, if so, "+
         "read the proxy file, and include its contents in the job ad "+
         "as \"x509_proxy\". This may be removed in the future.)"
@@ -447,7 +448,7 @@ public class StorkClient {
 
       assert stream != null;
       try {
-        ad = Ad.parse(stream).put("command", "stork_submit");
+        ad = Ad.parse(stream).put("command", "submit");
       } catch (Exception e) {
         throw new FatalEx("could not parse input ad");
       }
@@ -508,7 +509,7 @@ public class StorkClient {
     GetOpts parser(GetOpts base) {
       GetOpts opts = new GetOpts(base);
 
-      opts.prog = "stork_raw";
+      opts.prog = "raw";
       opts.args = new String[] { "[ad_file]" };
       opts.desc = new String[] {
         "Send a raw command ad to a server, for debugging purposes.",
@@ -594,7 +595,10 @@ public class StorkClient {
     // Execute the command handler.
     try {
       Ad ad = scmd.handle(server_sock);
-      System.err.println("Done: "+ad);
+      if (ad.has("error"))
+        System.err.println("Error: "+ad.get("error"));
+      else
+        System.err.println("Done: "+ad);
     } catch (Exception e) {
       System.err.println("Error: "+e.getMessage());
     }

@@ -1,20 +1,4 @@
-WHAT'S THIS?
-  The Stork README file. Aptly named; you should read it!
-
-  NOTE: This file, like Stork, is still in beta, and a lot of the
-  features mentioned herein are not implemented (though will be soon).
-
-  If there is a * at the beginning of a line, it means something in
-  that line has not been implemented yet.
-
-  Maintainers/Contributors: In this file, two spaces at the beginning
-  of each line under a header, NO TABS, line should wrap at 72 (here) >
-  characters, per arbitrary decree.
-
-TABLE OF CONTENTS
-  TODO: This, and numbering.
-
-WHAT IS STORK?
+Introduction
   Stork is a data transfer scheduler that provides a common interface
   to different file transfer protocols.
 
@@ -35,31 +19,31 @@ WHAT IS STORK?
   eliminating the communication overhead of piping serialized LiteAds
   between Stork and the transfer module.
 
-SUPPORTED PLATFORMS
+Supported Platforms
   Any modern operating system that can run a JVM.
 
-BUILDING
+Building
   On most systems, simply run `make'! 
 
-COMMANDS
-  stork_server - Used to start (or stop) a Stork server.
+Commands
+  stork server - Used to start (or stop) a Stork server.
 
-  stork_q - List all the jobs in the Stork queue along with information
+  stork q - List all the jobs in the Stork queue along with information
     about them, such as their status and progress. Can be used to find
     information about specific jobs by passing a job id. Can also be
     used to filter jobs by their status.
 
-  stork_submit - Submit a job to a Stork server. Can be passed a source
+  stork submit - Submit a job to a Stork server. Can be passed a source
     and destination URL, or a LiteAd descriptor of the job.
 
-  stork_rm - Remove or terminate a submitted job or set of jobs.
+  stork rm - Remove or terminate a submitted job or set of jobs.
 
-  stork_info - Display configuration information about the server. Can
+  stork info - Display configuration information about the server. Can
     also be used to find information about transfer modules.
 
   More information can be found by running `<command> --help'.
 
-CONFIGURING
+Configuring
   The Stork configuration file (stork.conf) can be used to change
   settings for the server and client tools. The search order for the
   configuration file is as follows:

@@ -19,14 +19,7 @@ public class SFTPModule extends TransferModule {
     ad.put("protocols", "scp,sftp");
     ad.put("accepts", "classads");
 
-    try {
-      info_ad = new ModuleInfoAd(ad);
-    } catch (Exception e) {
-      info_ad = null;
-      System.out.println("Fatal error parsing SFTPModule info ad");
-      e.printStackTrace();
-      System.exit(1);
-    }
+    info_ad = new ModuleInfoAd(ad);
   }
 
   public ModuleInfoAd infoAd() {

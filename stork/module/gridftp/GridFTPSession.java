@@ -149,13 +149,12 @@ public class GridFTPSession extends StorkSession {
           }
         });
       } try {
-        D("Syncing...");
         cp.sync();
       } catch (Exception e) {
         if (total < 2) {
           cp.oc.close();
           throw new TempEx(e.getMessage(), e);
-        } e.printStackTrace();
+        }
       }
     }
 

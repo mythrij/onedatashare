@@ -10,9 +10,10 @@ import io.netty.buffer.*;
 import io.netty.handler.codec.*;
 import io.netty.channel.*;
 import io.netty.channel.socket.*;
+import static io.netty.util.CharsetUtil.UTF_8;
 
 import java.util.*;
-import java.nio.charset.Charset;
+import java.io.*;
 import java.net.InetSocketAddress;
 
 // A bunch of classes under one namespace that implement various
@@ -25,27 +26,47 @@ public final class NettyStuff {
   // Codecs
   // ------
   // A decoder for parsing ads from channels.
-  public static class AdDecoder extends ReplayingDecoder {
-    protected Object decode(ChannelHandlerContext ctx, ByteBuf buf)
-    throws Exception {
-      // Feed the byte buffer to the ad parser as an input stream.
-      try {
-        return Ad.parse(new ByteBufInputStream(buf));
-      } catch (Exception e) {
-        e.printStackTrace();
-        ctx.close();
-        throw e;
-      }
-    }
-  }
+  public static class AdCodec {
+    AdPrinter printer = AdPrinter.CLASSAD;
 
-  // An encoder for writing ads to a channel.
-  public static class AdEncoder extends MessageToByteEncoder<Ad> {
-    protected void encode(ChannelHandlerContext ctx, Ad ad, ByteBuf out)
-    throws Exception {
-      //System.out.println("Writing ad: "+ad);
-      out.writeBytes(ad.serialize());
-    }
+    ReplayingDecoder<Ad> decoder = new ReplayingDecoder<Ad>() {
+      protected Ad decode(ChannelHandlerContext ctx, final ByteBuf buf)
+      throws Exception {
+        try {
+          if (actualReadableBytes() == 0)
+            return null;
+
+          Ad ad = Ad.parse(new InputStream() {
+            int i = 0, len = actualReadableBytes();
+            public int read() {
+              return (i++ == len) ? -1 : buf.readByte();
+            }
+          });
+
+          System.out.println("Got ad: "+ad);
+
+          if (ad instanceof AdParser.ParsedAd)
+            AdCodec.this.printer = ((AdParser.ParsedAd)ad).printer;
+
+          return ad;
+        } catch (Exception e) {
+          e.printStackTrace();
+          ctx.close();
+          throw e;
+        } catch (Error e) {
+          e.printStackTrace();
+          throw e;
+        }
+      }
+    };
+
+    // An encoder for writing ads to a channel. Uses the encapsulated printer.
+    MessageToByteEncoder<Ad> encoder = new MessageToByteEncoder<Ad>() {
+      protected void encode(ChannelHandlerContext ctx, Ad ad, ByteBuf out)
+      throws Exception {
+        out.writeBytes(AdCodec.this.printer.toString(ad).getBytes(UTF_8));
+      }
+    };
   }
 
   // Initializers
@@ -64,8 +85,9 @@ public final class NettyStuff {
 
       System.out.println("Initing channel: "+ch.localAddress());
 
-      pl.addLast("decoder", new AdDecoder());
-      pl.addLast("encoder", new AdEncoder());
+      AdCodec codec = new AdCodec();
+      pl.addLast("decoder", codec.decoder);
+      pl.addLast("encoder", codec.encoder);
       pl.addLast(new AdServerHandler(sched));
     }
   }
@@ -120,7 +142,6 @@ public final class NettyStuff {
 
       // Bind socket to the given host/port.
       sb.bind(addr).sync();
-      System.out.println("Bound channel...");
     }
   }
 }

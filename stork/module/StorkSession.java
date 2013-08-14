@@ -69,7 +69,6 @@ public abstract class StorkSession {
   // progress. TODO: Make protected once we get gridftp settled.
   //protected void reportProgress(Ad... ad) {
   public void reportProgress(Ad... ad) {
-    System.out.println("Reporting: "+ad[0]);
     if (pipe != null) pipe.put(ad);
   }
 
@@ -81,10 +80,7 @@ public abstract class StorkSession {
     path = StorkUtil.normalizePath(path);
     if (opts == null)
       opts = new Ad();
-    //return listImpl(path, opts);
-    Ad ad = listImpl(path, opts);
-    System.out.println("Crap: "+ad);
-    return ad;
+    return listImpl(path, opts);
   }
 
   public long size(String path) {

@@ -202,7 +202,7 @@ public class ControlChannel extends Pipeline<String, Reply> {
   // Write a command to the control channel.
   public void handleWrite(String cmd) {
     if (local) return;
-    System.out.println("Write ("+port+"): "+cmd);
+    //System.out.println("Write ("+port+"): "+cmd);
     try {
       fc.write(new Command(cmd));
     } catch (Exception e) {
@@ -223,7 +223,7 @@ public class ControlChannel extends Pipeline<String, Reply> {
   public Reply handleReply() {
     while (true) {
       Reply r = readChannel();
-      System.out.println("Reply: "+r);
+      //System.out.println("Reply: "+r);
       if (r.getCode() < 200) addReply(r);
       else return r;
     }
@@ -241,7 +241,7 @@ public class ControlChannel extends Pipeline<String, Reply> {
       Reply r = readChannel();
       ListAdSink sink = new ListAdSink(ad, false);
 
-      System.out.println(r.getMessage());
+      //System.out.println(r.getMessage());
 
       if (!Reply.isPositiveCompletion(r))
         throw new FatalEx("couldn't list: "+r);

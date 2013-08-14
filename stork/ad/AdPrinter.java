@@ -7,14 +7,13 @@ import java.util.*;
 public class AdPrinter {
   // Options
   protected int indent = 2;  // Indentation size.
-  protected boolean dots = true;  // Compact printing of sub ad IDs.
 
   // Default decorations.
   protected String
     LB  = "[\n", // Left bracket.
-    RB  = "]", // Right bracket.
+    RB  = "]",   // Right bracket.
     LLB = "{\n", // Left list bracket.
-    RLB = "}", // Right list bracket.
+    RLB = "}",   // Right list bracket.
     EQ  = " = ", // Assignment token.
     SC  = ";\n", // Declaration separator.
     LSC = ",\n", // List item separator.
@@ -22,19 +21,17 @@ public class AdPrinter {
     IDL = "",    // Left ID decorator.
     IDR = "",    // Right ID decorator.
     STL = "\"",  // Left string decorator.
-    STR = "\"",  // Right string decorator.
-    DOT = ".";   // Dotted ID separator.
+    STR = "\"";  // Right string decorator.
 
   // Some predefined ad formats.
-  public static AdPrinter PRETTY = new AdPrinter();
-  public static AdPrinter MIN = new AdPrinter() {
+  public static AdPrinter CLASSAD = new AdPrinter();
+  public static AdPrinter CLASSAD_MIN = new AdPrinter() {
     AdPrinter set() {
       indent = 0;
       LB  = "[";  RB  = "]";  LLB = "{";
       RLB = "}";  EQ  = "=";  SC  = ";";
       LSC = ",";  IDL = "";   IDR = "";
-      STL = "\""; STR = "\""; DOT = ".";
-      ELT = "";
+      STL = "\""; STR = "\""; ELT = "";
       return this;
     }
   }.set();
@@ -53,25 +50,16 @@ public class AdPrinter {
       LB  = "{";  RB  = "}";  LLB = "[";
       RLB = "]";  EQ  = ":";  SC  = ",";
       LSC = ",";  IDL = "\""; IDR = "\"";
-      STL = "\""; STR = "\"";
-      ELT = "";
+      STL = "\""; STR = "\""; ELT = "";
       return this;
     }
   }.set();
 
   AdPrinter set() { return this; }
 
-  // Change the settings.
-  public AdPrinter dots(boolean d) {
-    dots = d;
-    return this;
-  } 
-
   // Do the deed.
   public String toString(Ad ad) {
     return appendAd(new StringBuilder(), 0, ad).toString();
-  } public byte[] serialize(Ad ad) {
-    return appendAd(new StringBuilder(), 0, ad).toString().getBytes();
   } protected StringBuilder appendAd(StringBuilder sb, int level, Ad ad) {
     if (ad.isList()) {
       sb.append(LLB);

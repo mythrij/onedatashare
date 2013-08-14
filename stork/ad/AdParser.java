@@ -3,20 +3,51 @@ package stork.ad;
 import java.io.*;
 import java.util.*;
 import java.math.*;
+import java.nio.charset.*;
 
 public class AdParser {
   int level = 0;
   char saved = 0;
   private Reader r;
+  boolean body_only = false;
+  private static RuntimeException eof =
+    new RuntimeException("end of stream reached");
+  public static Charset defaultCharset = Charset.forName("UTF-8");
+
+  // This includes decorator hints for printing. Or will, maybe. For now
+  // it just picks a printer based on the opening bracket.
+  public static class ParsedAd extends Ad {
+    public AdPrinter printer = AdPrinter.CLASSAD;
+    public AdPrinter setHint(char c) {
+      switch (c) {
+        case '{': return printer = AdPrinter.JSON;
+        case '[': return printer = AdPrinter.CLASSAD;
+      } return printer;
+    }
+    public String toString() {
+      return printer.toString(this);
+    }
+  }
 
   public AdParser(CharSequence s) {
-    this(new StringReader(s.toString()));
+    this(s, false);
   } public AdParser(InputStream is) {
-    this(new InputStreamReader(is));
+    this(is, false);
   } public AdParser(File f) throws FileNotFoundException {
-    this(new FileReader(f));
+    this(f, false);
   } public AdParser(Reader r) {
-    this.r = r;
+    this(r, false);
+  }
+
+  public AdParser(CharSequence s, boolean body_only) {
+    this(new StringReader(s.toString()), body_only);
+  } public AdParser(InputStream is, boolean body_only) {
+    this(new InputStreamReader(is, defaultCharset), body_only);
+  } public AdParser(File f, boolean body_only) throws FileNotFoundException {
+    this(new FileReader(f), body_only);
+  } public AdParser(Reader r, boolean body_only) {
+    this.r = (r instanceof BufferedReader) ? r : new BufferedReader(r);
+    if (this.body_only = body_only) saved = '[';
   }
 
   // Utility methods
@@ -26,9 +57,11 @@ public class AdParser {
     try {
       int i = (saved != 0) ? saved : r.read();
       saved = 0;
-      if (i <= -1)
-        throw new RuntimeException("end of stream reached");
-      return (char) i;
+      if (i <= -1) {
+        if (body_only)
+          return ']';  // Just a little hacky.
+        throw eof;
+      } return (char) i;
     } catch (RuntimeException e) {
       throw e;
     } catch (Exception e) {
@@ -57,7 +90,7 @@ public class AdParser {
     return discard("\t\n\r\b ");
   } private char discard(String s) {
     char c;
-    for (c = peek(); check(c, s); c = next());
+    for (c = next(); check(c, s); c = next());
     return c;
   }
 
@@ -68,7 +101,7 @@ public class AdParser {
     char c;
     do switch (c = discard(s)) {
       case '/': if (peek() != '/') return c;
-      case '#': for (c = peek(); check(c, s); c = next());
+      case '#': for (c = peek(); !check(c, "\r\n"); c = next());
     } while (check(c, s));
     return c;
   }
@@ -91,14 +124,24 @@ public class AdParser {
 
   // Parsing methods
   // ---------------
-  public Ad parseAd() {
-    return parseInto(new Ad());
+  public Ad parse() {
+    try {
+      return parseInto(new ParsedAd());
+    } catch (RuntimeException e) {
+      if (e == eof)
+        return null;
+      throw e;
+    }
   }
 
   public Ad parseInto(Ad ad) {
-    expect("{[(<");
+    char c = expect("{[(<");
+
+    if (ad instanceof ParsedAd)
+      ((ParsedAd)ad).setHint(c);
+
     for (int i = 0; ; i++) {
-      char c = saved = discardIgnored();
+      c = saved = discardIgnored(";,\t\n\r\b ");
 
       // Check for end of ad.
       if (check(c, "}])>")) return ad;
@@ -112,7 +155,13 @@ public class AdParser {
       // Check if it's anonymous or not.
       switch (c = expect(":=,;\r\n}])>")) {
         case ':': // Check for assignment.
-        case '=': ad.putObject(o, findValue()); break;
+        case '=':
+          Object o2 = findValue();
+          if (o2 instanceof Atom)
+            ad.putObject(o, ((Atom)o2).eval());
+          else
+            ad.putObject(o, o2);
+          break;
         case '}': // Check for end and push char back if found.
         case ']':
         case ')':
@@ -184,7 +233,7 @@ public class AdParser {
         return Boolean.TRUE;
       if (s.equals("null"))
         return null;
-      throw new RuntimeException("unknown keyword: "+s);
+      throw new RuntimeException("invalid keyword: "+s);
     }
   }
 
@@ -224,7 +273,7 @@ public class AdParser {
     } if (check(c, '0', '9')) {
       return readNumber();
     } if (check(c, "{[(<")) {
-      return parseAd();
+      return parseInto(new Ad());
     } if (validAtomStart(c)) {
       return readAtom();
     } throw new RuntimeException("cannot parse value starting with: "+c);

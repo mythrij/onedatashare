@@ -151,7 +151,6 @@ public class StorkJob {
       Pipe<Ad> pipe = new Pipe<Ad>();
       pipe.new End(false) {
         public void store(Ad ad) {
-          System.out.println("Got aux ad: "+ad);
           if (ad.has("bytes_total") || ad.has("files_total"))
             tp.transferStarted(ad.getLong("bytes_total"),
                                ad.getInt("files_total"));
@@ -179,7 +178,6 @@ public class StorkJob {
         status(scheduled);
         attempts++;
       } message = e.getMessage();
-      e.printStackTrace();
     } finally {
       if (ss != null) ss.close();
       if (ds != null) ds.close();

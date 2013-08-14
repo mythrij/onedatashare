@@ -40,10 +40,11 @@ public class StorkMain {
     def_env.put("libexec", "../libexec/");
 
     // Initialize the default command line parser.
+    // TODO: Auto-generate command list.
     opts.prog = "stork";
     opts.args = new String[] { "<command> [args...]" };
     opts.desc = new String[] {
-      "Execute a Stork command. TODO: Auto-generate command list." };
+      "Execute a Stork command." };
 
     opts.add('C', "conf", "specify custom path to stork.conf").parser =
       opts.new SimpleParser("conf", "PATH", false);
@@ -64,9 +65,9 @@ public class StorkMain {
     opts.add('q', "quiet", "don't print anything to standard output");
 
     opts.foot = new String[] {
-      "Stork is still undergoing testing and development, "+
-      "so please excuse the mess! If you encounter any bugs, "+
-      "please contact Brandon Ross <bwross@buffalo.edu>.", version()
+      "Stork is still undergoing testing and development. "+
+      "If you encounter any bugs, please contact "+
+      "Brandon Ross <bwross@buffalo.edu>.", version()
     };
   }
 
@@ -114,9 +115,13 @@ public class StorkMain {
     Reader r = new FileReader(file);
     Scanner sc = new Scanner(r).useDelimiter("\\A");
 
-    if (!sc.hasNext())
+    if (!sc.hasNext()) {
       throw new Exception("couldn't read from config file: '"+file+"'");
-    return Ad.parse("[\n"+sc.next().replace("\n", ";\n")+"\n]");
+    } try {
+      return Ad.parseBody(sc.next());
+    } catch (Exception e) {
+      throw new FatalEx("could't parse config file: "+e.getMessage());
+    }
   }
 
   // Main entry point. The first argument should be the command to
@@ -137,7 +142,7 @@ public class StorkMain {
     }
 
     // Little hacky...
-    if (cmd.equals("stork_server")) {
+    if (cmd.equals("server")) {
       opt2 = StorkScheduler.getParser(opts);
     } else {
       opt2 = StorkClient.getParser(cmd, opts);
@@ -181,7 +186,7 @@ public class StorkMain {
       System.out.close();
 
     // Now run the actual command. (Again, a little hacky.)
-    if (cmd.equals("stork_server")) {
+    if (cmd.equals("server")) {
       String host = env.get("host", "127.0.0.1");
       int port = env.getInt("port", DEFAULT_PORT);
 

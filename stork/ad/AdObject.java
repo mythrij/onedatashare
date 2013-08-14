@@ -106,7 +106,7 @@ public class AdObject implements Comparable<AdObject> {
       return Boolean.valueOf(toString().equalsIgnoreCase("true"));
     if (object instanceof Number)
       return Boolean.valueOf(((Number)object).intValue() != 0);
-    throw new RuntimeException("cannot convert to boolean");
+    throw new RuntimeException("cannot convert to boolean from "+object.getClass());
   } public boolean asBooleanValue() {
     return asBoolean().booleanValue();
   }
@@ -120,7 +120,7 @@ public class AdObject implements Comparable<AdObject> {
   public <C extends Object> C as(Class<C> c) {
     Method m = conv_map.get(c);
     if (m == null) {
-      throw new RuntimeException("cannot convert to "+c);
+      throw new RuntimeException("cannot convert to "+c+" from "+object.getClass());
     } try {
       return c.cast(m.invoke(this));
     } catch (RuntimeException e) {

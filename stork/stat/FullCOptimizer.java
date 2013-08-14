@@ -73,8 +73,6 @@ public class FullCOptimizer extends Optimizer {
   public void report(Ad ad) {
     Block b = new Block();
 
-    System.out.println("Reported ad: "+ad);
-    
     b.para = ad.getInt("parallelism", para);
     b.size = ad.getLong("size");
     b.tp   = ad.getDouble("throughput");
@@ -89,14 +87,10 @@ public class FullCOptimizer extends Optimizer {
 
     // If that was a warm-up sample, don't change anything.
     if (!warmed_up) {
-      System.out.println("Alright, that was a warm-up...");
       warmed_up = true;
     } else {
       // Keep the sample and calculate next parallelism.
-      System.out.println("Block: "+b);
       samples.add(b);
-
-      System.out.println("Added sample: "+b);
 
       pd *= 2;
       para = p_base+pd;

@@ -55,7 +55,7 @@ public class ExternalModule extends TransferModule {
         proc.destroy();
         proc = null;
       } catch (Exception e) {
-        System.out.println("Warning: error stopping "+proc);
+        // Do nothing...
       } rv = 255;
     }
 

@@ -27,6 +27,7 @@ public class EndPoint {
   } public EndPoint(URI u) {
     if (u == null)
       throw new FatalEx("missing uri field from endpoint");
+    System.out.println("URI is: "+u);
     uri = u;
   }
 
@@ -35,10 +36,16 @@ public class EndPoint {
   }
 
   public String proto() {
+    if (uri == null)
+      throw new RuntimeException("endpoint has no URI");
+    if (uri.getScheme() == null)
+      throw new RuntimeException("scheme omitted from URI");
     return uri.getScheme();
   }
 
   public String path() {
+    if (uri == null)
+      throw new RuntimeException("endpoint has no URI");
     return uri.getPath();
   }
 
@@ -46,6 +53,8 @@ public class EndPoint {
   public StorkSession session() {
     if (module == null)
       module = tmt.byProtocol(proto());
+    if (module == null)
+      throw new RuntimeException("no module for "+proto()+" registered");
     return module.session(this);
   }
 }

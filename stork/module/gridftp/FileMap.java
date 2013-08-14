@@ -36,7 +36,7 @@ class FileMap implements DataSink, DataSource {
   }
 
   public void write(Buffer buffer) throws IOException {
-    System.out.println("Got buffer: "+new String(buffer.getBuffer()));
+    //System.out.println("Got buffer: "+new String(buffer.getBuffer()));
     if (buffer.getOffset() >= 0)
       file.seek(buffer.getOffset());
     file.write(buffer.getBuffer());

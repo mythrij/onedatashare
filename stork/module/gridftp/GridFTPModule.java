@@ -33,14 +33,7 @@ public class GridFTPModule extends TransferModule {
     ad.put("accepts", "classads");
     ad.put("opt_params", "parallelism,x509_proxy,optimizer");
 
-    try {
-      info_ad = new ModuleInfoAd(ad);
-    } catch (Exception e) {
-      info_ad = null;
-      System.out.println("Fatal error parsing StorkGridFTPModule info ad");
-      e.printStackTrace();
-      System.exit(1);
-    }
+    info_ad = new ModuleInfoAd(ad);
   }
 
   // Interface methods

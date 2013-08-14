@@ -42,8 +42,10 @@ public enum JobStatus {
 
   // Get a status by name. 
   public static JobStatus byName(String name) {
-    if (name == null)
-      return null;
-    return Enum.valueOf(JobStatus.class, name.toLowerCase());
+    if (name != null) try {
+      return Enum.valueOf(JobStatus.class, name.toLowerCase());
+    } catch (Exception e) {
+      // I guess that's not a real status...
+    } return null;
   }
 }

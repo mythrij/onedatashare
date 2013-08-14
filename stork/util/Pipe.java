@@ -21,6 +21,7 @@ public class Pipe<T> {
     }
 
     // Put messages from this end into the pipe.
+    @SuppressWarnings({"unchecked"})
     public final void put(T... msgs) {
       for (T t : msgs) if (t != null)
         broadcast(this, t);

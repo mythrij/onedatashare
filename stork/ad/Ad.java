@@ -62,14 +62,30 @@ public class Ad {
     this(); merge(bases);
   }
 
-  // Static parser methods.
+  // Static parser methods. These will throw runtime exceptions if there
+  // is a parse error, and will return null if EOF is encountered
+  // prematurely.
   public static Ad parse(CharSequence cs) {
-    return new AdParser(cs).parseAd();
+    return new AdParser(cs).parse();
   } public static Ad parse(InputStream is) {
-    return new AdParser(is).parseAd();
+    return new AdParser(is).parse();
   } public static Ad parse(File f) {
     try {
-      return new AdParser(f).parseAd();
+      return new AdParser(f).parse();
+    } catch (RuntimeException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  public static Ad parseBody(CharSequence cs) {
+    return new AdParser(cs, true).parse();
+  } public static Ad parseBody(InputStream is) {
+    return new AdParser(is, true).parse();
+  } public static Ad parseBody(File f) {
+    try {
+      return new AdParser(f, true).parse();
     } catch (RuntimeException e) {
       throw e;
     } catch (Exception e) {
@@ -561,35 +577,31 @@ public class Ad {
 
   // Composition methods
   // ------------------
-  // Represent this ad in ClassAd format.
+  // Represent this ad in some kind of nice format. I guess the ClassAd
+  // format is easier on the eyes.
   public synchronized String toString(boolean pretty) {
-    if (pretty)
-      return AdPrinter.PRETTY.toString(this);
-    return AdPrinter.MIN.toString(this);
+    return toClassAd(pretty);
   } public synchronized String toString() {
-    return toString(true);
+    return toClassAd(true);
   }
 
-  // Represent this ad as a nicely-formatted JSON string.
+  // Represent this ad as a JSON string.
   public synchronized String toJSON(boolean pretty) {
-    if (pretty)
-      return AdPrinter.JSON.toString(this);
-    return AdPrinter.JSON_MIN.toString(this);
+    return (pretty ? AdPrinter.JSON : AdPrinter.JSON_MIN).toString(this);
   } public synchronized String toJSON() {
     return toJSON(true);
   }
 
-  // Serialize as bytes.
-  public synchronized byte[] serialize() {
-    return toString(false).getBytes();
+  // Represent this ad as a ClassAd string.
+  public synchronized String toClassAd(boolean pretty) {
+    return (pretty ? AdPrinter.CLASSAD : AdPrinter.CLASSAD_MIN).toString(this);
+  } public synchronized String toClassAd() {
+    return toClassAd(true);
   }
 
   public static void main(String args[]) {
     System.out.println("Type an ad:");
     Ad ad = Ad.parse(System.in);
     System.out.println("Got ad: \n"+ad);
-    System.out.println("------\n"+ad.toString(false));
-    System.out.println("------\n"+ad.toJSON());
-    System.out.println("------\n"+ad.toJSON(false));
   }
 }

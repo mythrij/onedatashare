@@ -24,11 +24,6 @@ public class TransferModuleTable {
 
   // Add a transfer module to the table.
   public void register(TransferModule tm) {
-    if (tm == null) {
-      System.out.println("Error: register called with null argument");
-      return;
-    }
-
     // Check if handle is in use.
     if (!by_handle.containsKey(tm.handle())) {
       by_handle.put(tm.handle(), tm);

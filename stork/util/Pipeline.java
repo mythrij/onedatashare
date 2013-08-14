@@ -114,7 +114,7 @@ public abstract class Pipeline<C,R> extends Thread {
     handleWrite(c);
     PipedCommand cmd = new PipedCommand(c, i, h);
     sent.add(cmd); notifyAll();
-  } public void write(C c, Handler h) {
+  } public <H extends Handler> void write(C c, H h) {
     write(c, false, h);
   } public void write(C c, boolean ignore) {
     write(c, ignore, null);
