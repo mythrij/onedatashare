@@ -87,7 +87,7 @@ public class StorkClient {
     }
 
     // Return a parser for parsing command line options.
-    abstract GetOpts parser(GetOpts base);
+    abstract public GetOpts parser();
 
     // Return the command ad to send to the server.
     abstract public Ad command();
@@ -103,9 +103,8 @@ public class StorkClient {
 
   // Handler for performing remote listings.
   static class StorkLsHandler extends StorkCommand {
-    GetOpts parser(GetOpts base) {
-      GetOpts opts = new GetOpts(base);
-
+    public GetOpts parser() {
+      GetOpts opts = new GetOpts();
       opts.prog = "ls";
       opts.args = new String[] { "[option...] <url>" };
       opts.desc = new String[] {
@@ -145,9 +144,8 @@ public class StorkClient {
   static class StorkQHandler extends StorkCommand {
     boolean count_only = false;
 
-    GetOpts parser(GetOpts base) {
-      GetOpts opts = new GetOpts(base);
-
+    public GetOpts parser() {
+      GetOpts opts = new GetOpts();
       opts.prog = "q";
       opts.args = new String[] { "[option...] [status] [job_id...]" };
       opts.desc = new String[] {
@@ -266,9 +264,8 @@ public class StorkClient {
   // status of 
 
   static class StorkRmHandler extends StorkCommand {
-    GetOpts parser(GetOpts base) {
-      GetOpts opts = new GetOpts(base);
-
+    public GetOpts parser() {
+      GetOpts opts = new GetOpts();
       opts.prog = "rm";
       opts.args = new String[] { "[option...] [job_id...]" };
       opts.desc = new String[] {
@@ -309,9 +306,8 @@ public class StorkClient {
   }
 
   static class StorkInfoHandler extends StorkCommand {
-    GetOpts parser(GetOpts base) {
-      GetOpts opts = new GetOpts(base);
-
+    public GetOpts parser() {
+      GetOpts opts = new GetOpts();
       opts.prog = "info";
       opts.args = new String[] { "[option...] [type]" };
       opts.desc = new String[] {
@@ -344,9 +340,8 @@ public class StorkClient {
   static class StorkSubmitHandler extends StorkCommand {
     private int submitted = 0, accepted = 0;
 
-    GetOpts parser(GetOpts base) {
-      GetOpts opts = new GetOpts(base);
-
+    public GetOpts parser() {
+      GetOpts opts = new GetOpts();
       opts.prog = "submit";
       opts.args = new String[] {
         "[option...]",
@@ -506,9 +501,8 @@ public class StorkClient {
 
   // Handler for sending a raw command ad to the server.
   static class StorkRawHandler extends StorkCommand {
-    GetOpts parser(GetOpts base) {
-      GetOpts opts = new GetOpts(base);
-
+    public GetOpts parser() {
+      GetOpts opts = new GetOpts();
       opts.prog = "raw";
       opts.args = new String[] { "[ad_file]" };
       opts.desc = new String[] {
@@ -553,7 +547,7 @@ public class StorkClient {
   // Get a GetOpts parser for a Stork command.
   public static GetOpts getParser(String cmd, GetOpts base) {
     try {
-      return handler(cmd).parser(base);
+      return handler(cmd).parser().parent(base);
     } catch (Exception e) {
       return null;
     }

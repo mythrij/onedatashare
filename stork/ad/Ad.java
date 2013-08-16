@@ -7,35 +7,54 @@ import java.io.*;
 import java.lang.reflect.*;
 
 public class Ad {
-  // The heart of the structure.
-  protected final Map<Object, AdObject> map;
+  // An ad is either a list or a map, but never both. Never access these
+  // directly, always access through list() or map().
+  private Map<Object, AdObject> map = null;
+  private List<AdObject> list = null;
 
-  private static class AdKey {
-    Object v;
-    AdKey(String k)  { v = k; }
-    AdKey(Integer k) { v = k; }
-    public int hashCode() { return v.hashCode(); }
-    public boolean equals(Object o) { return v.equals(o); }
+  // Make this ad a map if it's undetermined. Return the map.
+  Map<Object, AdObject> map() {
+    return map(true);
+  } Map<Object, AdObject> map(boolean make) {
+    if (list != null)
+      throw new RuntimeException("cannot access ad as a map");
+    if (map == null && make)
+      map = new LinkedHashMap<Object, AdObject>();
+    return map;
+  }
+
+  // Make this ad a list if it's undetermined. Return the list.
+  List<AdObject> list() {
+    return list(true);
+  } List<AdObject> list(boolean make) {
+    if (map != null)
+      throw new RuntimeException("cannot access ad as a list");
+    if (list == null && make)
+      list = new LinkedList<AdObject>();
+    return list;
   }
 
   // Create a new ad, plain and simple.
-  public Ad() {
-    this(true, null);
+  public Ad() { }
+
+  // Create a new ad from a list.
+  public Ad(Collection<?> list) {
+    addAll(list);
   }
 
-  // Allows subclasses to take maps from input ads directly to prevent
-  // needless copying.
-  protected Ad(boolean copy, Ad ad) {
-    map = (ad == null) ? new LinkedHashMap<Object, AdObject>() :
-          (copy) ? new LinkedHashMap<Object, AdObject>(ad.map) : ad.map;
+  // Create a new ad from an iterable.
+  public Ad(Iterable<?> iter) {
+    addAll(iter);
   }
 
-  // Create a new ad from a list or map.
-  public Ad(Iterable<?> list) {
-    this(true, null);
-    int i = 0;
-    for (Object o : list)
-      put(o);
+  // Create a new ad from a map.
+  public Ad(Map<?,?> map) {
+    addAll(map);
+  }
+
+  // Create a new ad that is the copy of another ad.
+  public Ad(Ad ad) {
+    addAll(ad);
   }
 
   // Create an ad with given key and value.
@@ -55,11 +74,6 @@ public class Ad {
     this(); put(key, value);
   } public Ad(String key, List value) {
     this(); put(key, value);
-  }
-
-  // Merges all of the ads passed into this ad.
-  public Ad(Ad... bases) {
-    this(); merge(bases);
   }
 
   // Static parser methods. These will throw runtime exceptions if there
@@ -177,17 +191,17 @@ public class Ad {
 
     if (okey == null) {
       throw new RuntimeException("null key given");
-    } if (okey instanceof Number) {
-      i = ((Number)okey).intValue();
-      AdObject o = map.get(i);
-      if (o != null)
-        return o;
-      return getEntry(i).getValue();
+    } if (isEmpty()) {
+      // This is so we don't determine the ad type just because of a get.
+      return null;
+    } if (okey instanceof Integer && isList()) {
+      AdObject o = list().get((Integer)okey);
+      return o;
     } else {
       String key = okey.toString();
       while ((i = key.indexOf('.')) > 0) synchronized (ad) {
         String k1 = key.substring(0, i);
-        AdObject o = ad.map.get(k1);
+        AdObject o = ad.map().get(k1);
         if (o == null)
           return null;
         ad = o.asAd();
@@ -196,18 +210,9 @@ public class Ad {
 
       // No more ads to traverse, get value.
       synchronized (ad) {
-        return ad.map.get(key);
+        return ad.map().get(key);
       }
     }
-  }
-
-  // Get an entry from the map.
-  private Map.Entry<Object, AdObject> getEntry(int i) {
-    if (i < 0 || i >= size())
-      throw new IndexOutOfBoundsException();
-    for (Map.Entry<Object, AdObject> e : map.entrySet())
-      if (i-- == 0) return e;
-    return null;
   }
 
   // Insertion methods
@@ -256,24 +261,24 @@ public class Ad {
   // Use this to insert objects in the above methods. This takes care
   // of validating the key so accidental badness doesn't occur.
   synchronized Ad putObject(Object value) {
-    return putObject(null, value);
+    if (value instanceof Map.Entry<?,?>) {
+      Map.Entry<?,?> e = (Map.Entry<?,?>) value;
+      return putObject(e.getKey(), e.getValue());
+    } return putObject(null, value);
   } synchronized Ad putObject(Object okey, Object value) {
     int i;
     Ad ad = this;
 
     if (okey == null) {
-      map.put(size(), new AdObject(value));
-    } else if (okey instanceof Number) {
-      i = ((Number)okey).intValue();
-      getEntry(i).setValue(new AdObject(value));
+      list().add(AdObject.wrap(value));
     } else {
       String key = okey.toString();
       // Keep traversing ads until we find the ad we need to insert into.
       while ((i = key.indexOf('.')) > 0) synchronized (ad) {
         String k1 = key.substring(0, i);
-        AdObject o = ad.map.get(k1);
+        AdObject o = ad.map().get(k1);
         if (o == null)
-          ad.map.put(k1, new AdObject(ad = new Ad()));
+          ad.map().put(k1, AdObject.wrap(ad = new Ad()));
         else 
           ad = o.asAd();
         key = key.substring(i+1);
@@ -282,9 +287,9 @@ public class Ad {
       // No more ads to traverse, insert object.
       synchronized (ad) {
         if (value != null)
-          ad.map.put(key, new AdObject(value));
+          ad.map().put(key, AdObject.wrap(value));
         else
-          ad.map.remove(key);
+          ad.map().remove(key);
       }
     } return this;
   }
@@ -294,11 +299,20 @@ public class Ad {
   // Methods to get information about and perform operations on the ad.
 
   public synchronized boolean isEmpty() {
-    return map.isEmpty();
+    return size() == 0;
   }
 
   public synchronized void clear() {
-    map.clear();
+    if (isList())
+      list().clear();
+    else if (isMap())
+      map().clear();
+  }
+
+  // Clear the ad and make its type undetermined.
+  public synchronized void reset() {
+    list = null;
+    map  = null;
   }
 
   public synchronized void putAll(Map<String, Object> m) {
@@ -307,21 +321,10 @@ public class Ad {
     }
   }
 
-  public synchronized Set<Object> keySet() {
-    return map.keySet();
-  }
-
-  public synchronized Collection<AdObject> values() {
-    return map.values();
-  }
-
-  public synchronized Set<Map.Entry<Object, AdObject>> entrySet() {
-    return map.entrySet();
-  }
-  
   // Get the number of fields in this ad.
   public synchronized int size() {
-    return map.size();
+    return isMap()  ?  map().size() :
+           isList() ? list().size() : 0;
   }
 
   // Check if fields or values are present in the ad.
@@ -332,7 +335,8 @@ public class Ad {
   }
 
   public synchronized boolean containsValue(Object val) {
-    return map.containsValue(val);
+    return isMap()  ?  map().containsValue(val) :
+           isList() ? list().contains(val) : false;
   }
 
   // Ensure that all fields are present in the ad. Returns the first
@@ -343,12 +347,31 @@ public class Ad {
     return null;
   }
 
-  // Merge ads into this one.
-  // XXX Possible race condition? Just don't do crazy stuff like try
-  // to insert two ads into each other at the same time.
+  // Merge this ad and others into a new ad.
   public synchronized Ad merge(Ad... ads) {
-    for (Ad a : ads) if (a != null)
-      synchronized (a) { map.putAll(a.map); }
+    return new Ad(this).addAll(ads);
+  }
+
+  // Add all the entries from another ad.
+  public synchronized Ad addAll(Ad... ads) {
+    for (Ad ad : ads) {
+      if (ad == null || ad.isEmpty())
+        continue;
+      if (ad.isMap())
+        return addAll(ad.map());
+      else if (ad.isList())
+        return addAll(ad.list());
+    } return this;
+  }
+
+  // Add all the entries from a map.
+  public synchronized Ad addAll(Map<?,?> map) {
+    return addAll(map.entrySet());
+  }
+
+  // Add all the entries from a list.
+  public synchronized Ad addAll(Iterable<?> c) {
+    for (Object o : c) putObject(o);
     return this;
   }
 
@@ -378,7 +401,29 @@ public class Ad {
 
   // Trim strings in this ad, removing empty strings.
   public synchronized Ad trim() {
-    Iterator<Map.Entry<Object, AdObject>> it = map.entrySet().iterator();
+    if (isEmpty())
+      return this;
+    if (isList())
+      return trimList();
+    if (isMap())
+      return trimMap();
+    return this;
+  } private synchronized Ad trimList() {
+    Iterator<AdObject> it = list().iterator();
+    while (it.hasNext()) {
+      AdObject o = it.next();
+
+      if (o.asObject() instanceof String) {
+        String s = o.toString().trim();
+        if (s.isEmpty())
+          it.remove();
+        else o.setObject(s);
+      } else if (o.asObject() instanceof Ad) {
+        o.asAd().trim();
+      }
+    } return this;
+  } private synchronized Ad trimMap() {
+    Iterator<Map.Entry<Object, AdObject>> it = map().entrySet().iterator();
     while (it.hasNext()) {
       Map.Entry<Object, AdObject> e = it.next();
       AdObject o = e.getValue();
@@ -395,14 +440,24 @@ public class Ad {
   }
 
   // Remove a key from the ad, returning the old value (or null).
-  private synchronized Object removeKey(String key) {
+  private synchronized Object removeKey(Object okey) {
     int i;
     Ad ad = this;
+
+    // Quick and easy check.
+    if (isEmpty())
+      return null;
+
+    // See if we're removing an index from the list.
+    if (okey instanceof Integer && isList())
+      return list().remove((Integer)okey);
+
+    String key = okey.toString();
 
     // Keep traversing ads until we find ad we need to remove from.
     while ((i = key.indexOf('.')) > 0) synchronized (ad) {
       String k1 = key.substring(0, i);
-      Object o = ad.map.get(k1);
+      Object o = ad.map().get(k1);
       if (o instanceof Ad)
         ad = (Ad) o;
       else return this;
@@ -411,34 +466,43 @@ public class Ad {
 
     // No more ads to traverse, remove key.
     synchronized (ad) {
-      return ad.map.remove(key);
+      return ad.map().remove(key);
     }
   }
 
   // Two ads are equal if they have the same keys and the corresponding
   // values are equal.
   public boolean equals(Object o) {
-    if (o == this)
+    if (o == this) {
       return true;
-    if (o instanceof Ad)
-      return ((Ad)o).map.equals(this.map);
-    return false;
+    } if (o instanceof Ad) {
+      Ad ad = (Ad)o;
+      if (isList() && ad.isList())
+        return list().equals(ad.list());
+      else if (isMap() && ad.isMap())
+        return map().equals(ad.map());
+      return isEmpty() && ad.isEmpty();
+    } else {
+      return false;
+    }
   }
 
   public int hashCode() {
-    return map.hashCode();
+    return isList() ? list().hashCode() :
+           isMap()  ?  map().hashCode() : 0;
   }
 
-  // Quick hack thing. Check if everything is anonymous.
   public boolean isList() {
-    for (Object o : map.keySet())
-      if (!(o instanceof Number)) return false;
-    return true;
+    return list != null;
+  } public boolean isMap() {
+    return map != null;
+  } public boolean isUndetermined() {
+    return list == map;  // :)
   }
 
   // Marshalling
   // -----------
-  // Methods for serializing and deserializing Java objects as Ads/JSON.
+  // Methods for marshalling objects to/from ads.
 
   // Unmarshal an object from this ad.
   public <T> T unmarshalAs(Class<T> c) {

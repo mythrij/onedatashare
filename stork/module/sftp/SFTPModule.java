@@ -1,7 +1,8 @@
-package stork.module;
+package stork.module.sftp;
 
 import stork.ad.*;
 import stork.util.*;
+import stork.module.*;
 import stork.scheduler.*;
 import java.net.URI;
 

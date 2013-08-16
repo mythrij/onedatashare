@@ -78,7 +78,11 @@ public class AdPrinter {
   // already.
   protected void appendEntries(StringBuilder sb, String s, int l, Ad ad) {
     boolean first = true;
-    for (Map.Entry<Object, AdObject> e : ad.entrySet()) {
+
+    if (ad.isEmpty())
+      return;
+
+    if (ad.isMap()) for (Map.Entry<Object, AdObject> e : ad.map().entrySet()) {
       if (!first)
         sb.append(s);
       first = false;
@@ -86,6 +90,12 @@ public class AdPrinter {
       if (e.getKey() instanceof String)
         appendKey(sb, e.getKey());
       appendValue(sb, l, e.getValue());
+    } else if (ad.isList()) for (AdObject value : ad.list()) {
+      if (!first)
+        sb.append(s);
+      first = false;
+      indent(sb, l);
+      appendValue(sb, l, value);
     } sb.append(ELT);
   }
 

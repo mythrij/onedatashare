@@ -7,15 +7,13 @@ import java.net.URI;
 
 // A bunch of static utility functions, how fun!
 
-public class StorkUtil {
+public abstract class StorkUtil {
   // Some pre-compiled regexes.
   public static final Pattern
     regex_ws   = Pattern.compile("\\s+"),
     regex_csv  = Pattern.compile("\\s*(,\\s*)+"),
     regex_norm = Pattern.compile("[^a-z_0-9\\Q-_+,.\\E]+"),
     regex_path = Pattern.compile("[^^]/+");
-
-  private StorkUtil() { /* I sure can't be instantiated. */ }
 
   // Static imports
   // --------------

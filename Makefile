@@ -12,10 +12,9 @@ CLASSPATH = 'lib/*:build'
 JFLAGS = -J-Xmx512m -g -cp $(CLASSPATH) -Xlint:unchecked \
 				 #-target 1.7 -source 1.6
 JC = javac
-JAVA = java
 JAR = jar -J-Xmx512m
 
-.PHONY: all install clean dist-clean init release classes
+.PHONY: all install clean init release classes
 .SUFFIXES: .java .class
 
 # Recursive wildcard function from jgc.org.
@@ -34,7 +33,7 @@ all: $(CLASSES) | build
 	@$(MAKE) --no-print-directory $(JARFILE)
 
 build:
-	mkdir -p build
+	@mkdir -p build
 
 $(JARFILE): $(CLASSES)
 	$(JAR) cf $(JARFILE) -C build .
@@ -60,7 +59,7 @@ build/build_tag: $(CLASSES) | build
 	@echo generating build tag
 	@echo appname = '$(APPNAME)' >  build/build_tag
 	@echo version = '$(VERSION)' >> build/build_tag
-	@echo buildtime = `date`   >> build/build_tag
+	@echo buildtime = `date`     >> build/build_tag
 
 clean:
 	$(RM) -rf build lib/stork-*.jar $(PROJECT).tar.gz

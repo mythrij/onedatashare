@@ -13,14 +13,15 @@ import java.io.*;
 // and running Stork commands according to passed arguments.
 
 public class StorkMain {
-  public static final Ad def_env = new Ad();
-  public static final GetOpts opts = new GetOpts();
+  public static final Ad def_env;
+  public static final GetOpts bare_opts;
+  public static final GetOpts base_opts;
 
   public static final int DEFAULT_PORT = 57024;
 
   // Try to get the version and build time from the build tag.
   public static String version() {
-    String app = "JStork", ver = "", bts = "unknown";
+    String app = "Stork", ver = "", bts = "unknown";
     try {
       Properties props = new Properties();
       props.load(StorkMain.class.getResourceAsStream("/build_tag"));
@@ -36,39 +37,50 @@ public class StorkMain {
 
   static {
     // Initialize the default environment.
+    def_env = new Ad();
     def_env.put("port", DEFAULT_PORT);
-    def_env.put("libexec", "../libexec/");
+    def_env.put("libexec", "libexec");
 
-    // Initialize the default command line parser.
-    // TODO: Auto-generate command list.
-    opts.prog = "stork";
-    opts.args = new String[] { "<command> [args...]" };
-    opts.desc = new String[] {
-      "Execute a Stork command." };
+    // Construct the bare command line parser.
+    bare_opts = new GetOpts();
+    bare_opts.prog = "stork";
+    bare_opts.args = new String[] {
+      "[option...]", "<command> [args]" };
 
-    opts.add('C', "conf", "specify custom path to stork.conf").parser =
-      opts.new SimpleParser("conf", "PATH", false);
-    opts.add('p', "port", "set the port for the Stork server").parser =
-      opts.new SimpleParser("port", "PORT", false);
-    opts.add('h', "host", "set the host for the Stork server").parser =
-      opts.new Parser() {  // How can we handle IPv6?
+    bare_opts.add('V', "version", "display the version number and exit");
+    bare_opts.add("help", "display this usage information");
+
+    bare_opts.foot = new String[] {
+      "Stork is still undergoing testing and development. "+
+      "If you encounter any bugs, please contact "+
+      "Brandon Ross <bwross@buffalo.edu>.", version()
+    };
+
+    // Ugly part where we add command descriptions manually.
+    bare_opts.addCommand("server", "start the Stork server");
+    bare_opts.addCommand("q", "query the Stork queue");
+    bare_opts.addCommand("status", "an alias for q");
+    bare_opts.addCommand("rm", "cancel or unschedule a job");
+    bare_opts.addCommand("info", "get state information from a Stork server");
+    bare_opts.addCommand("raw", "send a raw command ad to a Stork server");
+
+    // Construct the base command line parser for commands to extend.
+    base_opts = new GetOpts().parent(bare_opts);
+    base_opts.add('C', "conf", "specify custom path to stork.conf").parser =
+      base_opts.new SimpleParser("conf", "PATH", false);
+    base_opts.add('p', "port", "set the port for the Stork server").parser =
+      base_opts.new SimpleParser("port", "PORT", false);
+    base_opts.add('h', "host", "set the host for the Stork server").parser =
+      base_opts.new Parser() {  // How can we handle IPv6?
         public String arg() { return "[host[:port]]"; }
-        public Ad parse(String s) throws Exception {
+        public Ad parse(String s) {
           int i = s.lastIndexOf(':');
           String h = (i < 0) ? s    : s.substring(0,i);
           String p = (i < 0) ? null : s.substring(i+1);
           return new Ad().put("host", h).put("port", p);
         }
       };
-    opts.add('V', "version", "display the version number and exit");
-    opts.add("help", "display this usage information");
-    opts.add('q', "quiet", "don't print anything to standard output");
-
-    opts.foot = new String[] {
-      "Stork is still undergoing testing and development. "+
-      "If you encounter any bugs, please contact "+
-      "Brandon Ross <bwross@buffalo.edu>.", version()
-    };
+    base_opts.add('q', "quiet", "don't print anything to standard output");
   }
 
   // Default locations for stork.conf.
@@ -112,16 +124,7 @@ public class StorkMain {
       return new Ad();
     }
 
-    Reader r = new FileReader(file);
-    Scanner sc = new Scanner(r).useDelimiter("\\A");
-
-    if (!sc.hasNext()) {
-      throw new Exception("couldn't read from config file: '"+file+"'");
-    } try {
-      return Ad.parseBody(sc.next());
-    } catch (Exception e) {
-      throw new FatalEx("could't parse config file: "+e.getMessage());
-    }
+    return Ad.parseBody(file);
   }
 
   // Main entry point. The first argument should be the command to
@@ -133,21 +136,47 @@ public class StorkMain {
     Ad env = def_env;
     GetOpts opt2;
 
+    // Parse any options before the command name.
+    // TODO: Find a better way to do this.
+    int i = 0;
+    for (String s : args) {
+      if (s.startsWith("-")) i++;
+      else break;
+      if (s.equals("--")) break;
+    } try {
+      env = env.merge(bare_opts.parse(args));
+    } catch (Exception e) {
+      bare_opts.usageAndExit(1, e.getMessage());
+    }
+
+    // Check if version was specified.
+    if (env.has("version")) {
+      System.out.println(version());
+      System.exit(0);
+    }
+
+    args = Arrays.copyOfRange(args, i, args.length);
+
     // Parse the first argument (command name).
     try {
       cmd = args[0];
       args = Arrays.copyOfRange(args, 1, args.length);
     } catch (Exception e) {
-      opts.usageAndExit(1, "no command given");
+      bare_opts.usageAndExit(0, null);
+    }
+
+    // Check again if the command name is help.
+    if (cmd.equals("help")) {
+      bare_opts.usageAndExit(0, null);
     }
 
     // Little hacky...
     if (cmd.equals("server")) {
-      opt2 = StorkScheduler.getParser(opts);
+      opt2 = StorkScheduler.getParser(base_opts);
     } else {
-      opt2 = StorkClient.getParser(cmd, opts);
+      opt2 = StorkClient.getParser(cmd, base_opts);
     } if (opt2 == null) {
-      opts.usageAndExit(1, "invalid command: "+cmd);
+      bare_opts.usageAndExit(1, "invalid command: "+cmd);
     }
 
     // Parse command line options.
@@ -157,12 +186,9 @@ public class StorkMain {
       opt2.usageAndExit(1, e.getMessage());
     }
 
-    // Check if --help was specified.
+    // Check if help was specified.
     if (env.has("help")) {
       opt2.usageAndExit(0, null);
-    } else if (env.has("version")) {
-      System.out.println(version());
-      System.exit(1);
     }
 
     // Try to parse config file and arguments.
@@ -175,7 +201,7 @@ public class StorkMain {
 
     // XXX: Stupid way to remove options from args to pass to Stork
     // client handler. Remove me when GetOpts handles positional args.
-    int i = 0;
+    i = 0;
     for (String s : args) {
       if (s.startsWith("-")) i++;
       else break;
@@ -187,7 +213,7 @@ public class StorkMain {
 
     // Now run the actual command. (Again, a little hacky.)
     if (cmd.equals("server")) {
-      String host = env.get("host", "127.0.0.1");
+      String host = env.get("host");
       int port = env.getInt("port", DEFAULT_PORT);
 
       StorkScheduler s = StorkScheduler.start(env);

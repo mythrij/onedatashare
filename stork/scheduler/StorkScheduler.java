@@ -5,6 +5,7 @@ import stork.ad.*;
 import stork.util.*;
 import stork.module.*;
 import stork.module.gridftp.*;
+import stork.module.sftp.*;
 
 import java.io.*;
 import java.net.*;
@@ -40,7 +41,7 @@ public class StorkScheduler {
 
   // Construct and return a usage/options parser object.
   public static GetOpts getParser(GetOpts base) {
-    GetOpts opts = new GetOpts(base);
+    GetOpts opts = new GetOpts();
 
     opts.prog = "server";
     opts.args = new String[] { "[option]..." };
@@ -94,8 +95,7 @@ public class StorkScheduler {
             System.out.println("Job "+job.jobId()+" failed!");
         }
       } catch (Exception e) {
-        System.out.println("Badness in StorkQueueThread...");
-        e.printStackTrace();
+        continue;
       }
     }
   }
@@ -115,10 +115,7 @@ public class StorkScheduler {
         try {
           req = req_queue.take();
           System.out.println("Pulled request from queue");
-          //System.out.println("Thread count: "+getAllStackTraces().size());
         } catch (Exception e) {
-          System.out.println("Something bad happened in StorkWorkerThread...");
-          e.printStackTrace();
           continue;
         }
 
@@ -146,7 +143,6 @@ public class StorkScheduler {
           // Let the magic happen.
           req.done(handler.handle(req));
         } catch (Exception e) {
-          e.printStackTrace();
           String m = e.getMessage();
           req.done(new Ad("error", m == null ? e.toString() : m));
         } finally {
@@ -321,7 +317,6 @@ public class StorkScheduler {
           xfer_modules.register(new ExternalModule(f));
         } catch (Exception e) {
           System.out.println("Warning: "+f+": "+e.getMessage());
-          e.printStackTrace();
         }
       } else {
         System.out.println("Warning: libexec is not a directory!");

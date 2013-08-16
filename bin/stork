@@ -13,9 +13,6 @@
 #   STORK_CONFIG   The Stork config file location.
 #                  Default: $STORK_HOME/stork.conf
 #
-#   STORK_JAR      The stork.jar location.
-#                  Default: $STORK_HOME/bin/stork.jar
-#
 #   STORK_PID      The Stork server PID file location.
 #                  Default: $STORK_HOME/stork.pid
 
@@ -32,11 +29,9 @@ PROGDIR=$(dirname "$PROGDIR")
   exit 1
 }
 
-# Check command syntax.
-[ -z "$1" ] && {
-  echo "Usage: $PROG <command> [command_args...]"
-  echo "       $PROG [--]help"
-  exit 1
+# Change to the STORK_HOME directory.
+cd "$STORK_HOME" || {
+  echo "Error: cannot change directory to STORK_HOME ($STORK_HOME)"
 }
 
 # Set default variables if unset.
@@ -45,9 +40,6 @@ PROGDIR=$(dirname "$PROGDIR")
 [ -z "$STORK_CONFIG" ] && STORK_CONFIG=$STORK_HOME/stork.conf
 [ -d "$STORK_CONFIG" ] && STORK_CONFIG=$STORK_CONFIG/stork.conf
 
-[ -z "$STORK_JAR" ] && STORK_JAR=$STORK_HOME/bin/stork.jar
-[ -d "$STORK_JAR" ] && STORK_JAR=$STORK_JAR/stork.jar
-
 [ -z "$STORK_PID" ] && STORK_PID=$STORK_HOME/stork.pid
 [ -d "$STORK_PID" ] && STORK_PID=$STORK_PID/stork.pid
 
@@ -55,6 +47,4 @@ PROGDIR=$(dirname "$PROGDIR")
 JAVA="$JAVA_HOME/bin/java"
 
 # Run it.
-CMD=$1
-shift
-$JAVA "-Dstork.home=$STORK_HOME" -Xmx512m -cp "$STORK_HOME/lib/*" $CLASS $CMD $@
+$JAVA -Xmx512m -cp "$STORK_HOME/lib/*" $CLASS $@

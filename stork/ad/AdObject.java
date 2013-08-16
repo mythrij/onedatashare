@@ -43,8 +43,12 @@ public class AdObject implements Comparable<AdObject> {
     map(java.net.URI.class, "asURI");
   }
 
-  public AdObject(Object o) {
+  private AdObject(Object o) {
     object = o;
+  }
+
+  public static AdObject wrap(Object o) {
+    return (o instanceof AdObject) ? (AdObject) o : new AdObject(o);
   }
 
   public AdObject setObject(Object o) {
@@ -139,10 +143,12 @@ public class AdObject implements Comparable<AdObject> {
       Ad ad = asAd();
       @SuppressWarnings("unchecked")
       C[] arr = (C[]) Array.newInstance(c, ad.size());
-      int i = 0;
 
       try {
-        for (AdObject o : ad.map.values())
+        int i = 0;
+        if (ad.isList()) for (AdObject o : ad.list())
+          Array.set(arr, i++, m.invoke(o));
+        else if (ad.isMap()) for (AdObject o : ad.map().values())
           Array.set(arr, i++, m.invoke(o));
         return arr;
       } catch (RuntimeException e) {

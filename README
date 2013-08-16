@@ -1,137 +1,166 @@
 Introduction
-  Stork is a data transfer scheduler that provides a common interface
-  to different file transfer protocols.
+============
 
-  Stork uses a client-server architecture where clients submit jobs to
-  a Stork server and the Stork server performs the transfer when
-  resources permit. The transfer happens asynchronously to the client,
-  allowing users to go along their merry way and check on the status
-  of the job at their own leisure. The Stork server responds to any
-  failures that may occur during transfer automatically, handling them
-  in an appropriate way and informing the user if a job can't be
-  completed.
+Stork is a data transfer scheduler that provides a common interface
+to different file transfer protocols.
 
-  Stork plug-ins can be created to add support for new file transfer
-  protocols very easily (with any programming language, too) using a
-  simple external executable interface. If additional performance or
-  integration with the Stork server is desired, plug-ins can also be
-  written in Java and extend the built-in TransferModule class,
-  eliminating the communication overhead of piping serialized LiteAds
-  between Stork and the transfer module.
+Stork uses a client-server architecture where clients submit jobs to
+a Stork server and the Stork server performs the transfer when
+resources permit. The transfer happens asynchronously to the client,
+allowing users to go along their merry way and check on the status
+of the job at their own leisure. The Stork server responds to any
+failures that may occur during transfer automatically, handling them
+in an appropriate way and informing the user if a job can't be
+completed.
+
+Stork plug-ins can be created to add support for new file transfer
+protocols very easily (with any programming language, too) using a
+simple external executable interface. If additional performance or
+integration with the Stork server is desired, plug-ins can also be
+written in Java and extend the built-in TransferModule class,
+eliminating the communication overhead of piping serialized messages
+between Stork and the transfer module.
 
 Supported Platforms
-  Any modern operating system that can run a JVM.
+===================
+
+Stork is intended to run in any Java Virtual Machine on any modern
+operating system.
+
+In reality it's only been tested with the Oracle Java SE 6 and 7 JRE
+on Linux, though there's no reason to believe it couldn't work on any
+other JVM.
 
 Building
-  On most systems, simply run `make'! 
+========
+
+On most systems, simply run `make'. For systems without a make
+command, the entire source tree can be found
+
+Installation
+============
+
+Right now there's no automatic installation. There will be, just not
+right now. If you want to install Stork system-wide, after building
+you can copy this entire directory into a 
+
+Prerequisites
+=============
+
+The following libraries are required to build and run Stork:
+
+* Apache Commons Logging 1.1
+* Log4J 1.2.15
+* JGlobus 1.8.0
+* Netty 4.0.0
+* JSch 0.1.50
+
+I'm not sure how far back or forward you can go version-wise, those
+are just the versions I've got in my lib directory. I'll formalize
+this section a bit later.
 
 Commands
-  stork server - Used to start (or stop) a Stork server.
+========
 
-  stork q - List all the jobs in the Stork queue along with information
-    about them, such as their status and progress. Can be used to find
-    information about specific jobs by passing a job id. Can also be
-    used to filter jobs by their status.
+stork server
+------------
+Used to start (or stop) a Stork server.
 
-  stork submit - Submit a job to a Stork server. Can be passed a source
-    and destination URL, or a LiteAd descriptor of the job.
+stork q
+-------
+List all the jobs in the Stork queue along with information
+about them, such as their status and progress. Can be used to find
+information about specific jobs by passing a job id. Can also be
+used to filter jobs by their status.
 
-  stork rm - Remove or terminate a submitted job or set of jobs.
+stork submit
+------------
+Submit a job to a Stork server. Can be passed a source
+and destination URL, or a LiteAd descriptor of the job.
 
-  stork info - Display configuration information about the server. Can
-    also be used to find information about transfer modules.
+stork rm
+--------
+Remove or terminate a submitted job or set of jobs.
 
-  More information can be found by running `<command> --help'.
+stork info
+----------
+Display configuration information about the server. Can
+also be used to find information about transfer modules.
+
+stork ls
+--------
+List a remote URL.
+
+More information can be found by running `stork --help`.
 
 Configuring
-  The Stork configuration file (stork.conf) can be used to change
-  settings for the server and client tools. The search order for the
-  configuration file is as follows:
+===========
 
-   1) STORK_CONFIG environment variable
-   2) ~/.stork.conf
-   3) /etc/stork.conf
-   4) (install dir)/stork.conf
-   5) /usr/local/stork/stork.conf
-   6) stork.conf in currect directory
+The Stork configuration file (stork.conf) can be used to change
+settings for the server and client tools. The search order for the
+configuration file is as follows:
 
-  Even if the file can't be found automatically, every valid config
-  variable has a "sane" default value. The Stork server will issue a
-  warning on startup if a config file cannot be found.
+ 1) $STORK_CONFIG
+ 2) ~/.stork.conf
+ 3) /etc/stork.conf
+ 4) $STORK/stork.conf
+ 5) /usr/local/stork/stork.conf
+ 6) stork.conf in currect directory
 
-* TODO: Document configuration variables here.
+Even if the file can't be found automatically, every valid config
+variable has a "sane" default value. The Stork server will issue a
+warning on startup if a config file cannot be found.
 
-HOW TO USE
-  Start a Stork server, unless you plan on using an existing server.
-  Submit a job to the server using stork_submit. Upon submission, the
-  job will be assigned a job id which stork_submit will output. Run
-  `stork_q all' to view all jobs and look for the job you submitted.
-  You can use `stork_rm' to cancel the job. You can run `stork_info' to
-  see additional information about a server, such as what protocols it
-  supports.
+How to Use
+==========
 
-  Every Stork command honors the --help option, which will cause it to
-  display usage information. Run, e.g., `stork_submit --help' to see
-  detailed information on how to use stork_submit.
+Start a Stork server, unless you plan on using an existing server.
+Submit a job to the server using `stork submit`. Upon submission, the
+job will be assigned a job id which stork_submit will output. Run
+`stork q all` to view all jobs and look for the job you submitted.
+You can use `stork rm` to cancel the job. You can run `stork_info' to
+see additional information about a server, such as what protocols it
+supports.
 
-LITEADS
-  Stork makes extensive use of a data representation language we've
-  called LiteAd. LiteAds are based on (really, a subset of) a data
-  representation language called ClassAd, developed by the Condor Team
-  at UW-Madison. LiteAds, like ClassAds, are human-readable, easy to
-  parse, and even easier to generate. All interprocess communication in
-  Stork is done with "ads" written in the LiteAds language. Clients and
-  servers speak in ads, transfer modules output their progress as ads,
-  and jobs are submitted to the Stork server as ads. Even the config
-  file is an ad. Trust me, we really abuse them!
+Every Stork command honors the `--help` option, which will cause it to
+display usage information. Run, e.g., `stork submit --help` to see
+detailed information on how to use the submit command.
 
-  Understanding LiteAds is key to using Stork's advanced features.
-  Luckily, they're intuitive and easy to understand. Here's an example
-  ad that describes a simple Stork job that will attempt the transfer
-  at most five times and will send an email to the user when the job
-  starts and completes:
+Talking to Stork
+================
 
-  [ src  = "ftp://example.com/file1.txt";
-    dest = "ftp://example.com/file2.txt";
-    max_attempts = 5; email = "user@example.com" ]
+Stork accepts job descriptors in a number of simple key-value pair
+formats, including JSON and (simple) Condor ClassAd.
 
-  Note that each ad begins with a [ and ends with a ]. Everything
-  inside is in the form of "key = value", and each key-value pair is
-  separated by a semicolon. And that's all there really is to it.
+An example job descriptor in the JSON format:
 
-  Submitting jobs to Stork as an ad allows you to have greater control
-  over the details of the job. While stork_submit will automatically
-  and transparently generate ads based on arguments passed to it on the
-  command line, not every aspect of the job can be controlled with
-  command line arguments. Ad descriptions of jobs also let you batch
-  submit jobs from files or pass them in from other programs via pipes.
-  This allows you to automate job submission or even generate jobs
-  algorithmically.
+    {
+      "src"  : "ftp://example.com/file1.txt",
+      "dest" : "ftp://example.com/file2.txt",
+      "max_attempts" : 5,
+      "email" = "user@example.com"
+    }
 
-  Ads are also output by stork_q and stork_info, so being able to
-  read them at least is necessary to use Stork on the command line.
+The same job descriptor in the ClassAd format:
 
-  Ads are also used by transfer modules to pass messages and job
-  progress back to the Stork server, and the Stork server can pass
-  ads to transfer modules that support it. They are also used
-  internally for communication between clients and the Stork server, so
-  communicating with the server from third-party clients requires
-  understanding LiteAds.
+    [
+      src  = "ftp://example.com/file1.txt";
+      dest = "ftp://example.com/file2.txt";
+      max_attempts = 5;
+      email = "user@example.com"
+    ]
 
-  In short, understanding how to write ads in the LiteAd language is
-  pretty important for all but the most basic usage scenarios. The
-  exact syntax of the language can be found in stork/util/Ad.java.
+When reading job descriptors from a file using `stork submit` the
+opening and closing brackets may be omitted.
 
-  More information about ClassAd, the language LiteAd is a derivative
-  of, can be found here:
+Stork is very liberal with what formats it accepts, and can receive
+jobs in various formats with similar grammars to JSON/ClassAd, though
+with weird combinations of symbols. How weird exactly? Weird enough
+that the same parser understands both JSON and ClassAd. The parser can
+be found in `stork.ad.AdParser` if you're curious exactly what you can
+throw at this thing.
 
-    <http://research.cs.wisc.edu/condor/classad/>
+More information about JSON and Condor ClassAd can be found here:
 
-API
-  All communication in Stork is done in ads. To communicate with
-  a Stork server using a custom client, one simply needs to establish
-  a TCP connection to the Stork server's command port, and write a
-  an ad containing command = "<command_name>" and any other arguments
-* the server expects. The arguments a command handler expects in this
-* ad can be found in the commands above StorkCommand subclass
-* definitions in StorkServer.java.
+  <http://www.json.org/>
+  <http://research.cs.wisc.edu/condor/classad/>

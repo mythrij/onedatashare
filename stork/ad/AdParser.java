@@ -14,12 +14,23 @@ public class AdParser {
     new RuntimeException("end of stream reached");
   public static Charset defaultCharset = Charset.forName("UTF-8");
 
+  public static final String SEP = ",;& \n\r";
+  public static final String EQ  = ":=";
+  public static final String OB  = "{[(<";  // It's a fish!
+  public static final String CB  = "}])>";
+  public static final String WS  = " \t\n\r\b";
+
   // This includes decorator hints for printing. Or will, maybe. For now
-  // it just picks a printer based on the opening bracket.
+  // it just picks a printer based on the opening bracket. The hint should
+  // be set after at least one object is inserted so we know whether this
+  // ad is a map or list.
   public static class ParsedAd extends Ad {
     public AdPrinter printer = AdPrinter.CLASSAD;
     public AdPrinter setHint(char c) {
-      switch (c) {
+      if (isList()) switch (c) {
+        case '[': return printer = AdPrinter.JSON;
+        case '{': return printer = AdPrinter.CLASSAD;
+      } else switch (c) {
         case '{': return printer = AdPrinter.JSON;
         case '[': return printer = AdPrinter.CLASSAD;
       } return printer;
@@ -87,7 +98,7 @@ public class AdParser {
   // isn't part of the ignore set.
   private char discard() {
     // Discard whitespace by default.
-    return discard("\t\n\r\b ");
+    return discard(WS);
   } private char discard(String s) {
     char c;
     for (c = next(); check(c, s); c = next());
@@ -96,7 +107,7 @@ public class AdParser {
 
   // Discard ignored characters as well as comments.
   private char discardIgnored() {
-    return discardIgnored("\t\n\r\b ");
+    return discardIgnored(WS);
   } private char discardIgnored(String s) {
     char c;
     do switch (c = discard(s)) {
@@ -109,7 +120,7 @@ public class AdParser {
   // Ignore all whitespace and check for a character in the given set.
   // If something else is found, throws a parse error.
   private char expect(String s) {
-    return expect(s, "\t\n\r\b ");
+    return expect(s, WS);
   } private char expect(String s, String i) {
     char c = discardIgnored(i);
     if (!check(c, s))
@@ -135,32 +146,36 @@ public class AdParser {
   }
 
   public Ad parseInto(Ad ad) {
-    char c = expect("{[(<");
-
-    if (ad instanceof ParsedAd)
-      ((ParsedAd)ad).setHint(c);
+    char open = expect(OB);
 
     for (int i = 0; ; i++) {
-      c = saved = discardIgnored(";,\t\n\r\b ");
+      char c = saved = discardIgnored(SEP+WS);
 
       // Check for end of ad.
-      if (check(c, "}])>")) return ad;
+      if (check(c, CB)) return ad;
 
       // Discard any extraneous separators or newlines.
-      saved = discardIgnored(";,\t\n\r\b ");
+      saved = discardIgnored(SEP+WS);
 
       // Check if first token is an id or a string.
       Object o = readValue();
 
       // Check if it's anonymous or not.
-      switch (c = expect(":=,;\r\n}])>")) {
+      // FIXME: This probably shouldn't be hardcoded...
+      switch (c = expect(EQ+SEP+CB)) {
         case ':': // Check for assignment.
         case '=':
-          Object o2 = findValue();
-          if (o2 instanceof Atom)
-            ad.putObject(o, ((Atom)o2).eval());
+          // Determine the key.
+          String k = o.toString();
+          o = findValue();
+          // Insert into ad as key-value pair.
+          if (o instanceof Atom)
+            ad.putObject(k, ((Atom)o).eval());
           else
-            ad.putObject(o, o2);
+            ad.putObject(k, o);
+          if (open > 0 && ad instanceof ParsedAd)
+            ((ParsedAd)ad).setHint(open);
+          open = 0;
           break;
         case '}': // Check for end and push char back if found.
         case ']':
@@ -168,12 +183,18 @@ public class AdParser {
         case '>': saved = c;
         case ',': // Check for separator.
         case ';':
+        case '&':
+        case ' ':
         case '\r':
         case '\n':
+          // Insert into ad as list item.
           if (o instanceof Atom)
             ad.putObject(null, ((Atom)o).eval());
           else
             ad.putObject(null, o);
+          if (open > 0 && ad instanceof ParsedAd)
+            ((ParsedAd)ad).setHint(open);
+          open = 0;
       }
     }
   }
@@ -220,20 +241,21 @@ public class AdParser {
   }
 
   // An atom represents something that can be either an identifier or a
-  // keyword.
+  // keyword. The string representation of this should be lowercased for
+  // use as a key.
   private static class Atom {
     String s;
     Atom(String s) { this.s = s; }
-    public String toString() { return s; }
+    public String toString() { return s.toLowerCase(); }
     public Object eval() {
-      s = s.toLowerCase();
-      if (s.equals("false"))
+      String sl = s.toLowerCase();
+      if (sl.equals("false"))
         return Boolean.FALSE;
-      if (s.equals("true"))
+      if (sl.equals("true"))
         return Boolean.TRUE;
-      if (s.equals("null"))
+      if (sl.equals("null"))
         return null;
-      throw new RuntimeException("invalid keyword: "+s);
+      return s;
     }
   }
 
