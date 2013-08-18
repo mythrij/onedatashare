@@ -132,11 +132,6 @@ public class InvQuadRegression {
       qr.add(n, 1/(th*th));
     }
 
-    System.out.println("Calculating...");
-    long time = System.nanoTime();
     double[] a = qr.calculate();
-    System.out.printf("%d in %.3fms\n", num, (System.nanoTime()-time)/1E6);
-
-    System.out.printf("a=%.2f, b=%.2f, c=%.2f\n", a[0], a[1], a[2]);
   }
 }

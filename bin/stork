@@ -47,4 +47,4 @@ cd "$STORK_HOME" || {
 JAVA="$JAVA_HOME/bin/java"
 
 # Run it.
-$JAVA -Xmx512m -cp "$STORK_HOME/lib/*" $CLASS $@
+$JAVA -Xmx512m -cp "$STORK_HOME/lib/*" $JFLAGS $CLASS $@

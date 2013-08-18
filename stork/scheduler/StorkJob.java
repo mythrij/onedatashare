@@ -40,7 +40,13 @@ public class StorkJob {
     ad.remove("status", "job_id", "attempts", "user_id");
     ad.rename("src_url",  "src.url");
     ad.rename("dest_url", "dest.url");
-    return ad.unmarshal(StorkJob.class).status(scheduled);
+
+    System.out.println(ad);
+    StorkJob j = ad.unmarshalAs(StorkJob.class).status(scheduled);
+
+    if (j.src == null || j.dest == null)
+      throw new RuntimeException("src or dest was null");
+    return j;
   }
 
   // Gets the job info as an ad, merged with progress ad.

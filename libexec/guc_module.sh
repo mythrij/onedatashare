@@ -1,8 +1,16 @@
 #!/bin/bash
 
+read -d '' AD <<END
+[
+  name = "globus_url_copy module"
+  description = "An example of a shell script transfer module."
+  protocols = {file,ftp,gsiftp}
+]
+END
+
 # Check for -i switch
 [ "$1" == "-i" ] && {
-  echo '[ protocols = "file,ftp,gsiftp"; name = "globus_url_copy module" ]'
+  echo "$AD"
   exit 0
 }
 

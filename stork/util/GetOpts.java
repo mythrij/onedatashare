@@ -343,18 +343,6 @@ public class GetOpts {
       body.append(joinWith(rest, (Object[]) args()));
     }
 
-    // Print the description.
-    for (String s : desc())
-      body.append("\n\n"+wrap(s, wrap));
-
-    // Print the options.
-    if (!op_set.isEmpty()) {
-      if (body.length() != 0) body.append("\n\n");
-      body.append("The following options are available:");
-      for (Option o : op_set)
-        body.append('\n'+o.toString(wrap/3, wrap));
-    }
-
     // Print any subcommands.
     if (!cmd_set.isEmpty()) {
       int len = 3;
@@ -367,6 +355,18 @@ public class GetOpts {
       body.append("The following commands are available:");
       for (Command c : cmd_set)
         body.append('\n'+c.toString(len, wrap));
+    }
+
+    // Print the description.
+    for (String s : desc())
+      body.append("\n\n"+wrap(s, wrap));
+
+    // Print the options.
+    if (!op_set.isEmpty()) {
+      if (body.length() != 0) body.append("\n\n");
+      body.append("The following options are available:");
+      for (Option o : op_set)
+        body.append('\n'+o.toString(wrap/3, wrap));
     }
 
     // Finally print the footer.

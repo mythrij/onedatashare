@@ -27,11 +27,11 @@ public class EndPoint {
   } public EndPoint(URI u) {
     if (u == null)
       throw new FatalEx("missing uri field from endpoint");
-    System.out.println("URI is: "+u);
     uri = u;
   }
 
   public static EndPoint unmarshal(String s) {
+    System.out.println("Creating endpoint from: "+s);
     return new EndPoint(s);
   }
 

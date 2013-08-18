@@ -37,6 +37,11 @@ public class Ad {
   // Create a new ad, plain and simple.
   public Ad() { }
 
+  // Create a new ad from an array.
+  public Ad(Object[] list) {
+    addAll(Arrays.asList(list));
+  }
+
   // Create a new ad from a list.
   public Ad(Collection<?> list) {
     addAll(list);
@@ -80,30 +85,31 @@ public class Ad {
   // is a parse error, and will return null if EOF is encountered
   // prematurely.
   public static Ad parse(CharSequence cs) {
-    return new AdParser(cs).parse();
+    return parse(cs, false);
   } public static Ad parse(InputStream is) {
-    return new AdParser(is).parse();
+    return parse(is, false);
   } public static Ad parse(File f) {
-    try {
-      return new AdParser(f).parse();
-    } catch (RuntimeException e) {
-      throw e;
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    }
+    return parse(f, false);
   }
 
-  public static Ad parseBody(CharSequence cs) {
-    return new AdParser(cs, true).parse();
-  } public static Ad parseBody(InputStream is) {
-    return new AdParser(is, true).parse();
-  } public static Ad parseBody(File f) {
+  public static Ad parse(CharSequence cs, boolean body_only) {
+    return new AdParser(cs, body_only).parse();
+  } public static Ad parse(InputStream is, boolean body_only) {
+    return new AdParser(is, body_only).parse();
+  } public static Ad parse(File f, boolean body_only) {
+    Reader r = null;
     try {
-      return new AdParser(f, true).parse();
+      return new AdParser(r = new FileReader(f), body_only).parse();
     } catch (RuntimeException e) {
       throw e;
     } catch (Exception e) {
       throw new RuntimeException(e);
+    } finally {
+      if (r != null) try {
+        r.close();
+      } catch (Exception e) {
+        // Ugh, whatever...
+      }
     }
   }
 
@@ -172,6 +178,8 @@ public class Ad {
     return (s != null) ? o.asAd() : def;
   } public Ad[] getAds(Object s) {
     return getAll(Ad.class, s);
+  } public Ad[] getAds() {
+    return getAll(Ad.class);
   }
 
   // Get a value as a list of a given type. If the value is not an ad,
@@ -179,9 +187,11 @@ public class Ad {
   // exist, returns null.
   public AdObject[] getAll(Object s) {
     return getAll(null, s);
+  } public <C> C[] getAll(Class<C> c) {
+    return AdObject.wrap(this).asArray(c);
   } public <C> C[] getAll(Class<C> c, Object s) {
     AdObject o = getObject(s);
-    return (o != null) ? o.asList(c) : null;
+    return (o != null) ? o.asArray(c) : null;
   }
     
   // Look up an object by its key. Handles recursive ad lookups.
@@ -194,9 +204,14 @@ public class Ad {
     } if (isEmpty()) {
       // This is so we don't determine the ad type just because of a get.
       return null;
-    } if (okey instanceof Integer && isList()) {
-      AdObject o = list().get((Integer)okey);
-      return o;
+    } if (isList()) {
+      if (okey instanceof Integer) {
+        AdObject o = list().get((Integer)okey);
+        return o;
+      } else {
+        // Don't choke on an access, just pretend it's not there.
+        return null;
+      }
     } else {
       String key = okey.toString();
       while ((i = key.indexOf('.')) > 0) synchronized (ad) {
@@ -221,41 +236,12 @@ public class Ad {
   // be stored as their wrapped equivalents to save space, since they are
   // still printed in a way that is compatible with the language.
   // All of these eventually synchronize on putObject.
-  public Ad put(Object key, int value) {
-    return putObject(key, Integer.valueOf(value));
-  }
-
-  public Ad put(Object key, long value) {
-    return putObject(key, Long.valueOf(value));
-  }
-
-  public Ad put(Object key, double value) {
-    return putObject(key, Double.valueOf(value));
-  }
-
-  public Ad put(Object key, Boolean value) {
-    return putObject(key, value);
-  }
-
-  public Ad put(Object key, boolean value) {
-    return putObject(key, Boolean.valueOf(value));
-  }
-
-  public Ad put(Object key, Object value) {
-    return putObject(key, value);
-  }
-
-  // If you create a loop with this and print it, I feel bad for you. :)
-  public Ad put(Object key, Ad value) {
-    return putObject(key, value);
-  }
-
-  public Ad put(Object key, List value) {
-    return putObject(key, new Ad(value));
-  }
-
-  public Ad put(Object value) {
-    return putObject(null, value);
+  public Ad put(Object k, Object... v) {
+    switch (v.length) {
+      case 0 : return putObject(k);
+      case 1 : return putObject(k, v[0]);
+      default: return putObject(k, new Ad(v));
+    }
   }
 
   // Use this to insert objects in the above methods. This takes care
@@ -504,145 +490,109 @@ public class Ad {
   // -----------
   // Methods for marshalling objects to/from ads.
 
-  // Unmarshal an object from this ad.
-  public <T> T unmarshalAs(Class<T> c) {
-    return unmarshalAs(c, null);
-  } public <T> T unmarshalAs(Class<T> c, Object key) {
-    Object o = (key != null) ? getObject(key).asObject() : this;
-    T t = null;  // The object we return.
-
-    if (o == null) {
-      // If there's no object with the given key, return null.
-      return null;
-    } if (c.isInstance(o)) {
-      // If it's already the desired class, just return it.
-      return c.cast(o);
-    } try {
-      // If it's declared unmarshallable, look for an unmarshal method.
-      try {
-        // Look for a unmarshalling method which takes the stored type.
-        t = c.cast(c.getMethod("unmarshal", o.getClass()).invoke(null, o));
-      } catch (NoSuchMethodException e) {
-        // Look for a unmarshalling method that takes an object.
-        t = c.cast(c.getMethod("unmarshal", Object.class).invoke(null, o));
-      }
-    } catch (NoSuchMethodException e) {
-      /* fall through */
-    } catch (RuntimeException e) {
-      // Something bad happened while unmarshalling.
-      throw e;
-    } catch (Exception e) {
-      // Something bad happened while unmarshalling. Wrap it.
-      throw new RuntimeException(e);
-    } if (o instanceof Ad && t == null) {
-      // If the stored object is an ad, try unmarshalling the ad.
-      t = ((Ad)o).unmarshal(c);
-    }
-
-    return t;
-  }
-
   // Unmarshal this ad into an object. This operation can throw a runtime
-  // exception.
+  // exception. Should we reset fields if there's an exception?
   public synchronized <O> O unmarshal(O o) {
-    try {
-      if (o.getClass() == Ad.class) {
-        ((Ad)o).merge(this);
-        return o;
-      } else for (Field f : o.getClass().getFields()) synchronized (f) {
-        // Iterate over class fields and see if there's anything in the ad.
-        // Ignore certain types of fields.
-        int m = f.getModifiers();
-        if (f.isSynthetic() ||
-            Modifier.isTransient(m) ||
-            Modifier.isStatic(m)) continue;
-
-        Class<?> c = f.getType();
-        AdObject a = getObject(f.getName());
-
-        // Ignore nulls.
-        if (a == null) continue;
-
-        // Make the field accessible for our purposes.
-        boolean accessible = f.isAccessible();
-        f.setAccessible(true);
-
-        if (a.isAd())
-          f.set(o, unmarshal(c));
-        else
-          f.set(o, a.as(c));
-
-        // Replace original access permissions.
-        f.setAccessible(accessible);
-      }
-    } catch (RuntimeException e) {
-      throw e;
-    } catch (Exception e) {
-      throw new RuntimeException(e);
+    if (o.getClass() == Ad.class) {
+      ((Ad)o).addAll(this);
+    } else {
+      for (Field f : fieldsFrom(o))
+        marshalField(f, o, false);
     } return o;
   }
 
-  // For objects to be used with this, they must implement a zero-arg
-  // constructor.
-  public <O> O unmarshal(Class<O> clazz) {
-    try {
-      O o = clazz.newInstance();
-      unmarshal(o);
-      return o;
+  // Construct a new instance of a class and marshal into it.
+  public <O> O unmarshalAs(Class<O> clazz, Object... args) {
+    Class<?>[] ca = new Class<?>[args.length];
+    for (int i = 0; i < args.length; i++) {
+      // Hmm, what to do about null arguments...
+      ca[i] = (args[i] != null) ? args[i].getClass() : Object.class;
+    } try {
+      Constructor<O> c = clazz.getConstructor(ca);
+      return unmarshal(c.newInstance(args));
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
   }
 
-  // Marshal an object into this ad.
+  // Marshal an object into an ad.
   public static Ad marshal(Object o) {
     try {
       if (o instanceof Ad) {
         return (Ad)o;
       } else if (o instanceof Map) {
-        return fromMap((Map) o);
+        return new Ad((Map) o);
       } else if (o instanceof Collection) {
-        return fromList((Collection) o);
+        return new Ad((Collection) o);
+      } else if (o instanceof Iterable) {
+        return new Ad((Iterable) o);
       } else if (o.getClass().isArray()) {
-        return fromArray(o);
+        return new Ad((Object[])o);
       } else {
-        return fromObject(o);
+        Ad ad = new Ad();
+        for (Field f : fieldsFrom(o))
+          ad.marshalField(f, o, true);
+        return ad;
       }
+    } catch (RuntimeException e) {
+      throw e;
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
   }
 
-  private static Ad fromMap(Map<?,?> m) {
-    Ad ad = new Ad();
-    for (Map.Entry<?,?> e : m.entrySet())
-      ad.putObject(e.getKey(), e.getValue());
-    return ad;
-  } private static Ad fromList(Collection<?> l) {
-    Ad ad = new Ad();
-    for (Object o : l) ad.putObject(o);
-    return ad;
-  } private static Ad fromArray(Object o) {
-    Ad ad = new Ad();
-    for (int i = 0; i < Array.getLength(o); i++)
-      ad.putObject(Array.get(o, i));
-    return ad;
-  } private static Ad fromObject(Object o) {
-    Ad ad = new Ad();
-    for (Field f : o.getClass().getFields()) try {
-      if (f.get(o) != null)
-        ad.putObject(f.getName(), f.get(o));
+  // Helper method to marshal/unmarshal a field to/from an ad.
+  private synchronized void marshalField(Field f, Object o, boolean m) {
+    // Ignore certain types of fields.
+    int mod = f.getModifiers();
+    if (f.isSynthetic() ||
+        Modifier.isTransient(mod) ||
+        Modifier.isStatic(mod)) return;
+
+    // Skip if unmarshalling and ad has no such member.
+    AdObject ao = null;
+    if (!m && (ao = getObject(f.getName())) == null)
+      return;
+
+    // Make the field accessible.
+    boolean accessible = f.isAccessible();
+    f.setAccessible(true);
+
+    // Do the deed.
+    try {
+      if (m)  // If we're marshalling...
+        putObject(f.getName(), f.get(o));
+      else    // Else unmarshalling (ao is not null).
+        f.set(o, ao.as(f.getType()));
     } catch (RuntimeException e) {
       throw e;
     } catch (Exception e) {
       throw new RuntimeException(e);
-    } return ad;
+    } finally {
+      // Reset access permissions.
+      f.setAccessible(accessible);
+    }
+  }
+
+  // Helper method to get all interesting fields in a class.
+  private static Set<Field> fieldsFrom(Object o) {
+    return fieldsFrom(o.getClass());
+  } private static Set<Field> fieldsFrom(Class c) {
+    Set<Field> fields = new HashSet<Field>();
+    fields.addAll(Arrays.asList(c.getDeclaredFields()));
+    fields.addAll(Arrays.asList(c.getFields()));
+    return fields;
   }
 
   // Composition methods
   // ------------------
+  // Obvious an ad as an ad it just itself.
+  public Ad toAd() {
+    return this;
+  }
+
   // Represent this ad in some kind of nice format. I guess the ClassAd
-  // format is easier on the eyes.
+  // format is easier on the eyes, so let's use that.
   public synchronized String toString(boolean pretty) {
     return toClassAd(pretty);
   } public synchronized String toString() {
@@ -663,6 +613,7 @@ public class Ad {
     return toClassAd(true);
   }
 
+  // Testing method.
   public static void main(String args[]) {
     System.out.println("Type an ad:");
     Ad ad = Ad.parse(System.in);

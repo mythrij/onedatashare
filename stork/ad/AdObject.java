@@ -40,11 +40,24 @@ public class AdObject implements Comparable<AdObject> {
     map(long.class,    "asLong");
     map(short.class,   "asShort");
     map(boolean.class, "asBooleanValue");
+    map(Map.class,     "asMap");
+    map(List.class,    "asList");
     map(java.net.URI.class, "asURI");
   }
 
   private AdObject(Object o) {
-    object = o;
+    if (o == null)
+      object = null;
+    else if (o instanceof Collection)
+      object = new Ad((Collection) o);
+    else if (o instanceof Iterable)
+      object = new Ad((Iterable) o);
+    else if (o instanceof Map)
+      object = new Ad((Map) o);
+    else if (o.getClass().isArray())
+      object = new Ad((Object[]) o);
+    else
+      object = o;
   }
 
   public static AdObject wrap(Object o) {
@@ -121,12 +134,44 @@ public class AdObject implements Comparable<AdObject> {
     throw new RuntimeException("cannot convert to ad");
   }
 
+  public List asList() {
+    return new Ad(asAd()).list();
+  }
+
+  public Map asMap() {
+    return new Ad(asAd()).map();
+  }
+
+  // Helper function to try to find an unmarshal method.
+  private <C> Method getUnmarshalMethod(Class<C> c) {
+    try {
+      try {
+        // Look for a unmarshalling method which takes the stored type.
+        return c.getMethod("unmarshal", object.getClass());
+      } catch (NoSuchMethodException e) {
+        // Look for a unmarshalling method that takes an object.
+        return c.getMethod("unmarshal", Object.class);
+      }
+    } catch (NoSuchMethodException e) {
+      return null;
+    }
+  }
+
   public <C extends Object> C as(Class<C> c) {
-    Method m = conv_map.get(c);
-    if (m == null) {
-      throw new RuntimeException("cannot convert to "+c+" from "+object.getClass());
-    } try {
-      return c.cast(m.invoke(this));
+    try {
+      // Check if it's an array.
+      if (c.isArray())
+        return c.cast(asArray(c.getComponentType()));
+      // Try a primitive type conversion.
+      Method m = conv_map.get(c);
+      if (m != null)
+        return c.cast(m.invoke(this));
+      // Try looking for an unmarshalling method.
+      m = getUnmarshalMethod(c);
+      if (m != null)
+        return c.cast(m.invoke(null, object));
+      // Just unmarshal the ad into the object.
+      return asAd().unmarshalAs((Class<C>)c);
     } catch (RuntimeException e) {
       throw e;
     } catch (Exception e) {
@@ -134,7 +179,7 @@ public class AdObject implements Comparable<AdObject> {
     }
   }
 
-  public <C> C[] asList(Class<C> c) {
+  public <C> C[] asArray(Class<C> c) {
     if (object instanceof Ad) {
       Method m = conv_map.get(c);
       if (m == null)

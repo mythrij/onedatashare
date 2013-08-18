@@ -193,7 +193,6 @@ public class Full2ndOptimizer extends Optimizer {
   // parallelism is set here, nothing else should change it.
   private double doAnalysis2() {
     if (samples.size() < 3) {
-      System.out.println("Not enough samples!");
       para = bestParallelism();
       return 0;
     }
@@ -234,7 +233,6 @@ public class Full2ndOptimizer extends Optimizer {
   // Perform analysis using inverse quadratic regression.
   private void doAnalysis() {
     if (samples.size() < 3) {
-      System.out.println("Not enough samples!");
       para = bestParallelism();
       return;
     }
@@ -249,10 +247,7 @@ public class Full2ndOptimizer extends Optimizer {
       int n = s.para;
       double th = s.tp;
       
-      if (th < 0) {
-        System.out.println("Skipping sample: "+s);
-        continue;
-      }
+      if (th < 0) continue;
 
       iqr.add(n, 1/(th*th));
     }
@@ -261,7 +256,6 @@ public class Full2ndOptimizer extends Optimizer {
     double[] a = iqr.calculate();
 
     if (a == null) {
-      System.out.println("Not enough samples!");
       para = bestParallelism();
       return;
     }
@@ -269,11 +263,7 @@ public class Full2ndOptimizer extends Optimizer {
     para = cal_full_peak(a[0], a[1], a[2], p_range);
     analysis_done = true;
 
-    System.out.printf("ANALYSIS DONE!! Got: x/sqrt((%f)*x^2+(%f)*x+(%f)) = %d\n", a[0], a[1], a[2], para);
-
     // Compare errors.
     double err2 = cal_err(a[0], a[1], a[2]);
-
-    System.out.printf("Errors: 3p = %.2f, qr = %.2f\n", err1, err2);
   }
 }

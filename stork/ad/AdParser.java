@@ -1,5 +1,6 @@
 package stork.ad;
 
+import stork.util.Log;
 import java.io.*;
 import java.util.*;
 import java.math.*;
@@ -40,23 +41,11 @@ public class AdParser {
     }
   }
 
-  public AdParser(CharSequence s) {
-    this(s, false);
-  } public AdParser(InputStream is) {
-    this(is, false);
-  } public AdParser(File f) throws FileNotFoundException {
-    this(f, false);
-  } public AdParser(Reader r) {
-    this(r, false);
-  }
-
-  public AdParser(CharSequence s, boolean body_only) {
+  AdParser(CharSequence s, boolean body_only) {
     this(new StringReader(s.toString()), body_only);
-  } public AdParser(InputStream is, boolean body_only) {
+  } AdParser(InputStream is, boolean body_only) {
     this(new InputStreamReader(is, defaultCharset), body_only);
-  } public AdParser(File f, boolean body_only) throws FileNotFoundException {
-    this(new FileReader(f), body_only);
-  } public AdParser(Reader r, boolean body_only) {
+  } AdParser(Reader r, boolean body_only) {
     this.r = (r instanceof BufferedReader) ? r : new BufferedReader(r);
     if (this.body_only = body_only) saved = '[';
   }
@@ -152,16 +141,19 @@ public class AdParser {
       char c = saved = discardIgnored(SEP+WS);
 
       // Check for end of ad.
-      if (check(c, CB)) return ad;
+      if (check(c, CB)) {
+        next();
+        return ad;
+      }
 
       // Discard any extraneous separators or newlines.
       saved = discardIgnored(SEP+WS);
 
-      // Check if first token is an id or a string.
+      // Read the first token.
       Object o = readValue();
 
       // Check if it's anonymous or not.
-      // FIXME: This probably shouldn't be hardcoded...
+      // FIXME: These switch cases should not be hardcoded...
       switch (c = expect(EQ+SEP+CB)) {
         case ':': // Check for assignment.
         case '=':
@@ -189,9 +181,9 @@ public class AdParser {
         case '\n':
           // Insert into ad as list item.
           if (o instanceof Atom)
-            ad.putObject(null, ((Atom)o).eval());
+            ad.putObject(((Atom)o).eval());
           else
-            ad.putObject(null, o);
+            ad.putObject(o);
           if (open > 0 && ad instanceof ParsedAd)
             ((ParsedAd)ad).setHint(open);
           open = 0;

@@ -11,7 +11,6 @@ import java.io.*;
 import java.net.*;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.logging.*;
 
 // The Stork transfer job scheduler. Maintains its own internal
 // configuration and state as an ad. Operates based on commands given
@@ -33,15 +32,12 @@ public class StorkScheduler {
   private transient Map<String, StorkCommand> cmd_handlers;
   private transient TransferModuleTable xfer_modules;
 
-  private static final Logger LOG =
-    Logger.getLogger(StorkScheduler.class.getName());
-
   private transient LinkedBlockingQueue<RequestContext> req_queue =
     new LinkedBlockingQueue<RequestContext>();
 
   // Construct and return a usage/options parser object.
   public static GetOpts getParser(GetOpts base) {
-    GetOpts opts = new GetOpts();
+    GetOpts opts = new GetOpts().parent(base);
 
     opts.prog = "server";
     opts.args = new String[] { "[option]..." };
@@ -72,7 +68,7 @@ public class StorkScheduler {
     public void run() {
       while (true) try {
         StorkJob job = job_queue.take();
-        System.out.println("Pulled job from queue: "+job);
+        Log.info("Pulled job from queue: "+job);
 
         // Make sure we didn't get interrupted while taking.
         if (job == null)
@@ -85,14 +81,14 @@ public class StorkScheduler {
             throw new Exception("job still processing after completion");
           // If job is scheduled, put it back in the schedule queue.
           case scheduled:
-            System.out.println("Job "+job.jobId()+" rescheduling...");
+            Log.info("Job "+job.jobId()+" rescheduling...");
             job_queue.schedule(job); break;
           // If the job was paused, put it in limbo until it's resumed.
           case paused:  // This can't happen yet!
             break;
           // Alert the user if it failed.
           case failed:
-            System.out.println("Job "+job.jobId()+" failed!");
+            Log.info("Job "+job.jobId()+" failed!");
         }
       } catch (Exception e) {
         continue;
@@ -114,7 +110,7 @@ public class StorkScheduler {
         // Try to take something from the queue.
         try {
           req = req_queue.take();
-          System.out.println("Pulled request from queue");
+          Log.fine("Worker pulled request from queue: "+req.cmd);
         } catch (Exception e) {
           continue;
         }
@@ -146,7 +142,9 @@ public class StorkScheduler {
           String m = e.getMessage();
           req.done(new Ad("error", m == null ? e.toString() : m));
         } finally {
-          System.out.println("Done with request!");
+          Log.fine("Worker done with request: "+req.cmd);
+
+          // Used for debugging thread leaks.
           //System.out.println("Thread count: "+getAllStackTraces().size());
           //for (Thread t : getAllStackTraces().keySet())
             //System.out.println(t);
@@ -172,7 +170,7 @@ public class StorkScheduler {
       sorter.reverse(req.ad.getBoolean("reverse"));
 
       // Add jobs to the ad sorter.
-      sorter.add(job_queue.get(req.ad));
+      sorter.add(job_queue.get(req.ad).getAds());
       int count = sorter.size();
 
       if (count < 1)
@@ -208,7 +206,7 @@ public class StorkScheduler {
     public StorkUser handle(RequestContext req) {
       if ("register".equals(req.ad.get("action", ""))) {
         StorkUser su = StorkUser.register(req.ad);
-        System.out.println("Registering user: "+su.user_id);
+        Log.info("Registering user: "+su.user_id);
         dumpState();
         return su;
       } return StorkUser.login(req.ad);
@@ -265,20 +263,15 @@ public class StorkScheduler {
   }
 
   class StorkInfoHandler extends StorkCommand {
-    // Send transfer module information
+    // Send transfer module information.
     Ad sendModuleInfo(RequestContext req) {
-      for (TransferModule tm : xfer_modules.modules()) {
-        try {
-          req.putReply(tm.infoAd());
-        } catch (Exception e) {
-          return new Ad("error", e.getMessage());
-        }
-      } return new Ad();
+      return Ad.marshal(xfer_modules.infoAds());
     }
 
-    // TODO: Send server information.
+    // Send server information. But for now, don't send anything until we
+    // know what sort of information is good to send.
     Ad sendServerInfo(RequestContext req) {
-      return Ad.marshal(this);
+      return new Ad("error", "server info is currently unavailable");
     }
 
     public Ad handle(RequestContext req) {
@@ -316,16 +309,17 @@ public class StorkScheduler {
         try {
           xfer_modules.register(new ExternalModule(f));
         } catch (Exception e) {
-          System.out.println("Warning: "+f+": "+e.getMessage());
+          e.printStackTrace();
+          Log.warning(f, ": ", e.getMessage());
         }
       } else {
-        System.out.println("Warning: libexec is not a directory!");
+        Log.warning("libexec is not a directory!");
       }
     }
 
     // Check if anything got added.
     if (xfer_modules.modules().isEmpty())
-      System.out.println("Warning: no transfer modules registered");
+      Log.warning("no transfer modules registered");
   }
 
   // Initialize the thread pool according to config.
@@ -336,19 +330,19 @@ public class StorkScheduler {
 
     if (jn < 1) {
       jn = 10;
-      System.out.println("Warning: invalid value for max_jobs, "+
+      Log.warning("invalid value for max_jobs, "+
                          "defaulting to "+jn);
     } if (wn < 1) {
       wn = 4;
-      System.out.println("Warning: invalid value for workers, "+
+      Log.warning("invalid value for workers, "+
                          "defaulting to "+wn);
     }
 
     thread_pool = new Thread[jn];
     worker_pool = new Thread[wn];
     
-    System.out.println("Starting "+jn+" job threads, "+
-                       "and "+wn+" worker threads...");
+    Log.info("Starting "+jn+" job threads, and "+wn+" worker threads...");
+
     for (int i = 0; i < thread_pool.length; i++) {
       thread_pool[i] = new StorkQueueThread();
       thread_pool[i].start();
@@ -429,7 +423,7 @@ public class StorkScheduler {
         if (!temp_file.renameTo(state_file))
           throw new FatalEx("could not rename temp file");
       } catch (Exception e) {
-        System.out.println("Warning: couldn't save state: "+
+        Log.warning("couldn't save state: "+
                            state_file+": "+e.getMessage());
       } finally {
         if (temp_file != null && temp_file.exists()) {
@@ -458,11 +452,16 @@ public class StorkScheduler {
     return loadServerState(f != null ? new File(f) : null);
   } public StorkScheduler loadServerState(File f) {
     if (f != null && f.exists()) {
-      System.out.println("Loading: "+f);
+      Log.info("Loading server state file: "+f);
       return loadServerState(Ad.parse(f));
     } return this;
   } public StorkScheduler loadServerState(Ad state) {
-    return state.unmarshal(this);
+    try {
+      state.unmarshal(this);
+    } catch (Exception e) {
+      Log.warning("Couldn't load server state: "+e.getMessage());
+      e.printStackTrace();
+    } return this;
   }
 
   // Restart a scheduler from saved state.
@@ -512,7 +511,7 @@ public class StorkScheduler {
     dump_state_thread.start();
     dumpState();
 
-    System.out.println(Ad.marshal(this));
+    Log.info("Server state: "+Ad.marshal(this));
 
     return this;
   }

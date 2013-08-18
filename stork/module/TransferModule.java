@@ -8,16 +8,23 @@ import java.net.URI;
 // Abstract base class for a Stork transfer module.
 
 public abstract class TransferModule {
-  public abstract ModuleInfoAd infoAd();
+  public String name = null, version = null;
+  public String[] protocols = null;
+  public String handle = null;
+  public String author = null, email = null, website = null;
+  public String[] options = null;
 
-  public abstract Ad validateAd(SubmitAd ad) throws Exception;
+  // Subclasses should pass a module info ad to this constructor.
+  public TransferModule(Ad ad) {
+    ad.unmarshal(this);
 
-  public String handle() {
-    return infoAd().handle;
-  }
-
-  public String[] protocols() {
-    return infoAd().protocols;
+    if (name == null || name.isEmpty())
+      throw new RuntimeException("module has no name");
+    handle = StorkUtil.normalize((handle == null) ? name : handle);
+    if (handle.isEmpty())
+      throw new RuntimeException("module has an invalid handle: \""+handle+'"');
+    if (protocols == null || protocols.length < 1)
+      throw new RuntimeException("module does not handle any protocols");
   }
 
   // Unmarshal transfer modules by name.
@@ -33,15 +40,6 @@ public abstract class TransferModule {
   // Lookup a transfer module by protocol.
   public static TransferModule byProtocol(String s) {
     return TransferModuleTable.instance().byProtocol(s);
-  }
-
-  // Start a session and perform a transfer.
-  // TODO: Remove this.
-  public StorkTransfer transfer(SubmitAd ad) {
-    StorkSession src = session(ad.src);
-    StorkSession dest = session(ad.dest);
-    src.pair(dest);
-    return new StorkTransfer(src, ad);
   }
 
   // Start a session and perform a listing.
@@ -62,11 +60,7 @@ public abstract class TransferModule {
     return session(new EndPoint(uri));
   } public abstract StorkSession session(EndPoint e);
 
-  public String name() {
-    return infoAd().full_name;
-  }
-
   public String toString() {
-    return infoAd().handle;
+    return handle;
   }
 }

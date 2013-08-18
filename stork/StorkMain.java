@@ -45,7 +45,7 @@ public class StorkMain {
     bare_opts = new GetOpts();
     bare_opts.prog = "stork";
     bare_opts.args = new String[] {
-      "[option...]", "<command> [args]" };
+      "<command> [args]", "[option...]" };
 
     bare_opts.add('V', "version", "display the version number and exit");
     bare_opts.add("help", "display this usage information");
@@ -63,6 +63,7 @@ public class StorkMain {
     bare_opts.addCommand("rm", "cancel or unschedule a job");
     bare_opts.addCommand("info", "get state information from a Stork server");
     bare_opts.addCommand("raw", "send a raw command ad to a Stork server");
+    bare_opts.addCommand("help", "display usage information for a command");
 
     // Construct the base command line parser for commands to extend.
     base_opts = new GetOpts().parent(bare_opts);
@@ -110,21 +111,21 @@ public class StorkMain {
 
   // Parse config file, where each line is either a comment or an
   // Ad expression which gets merged into the returned ad.
-  private static Ad parseConfig(String path) throws Exception {
+  private static Ad parseConfig(String path) {
     File file = (path != null) ? checkPath(path) : defaultConfig();
 
     // Error checking
     if (file == null) {
       if (path != null)
-        throw new Exception("couldn't open '"+path+"'");
-      throw new Exception("Warning: STORK_CONFIG not set and couldn't "+
-                          "find stork.conf in default locations");
+        throw new RuntimeException("couldn't open '"+path+"'");
+      throw new RuntimeException("STORK_CONFIG not set and "+
+              "couldn't find stork.conf in default locations");
     } else if (!file.canRead()) {
-      System.out.println("Warning: couldn't open config file '"+file+"'");
+      Log.warning("couldn't open config file '"+file+"'");
       return new Ad();
     }
 
-    return Ad.parseBody(file);
+    return Ad.parse(file, true);
   }
 
   // Main entry point. The first argument should be the command to
@@ -166,8 +167,14 @@ public class StorkMain {
     }
 
     // Check again if the command name is help.
+    // FIXME: This is hecka hacky.
     if (cmd.equals("help")) {
-      bare_opts.usageAndExit(0, null);
+      if (args.length > 0 && !args[0].startsWith("-")) {
+        cmd = args[0];
+        env.put("help", true);
+      } else {
+        bare_opts.usageAndExit(0, null);
+      }
     }
 
     // Little hacky...

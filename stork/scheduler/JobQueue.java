@@ -65,17 +65,15 @@ public class JobQueue extends ArrayList<StorkJob> {
   //   status - the name of a job status filter
   //   user_id - the user to select for
   // The results are returned as a list.
-  public List<Ad> get() {
-    return get(null);
-  } public List<Ad> get(Ad ad) {
-    List<Ad> list = new LinkedList<Ad>();
+  public Ad get(Ad ad) {
+    Ad list = new Ad();
 
     // Filter fields.
     String user_id = null;
     Range range = new Range(1, super.size());
     EnumSet<JobStatus> status = JobStatus.all.filter();
 
-    // Parse fields from input ad. These all return null if passed null.
+    // Parse fields from input ad.
     if (ad != null) {
       user_id = ad.get("user_id");
       if (ad.has("range"))
@@ -90,7 +88,7 @@ public class JobQueue extends ArrayList<StorkJob> {
       if (j != null)
       if (status.contains(j.status()))
       if (user_id == null || user_id.equals(j.user_id()))
-        list.add(j.getAd());
+        list.put(j.getAd());
     } return list;
   }
 

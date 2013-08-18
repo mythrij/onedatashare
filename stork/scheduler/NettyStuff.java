@@ -12,17 +12,13 @@ import io.netty.channel.*;
 import io.netty.channel.socket.*;
 import static io.netty.util.CharsetUtil.UTF_8;
 
-import java.util.*;
 import java.io.*;
 import java.net.InetSocketAddress;
 
 // A bunch of classes under one namespace that implement various
 // pieces needed to use Netty for network communications.
 
-public final class NettyStuff {
-
-  private NettyStuff() { /* Don't instantiate me! */ }
-
+public abstract class NettyStuff {
   // Codecs
   // ------
   // A decoder for parsing ads from channels.
@@ -43,7 +39,7 @@ public final class NettyStuff {
             }
           });
 
-          System.out.println("Got ad: "+ad);
+          Log.finer("Got ad: ", ad);
 
           if (ad instanceof AdParser.ParsedAd)
             AdCodec.this.printer = ((AdParser.ParsedAd)ad).printer;
@@ -64,6 +60,7 @@ public final class NettyStuff {
     MessageToByteEncoder<Ad> encoder = new MessageToByteEncoder<Ad>() {
       protected void encode(ChannelHandlerContext ctx, Ad ad, ByteBuf out)
       throws Exception {
+        Log.finer("Writing ad: ", ad);
         out.writeBytes(AdCodec.this.printer.toString(ad).getBytes(UTF_8));
       }
     };
@@ -82,8 +79,6 @@ public final class NettyStuff {
 
     public void initChannel(SocketChannel ch) throws Exception {
       ChannelPipeline pl = ch.pipeline();
-
-      System.out.println("Initing channel: "+ch.localAddress());
 
       AdCodec codec = new AdCodec();
       pl.addLast("decoder", codec.decoder);
@@ -142,6 +137,7 @@ public final class NettyStuff {
 
       // Bind socket to the given host/port.
       sb.bind(addr).sync();
+      Log.info("Listening for TCP connections on: "+addr);
     }
   }
 }

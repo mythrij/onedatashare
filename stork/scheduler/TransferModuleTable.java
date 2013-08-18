@@ -2,6 +2,7 @@ package stork.scheduler;
 
 import stork.ad.*;
 import stork.module.*;
+import stork.util.*;
 import java.util.*;
 
 // A class for looking up transfer modules by protocol and handle.
@@ -25,27 +26,32 @@ public class TransferModuleTable {
   // Add a transfer module to the table.
   public void register(TransferModule tm) {
     // Check if handle is in use.
-    if (!by_handle.containsKey(tm.handle())) {
-      by_handle.put(tm.handle(), tm);
-      System.out.println(
-        "Registered module \""+tm+"\" [handle: "+tm.handle()+"]");
+    if (!by_handle.containsKey(tm.handle)) {
+      by_handle.put(tm.handle, tm);
+      Log.info("Registered module \"", tm, "\" [handle: ", tm.handle, "]");
     } else {
-      System.out.println(
-        "Warning: module handle "+tm.handle()+" in use, ignoring");
+      Log.warning("Module handle \"", tm.handle, "\"in use, ignoring");
       return;
     }
 
     // Add the protocols for this module.
-    for (String p : tm.protocols()) {
+    for (String p : tm.protocols) {
       if (!by_proto.containsKey(p)) {
-        System.out.println("  Registering protocol: "+p);
+        Log.info("  Registering protocol: ", p);
         by_proto.put(p, tm);
       } else {
-        System.out.println(
-          "  Note: protocol "+p+" already registered, not registering");
+        Log.info("  Protocol ", p, " already registered, not registering");
         continue;
       }
     }
+  }
+
+  // Get all of the transfer module info ads in a list.
+  public Ad infoAds() {
+    Ad mods = new Ad();
+    for (TransferModule tm : by_handle.values())
+      mods.put(tm.handle, Ad.marshal(tm));
+    return mods;
   }
 
   // Get a transfer module by its handle.

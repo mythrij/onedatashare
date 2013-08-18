@@ -210,4 +210,13 @@ public abstract class StorkUtil {
       sb.append(String.format(fmt, b));
     return sb.toString();
   }
+
+  // Read a file into a string.
+  public static String readFile(String path) {
+    try {
+      return new Scanner(new File(path), "UTF-8").useDelimiter("\\A").next();
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
 }

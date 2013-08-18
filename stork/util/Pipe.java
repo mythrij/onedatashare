@@ -87,7 +87,6 @@ public class Pipe<T> {
     for (String s : args) switch (Integer.parseInt(s)) {
       case 1: test1(); break;
       case 2: test2(); break;
-      case 3: test3();
     }
   }
 
@@ -116,16 +115,5 @@ public class Pipe<T> {
 
     System.out.println(p1.get());
     System.out.println(p2.get());
-  }
-
-  public static void test3() {
-    Pipe<String> pipe = new Pipe<String>();
-    pipe.new End(false) {
-      public void store(String s) {
-        System.out.println(s);
-      }
-    };
-    pipe.new End().put("hello");
-    pipe.new End().put("yatta");
   }
 }

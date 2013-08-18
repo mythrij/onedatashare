@@ -66,12 +66,7 @@ public class StorkClient {
           os.write((ad.toString()+"\n").getBytes("UTF-8"));
           os.flush();
 
-          // Receive responses until we're done.
-          do {
-            ad = Ad.parse(is);
-          } while (ad != null && handle(ad));
-
-          // Return response.
+          handle(ad = Ad.parse(is));
           return ad;
         } while (hasMoreCommands());
       } catch (Exception e) {
@@ -92,10 +87,8 @@ public class StorkClient {
     // Return the command ad to send to the server.
     abstract public Ad command();
 
-    // Handle each response from the server. Return true if more ads
-    // are expected, false if the end of the stream was detected.
-    // Throw an exception if an error occurs.
-    abstract public boolean handle(Ad ad);
+    // Handle each response from the server.
+    abstract public void handle(Ad ad);
 
     // Anything else that needs to be done at the end of a command.
     public void complete() { }
@@ -103,6 +96,8 @@ public class StorkClient {
 
   // Handler for performing remote listings.
   static class StorkLsHandler extends StorkCommand {
+    String uri = null;
+
     public GetOpts parser() {
       GetOpts opts = new GetOpts();
       opts.prog = "ls";
@@ -126,7 +121,7 @@ public class StorkClient {
         throw new RuntimeException("not enough arguments");
       else if (args.length > 1)
         throw new RuntimeException("too many argument arguments");
-      ad.put("uri", args[0]);
+      ad.put("uri", uri = args[0]);
 
       // Check for options.
       if (env.getBoolean("recursive"))
@@ -134,10 +129,32 @@ public class StorkClient {
       return ad;
     }
 
-    public boolean handle(Ad ad) {
-      if (!ad.has("error"))
-        System.out.println(ad);
-      return false;
+    // Flatten the tree structure for listing.
+    private static List<Ad> flatten(List<Ad> list, Ad ad) {
+      list.add(ad);
+      if (ad.has("files")) for (Ad a : ad.getAds("files"))
+        if (a.has("files")) flatten(list, a);
+      return list;
+    }
+
+    // Print a single directory listing ad.
+    private static void printListing(Ad ad) {
+      System.out.println(ad.get("name")+":");
+      if (ad.has("files")) for (Ad a : ad.getAds("files")) {
+        System.out.print("    "+a.get("name", "?"));
+        if (a.getBoolean("dir"))
+          System.out.print("/");
+        System.out.println();
+      }
+    }
+
+    public void handle(Ad ad) {
+      if (ad.has("error"))
+        return;
+
+      // Print everything from the list.
+      for (Ad a : flatten(new LinkedList<Ad>(), ad))
+        printListing(a);
     }
   }
 
@@ -208,14 +225,13 @@ public class StorkClient {
       return ad;
     }
 
-    public boolean handle(Ad ad) {
+    public void handle(Ad ad) {
       // Check if we just wanted the count.
       if (count_only) {
         if (ad.has("error"))  // Should we print instead?
           System.out.println(0);
         else if (ad.has("count"))
           System.out.println(ad.getInt("count"));
-        return false;
       }
 
       // Check if there was an error.
@@ -238,7 +254,7 @@ public class StorkClient {
         System.out.println(msg);
       } else {
         System.out.println("No jobs found...");
-      } return false;
+      }
 
       // If we're watching, keep resending every interval.
       // TODO: Make sure clearing is portable.
@@ -299,9 +315,8 @@ public class StorkClient {
       return ad;
     }
 
-    public boolean handle(Ad ad) {
+    public void handle(Ad ad) {
       System.out.println(ad);
-      return false;
     }
   }
 
@@ -313,7 +328,7 @@ public class StorkClient {
       opts.desc = new String[] {
         "This command retrieves information about the server itself, "+
         "such as transfer modules available and server statistics.",
-        "Valid options for type: modules (default), server"
+        "Valid type arguments: modules (default), server"
       };
 
       return opts;
@@ -331,9 +346,8 @@ public class StorkClient {
       return ad;
     }
 
-    public boolean handle(Ad ad) {
+    public void handle(Ad ad) {
       System.out.println(ad);
-      return false;
     }
   }
 
@@ -396,23 +410,10 @@ public class StorkClient {
     }
 
     private boolean parsedArgs = false;
-    private PushbackInputStream stream = null;
     private boolean echo = true;
 
-    // A little bit on the hacky side.
-    public boolean hasMoreCommands() {
-      if (stream != null) try {
-        int b = stream.read();
-        if (b == -1) return false;
-        stream.unread(b);
-        return true;
-      } catch (Exception e) { 
-        // Fall through to return.
-      } return false;
-    }
-
     public Ad command() {
-      Ad ad;
+      Ad ad = null;
 
       // Determine if we're going to read from stream or generator our
       // own ad.
@@ -420,33 +421,24 @@ public class StorkClient {
         default:
           throw new FatalEx("wrong number of arguments");
         case 2:  // src_url and dest_url
-          return new Ad("src",  args[0])
-                   .put("dest", args[1]);
+          ad = new Ad("src",  args[0]).put("dest", args[1]);
+          break;
         case 1:  // From file
-          try {
-            stream = new PushbackInputStream(new FileInputStream(args[0]));
-          } catch (Exception e) {
-            throw new FatalEx("could not open file: "+args[0]);
-          } break;
+          ad = Ad.parse(new File(args[0]), true);
+          break;
         case 0:  // From stdin
-          // Check if we're running on a console first. If so, give
-          // them the fancy prompt. TODO: use readline()
           if (System.console() != null) {
             echo = false;
             System.out.print("Begin typing submit ads (ctrl+D to end):\n\n");
-          } try {
-            stream = new PushbackInputStream(System.in);
-          } catch (Exception e) {
-            throw new FatalEx("could not open standard input");
-          }
+          } ad = ad.parse(System.in, true);
       } parsedArgs = true;
 
-      assert stream != null;
-      try {
-        ad = Ad.parse(stream).put("command", "submit");
-      } catch (Exception e) {
-        throw new FatalEx("could not parse input ad");
+      // Check if this is an ad list with only one ad.
+      if (ad.isList() && ad.size() == 1) {
+        ad = ad.getAd(0);
       }
+
+      ad.put("command", "submit");
 
       // Replace x509_proxy in job ad.
       // TODO: A better way of doing this would be nice...
@@ -454,27 +446,22 @@ public class StorkClient {
       ad.remove("x509_file");
 
       if (proxy != null) try {
-        File f = new File(proxy);
-        Scanner s = new Scanner(f);
-        StringBuffer sb = new StringBuffer();
+        proxy = StorkUtil.readFile(proxy);
 
-        while (s.hasNextLine())
-          sb.append(s.nextLine()+"\n");
-        
-        if (sb.length() > 0)
-          ad.put("x509_proxy", sb.toString());
+        if (proxy.length() > 0)
+          ad.put("x509_proxy", proxy);
       } catch (Exception e) {
         System.out.println("Fatal: couldn't open x509_file...");
         System.exit(1);
       }
 
       // Print the command sent if we're echoing.
-      //if (echo)
-        //System.out.print(ad+"\n\n");
+      if (echo)
+        System.out.print(ad+"\n\n");
       return ad;
     }
 
-    public boolean handle(Ad ad) {
+    public void handle(Ad ad) {
       submitted++;
       if (!ad.has("error")) {
         accepted++;
@@ -487,14 +474,6 @@ public class StorkClient {
         System.out.println(
           (accepted > 0 ? "Success: " : "Error: ") +
           accepted+" of "+submitted+" jobs successfully submitted");
-      } return false;
-    }
-
-    public void complete() {
-      if (stream != null && stream != System.in) try {
-        stream.close();
-      } catch (Exception e) {
-        // Who cares...
       }
     }
   }
@@ -526,10 +505,8 @@ public class StorkClient {
       }
     }
         
-    // Keep parsing ads from the server forever.
-    public boolean handle(Ad ad) {
+    public void handle(Ad ad) {
       System.out.println(ad);
-      return true;
     }
   }
 
@@ -589,11 +566,12 @@ public class StorkClient {
     // Execute the command handler.
     try {
       Ad ad = scmd.handle(server_sock);
+      //Log.info("Got ad: ", ad);
+
       if (ad.has("error"))
         System.err.println("Error: "+ad.get("error"));
-      else
-        System.err.println("Done: "+ad);
     } catch (Exception e) {
+      e.printStackTrace();
       System.err.println("Error: "+e.getMessage());
     }
   }

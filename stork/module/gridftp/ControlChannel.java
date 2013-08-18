@@ -115,8 +115,8 @@ public class ControlChannel extends Pipeline<String, Reply> {
           }
         }
 
-        exchange("SITE CLIENTINFO appname="+GridFTPModule.info_ad.name+
-                 ";appver="+GridFTPModule.info_ad.version+";schema=gsiftp;");
+        exchange("SITE CLIENTINFO appname="+GridFTPModule.name+";appver="+
+                 GridFTPModule.version+";schema=gsiftp;");
       } else {
         String user = (u.user == null) ? "anonymous" : u.user;
         String pass = (u.pass == null) ? "" : u.pass;
@@ -202,7 +202,7 @@ public class ControlChannel extends Pipeline<String, Reply> {
   // Write a command to the control channel.
   public void handleWrite(String cmd) {
     if (local) return;
-    //System.out.println("Write ("+port+"): "+cmd);
+    Log.fine("Write (", port, "): ", cmd);
     try {
       fc.write(new Command(cmd));
     } catch (Exception e) {
@@ -223,7 +223,7 @@ public class ControlChannel extends Pipeline<String, Reply> {
   public Reply handleReply() {
     while (true) {
       Reply r = readChannel();
-      //System.out.println("Reply: "+r);
+      Log.fine("Reply: ", r);
       if (r.getCode() < 200) addReply(r);
       else return r;
     }
@@ -240,8 +240,6 @@ public class ControlChannel extends Pipeline<String, Reply> {
     public Reply handleReply() {
       Reply r = readChannel();
       ListAdSink sink = new ListAdSink(ad, false);
-
-      //System.out.println(r.getMessage());
 
       if (!Reply.isPositiveCompletion(r))
         throw new FatalEx("couldn't list: "+r);

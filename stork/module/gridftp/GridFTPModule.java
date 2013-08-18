@@ -19,31 +19,21 @@ import org.ietf.jgss.*;
 import org.gridforum.jgss.*;
 
 public class GridFTPModule extends TransferModule {
-  static ModuleInfoAd info_ad;
+  public static final String name    = "Stork GridFTP Module";
+  public static final String version = "0.2";
 
-  static {
-    Ad ad = new Ad();
-    ad.put("name", "Stork GridFTP Module");
-    ad.put("version", "0.1");
-    ad.put("author", "Brandon Ross");
-    ad.put("email", "bwross@buffalo.edu");
-    ad.put("description",
-              "A rudimentary module for FTP and GridFTP transfers.");
-    ad.put("protocols", "gsiftp,gridftp,ftp");
-    ad.put("accepts", "classads");
-    ad.put("opt_params", "parallelism,x509_proxy,optimizer");
-
-    info_ad = new ModuleInfoAd(ad);
+  public GridFTPModule() {
+    super(new Ad("name", "Stork GridFTP Module")
+            .put("version", "0.2")
+            .put("author", "Brandon Ross")
+            .put("email", "bwross@buffalo.edu")
+            .put("description", "A module for FTP and GridFTP transfers.")
+            .put("protocols", "gsiftp", "gridftp", "ftp")
+            .put("params", "parallelism", "x509_proxy", "optimizer"));
   }
 
   // Interface methods
   // -----------------
-  public ModuleInfoAd infoAd() { return info_ad; }
-
-  public Ad validateAd(SubmitAd ad) {
-    return ad.filter(info_ad.opt_params);
-  }
-
   // Create a new connection to an FTP server.
   public StorkSession session(EndPoint e) {
     return new GridFTPSession(e);
