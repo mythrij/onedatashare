@@ -1,6 +1,7 @@
 package stork.module.gridftp;
 
 import stork.ad.*;
+import stork.util.*;
 
 import java.text.*;
 import java.util.*;
@@ -13,15 +14,20 @@ import java.io.*;
 //
 //   netwerk/streamconv/converters/ParseFTPList.cpp
 
+@SuppressWarnings("fallthrough")
 public class FTPListParser {
   String data = null;
   char list_type;
+  StringBuilder sb = new StringBuilder();
+  AdSorter sorter;
+  long time = 0;
 
   // Create a parser with an optional known type suggestion.
   public FTPListParser() {
     this((char)0);
   } public FTPListParser(char type) {
     list_type = type;
+    sorter = new AdSorter("-dir", "name");
   }
 
   // Check if a file should be ignored.
@@ -29,23 +35,56 @@ public class FTPListParser {
     return name == null || name.equals(".") || name.equals("..");
   }
 
-  // Split the data so that each entry can be parsed individually.
+  // Split the data so that each entry can be parsed individually. Only
+  // feed this thing complete lines.
   private static Pattern line_pattern =
     Pattern.compile("[\\s\\00]*([^\\n\\r\\00]+)");
-  public List<Ad> parse(String data) {
+  private void parseData(CharSequence data) {
     Matcher m = line_pattern.matcher(data);
-    AdSorter sorter = new AdSorter("-dir", "name");
 
+    Watch w = new Watch(true);
     while (m.find()) {
       String line = m.group(1);
       Ad ad = parseEntry(line);
       if (ad != null && !ignoreName(ad.get("name")))
         sorter.add(ad);
+    }
+    time += w.elapsed();
+  }
+
+  // Finalize the parser and get the sorted ads. Any more calls to this
+  // thing will exhibit undefined behavior.
+  public List<Ad> getAds() {
+    if (sb.length() > 0) {
+      parseData(sb);
+      sb = null;
     } return sorter.getAds();
   }
 
+  // Write a byte buffer to the file, decode as string, scan for newlines,
+  // and feed lines through parser. Assumably we're reading data where
+  // newlines are one byte so just look for newline characters.
+  // XXX This might just be a temporary hack to increase performance a bit.
+  public void write(byte[] b) {
+    // Find last newline and chomp it, then buffer the rest.
+    int o;
+    out: for (o = b.length-1; o >= 0; o--) switch (b[0]) {
+      case '\r':
+      case '\n': break out;
+    } if (o >= 0) {  // If we found something...
+      parseData(sb.append(new String(b, 0, o+1)));
+      sb = new StringBuilder();
+      if (o != b.length-1)
+        sb.append(new String(b, o+1, b.length-o));
+    } else {  // Otherwise buffer the string.
+      sb.append(new String(b));
+    }
+  }
+
   // Parse a line from the listing, return as an ad.
-  public Ad parseEntry(String line) {
+  public Ad parseEntry2(String line) {
+    return parseEntry(line).put("type", list_type);
+  } public Ad parseEntry(String line) {
     String[] tokens;
     Ad ad = new Ad();
 
@@ -67,8 +106,7 @@ public class FTPListParser {
         String name = t[1];
 
         // Parse facts according to prefixes.
-        for (String f : facts)
-        if (!f.isEmpty()) try {
+        for (String f : facts) if (!f.isEmpty()) {
           switch (f.charAt(0)) {
             case 'm':  // Modification time.
               ad.put("time", Long.parseLong(f.substring(1))); break;
@@ -76,11 +114,12 @@ public class FTPListParser {
               ad.put("dir", true); break;
             case 'r':  // It's a file.
               ad.put("file", true); break;
-            case 's':  // Permissions.
-              ad.put("perm", f.substring(1));
+            case 's':  // Size.
+              ad.put("size", f.substring(1)); break;
+            case 'u':  // Permissions.
+              if (f.charAt(1) == 'p')
+                ad.put("perm", f.substring(2));
           }
-        } catch (Exception e) {
-          // There was a parse error, just ignore it.
         }
 
         // Everything else after the tab is the file name.
@@ -99,6 +138,7 @@ public class FTPListParser {
         String[] t = line.split(" ", 2);
         String[] facts = t[0].split(";+");
         String name = t[1];
+        System.out.println("NAME: '"+name+"'");
 
         if (t.length != 2)
           throw null;
@@ -106,6 +146,8 @@ public class FTPListParser {
         // Parse each fact, splitting at =.
         for (String f : facts) {
           String s[] = f.split("=", 2);
+          String perm = null;
+          boolean dir = false, unix = false;
           s[0] = s[0].toLowerCase();
 
           if (s.length != 2)
@@ -119,7 +161,7 @@ public class FTPListParser {
             else if (s[1].equalsIgnoreCase("file"))
               ad.put("file", true);
             else if (s[1].equalsIgnoreCase("dir"))
-              ad.put("dir", true);
+              ad.put("dir", dir = true);
             else if (s[1].equalsIgnoreCase("cdir"))
               return null;
             else if (s[1].equalsIgnoreCase("pdir"))
@@ -128,8 +170,23 @@ public class FTPListParser {
               ad.put("file", true);
           } else if (s[0].equals("size")) {
             ad.put("size", Long.parseLong(s[1]));
-          } else if (s[0].equals("perm")) {
-            ad.put("perm", s[1]);  // TODO: Parse this.
+          } else if (s[0].equals("unix.mode")) {
+            int p = Integer.parseInt(s[1], 8);
+            perm = new String(new char[] {
+              (0 != (p & 0400)) ? '-' : 'r',
+              (0 != (p & 0200)) ? '-' : 'w',
+              (0 != (p & 0100)) ? '-' : 'x',
+              (0 != (p & 0040)) ? '-' : 'r',
+              (0 != (p & 0020)) ? '-' : 'w',
+              (0 != (p & 0010)) ? '-' : 'x',
+              (0 != (p & 0004)) ? '-' : 'r',
+              (0 != (p & 0002)) ? '-' : 'w',
+              (0 != (p & 0001)) ? '-' : 'x' });
+          } else if (s[0].equals("perm") && !unix) {
+            perm = s[1];
+          } if (perm != null) {
+            if (unix) perm = (dir?'d':'-')+perm;
+            ad.put("perm", perm);
           }
         }
 
@@ -221,6 +278,7 @@ public class FTPListParser {
           if (size > 0 && !dir)
             ad.put("size", size);
           ad.put(dir ? "dir" : "file", true);
+          ad.put("perm", perm);
 
           list_type = 'U';
           return ad;
@@ -233,17 +291,5 @@ public class FTPListParser {
       case 'w':  // TODO: Check for a Windows 16-bit listing.
       case 'D':  // TODO: Check for a /bin/dls listing.
     } return null;
-  }
-
-  // Tester: read from stdin and parse.
-  public static void main(String[] args) {
-    FTPListParser lp = new FTPListParser();
-
-    Scanner scan = new Scanner(System.in);
-    scan.useDelimiter("\\Z");
-    String data = scan.next();
-
-    //lp.parse(data);
-    System.out.println(lp.parse(data));
   }
 }

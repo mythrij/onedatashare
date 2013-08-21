@@ -7,6 +7,7 @@ import stork.util.*;
 import java.io.*;
 import java.net.*;
 import java.util.*;
+import java.text.*;
 
 // All the client commands tossed into one file. TODO: Refactor.
 
@@ -69,8 +70,10 @@ public class StorkClient {
           handle(ad = Ad.parse(is));
           return ad;
         } while (hasMoreCommands());
+      } catch (RuntimeException e) {
+        throw e;
       } catch (Exception e) {
-        return new Ad("error", e.getMessage());
+        throw new RuntimeException(e);
       } finally {
         complete();
       }
@@ -97,6 +100,8 @@ public class StorkClient {
   // Handler for performing remote listings.
   static class StorkLsHandler extends StorkCommand {
     String uri = null;
+    boolean all = false;
+    boolean long_fmt = false;
 
     public GetOpts parser() {
       GetOpts opts = new GetOpts();
@@ -109,6 +114,8 @@ public class StorkClient {
       opts.add('d', "depth", "list only up to N levels").parser =
         opts.new SimpleParser("depth", "N", false);
       opts.add('r', "recursive", "recursively list subdirectories");
+      opts.add('a', "all", "include hidden directories in listing");
+      opts.add('l', "long", "show long form listing information");
 
       return opts;
     }
@@ -126,6 +133,8 @@ public class StorkClient {
       // Check for options.
       if (env.getBoolean("recursive"))
         ad.put("depth", env.getInt("depth", -1));
+      all = env.getBoolean("all");
+      long_fmt = env.getBoolean("long");
       return ad;
     }
 
@@ -138,13 +147,51 @@ public class StorkClient {
     }
 
     // Print a single directory listing ad.
-    private static void printListing(Ad ad) {
-      System.out.println(ad.get("name")+":");
-      if (ad.has("files")) for (Ad a : ad.getAds("files")) {
-        System.out.print("    "+a.get("name", "?"));
-        if (a.getBoolean("dir"))
-          System.out.print("/");
-        System.out.println();
+    private void printListing(Ad ad) {
+      Ad[] files = ad.getAds("files");
+      if (files == null || files.length == 0)
+        return;
+      if (files.length > 1)
+        System.out.println(ad.get("name")+":");
+      for (Ad a : files)
+        printEntry(a);
+    }
+
+    // Helper methods for printing long listing information.
+    static DateFormat df1 = new SimpleDateFormat("MMM dd HH:mm");
+    static DateFormat df2 = new SimpleDateFormat("MMM dd  yyyy");
+    static String dateString(long time) {
+      if (time < 0) return "(unknown)";
+      // Why is this so atrocious in Java.
+      Date d = new Date(time*1000);
+      Calendar c = Calendar.getInstance();
+      c.setTime(d);
+      int dy = c.get(Calendar.YEAR);
+      int cy = Calendar.getInstance().get(Calendar.YEAR);
+      DateFormat fmt = (cy == dy) ? df1 : df2;
+      return fmt.format(d);
+    }
+
+    // Print a single list entry. Pretty icky.
+    private void printEntry(Ad ad) {
+      String name = ad.get("name");
+      if (name == null)
+        return;
+      if (!all && name.startsWith("."))
+        return;
+      if (ad.getBoolean("dir"))
+        name += '/';
+
+      if (long_fmt) {
+        // Get the permissing string.
+        String p = ad.get("perm", "?");
+        // Format the date.
+        String d = dateString(ad.getLong("time"));
+        // Get the size.
+        String s = StorkUtil.prettySize(ad.getLong("size", 0));
+        System.out.printf("%9s %6s %12s %s\n", p, s, d, name);
+      } else {
+        System.out.println(name);
       }
     }
 
@@ -160,6 +207,8 @@ public class StorkClient {
 
   static class StorkQHandler extends StorkCommand {
     boolean count_only = false;
+    boolean raw = false;
+    Ad cmd = null;
 
     public GetOpts parser() {
       GetOpts opts = new GetOpts();
@@ -179,7 +228,7 @@ public class StorkClient {
         opts.new SimpleParser("limit", "N", false);
       opts.add('r', "reverse", "reverse printing order (oldest first)");
       opts.add('w', "watch",
-               "retrieve list every T seconds (default 2)").parser =
+               "fetch queue every T seconds (default 2)").parser =
         opts.new SimpleParser("watch", "T", true);
       opts.add("daglog", "output results to FILE in DAGMan log format")
         .parser = opts.new SimpleParser("daglog", "FILE", false);
@@ -222,7 +271,47 @@ public class StorkClient {
         ad.put("range", range.toString());
       if (status != null)
         ad.put("status", status);
-      return ad;
+      return cmd = ad;
+    }
+
+    // Print a job ad in a nice and pretty format.
+    private void printTableHeader() {
+      System.out.printf("%3s  %-12s  %8s  %8s  %9s  %s\n",
+                        "ID", "Status", "Queue", "Run", "Size", "Speed");
+      System.out.printf("%3s  %-12s  %8s  %8s\n", "", "", "time", "time");
+    } private String time(Ad ad) {
+      Watch w = ad.unmarshalAs(Watch.class);
+      return w.toString();
+    } private String progressBar(Ad ad, int len) {
+      Progress prog = ad.unmarshalAs(Progress.class);
+      int j = (prog.total > 0) ? (int)(len * prog.done / prog.total) : 0;
+      char[] bar = new char[len];
+
+      if (j >= len)
+        j = len-1;
+
+      for (int i = 0; i < len; i++)
+        bar[i] = ' ';
+      for (int i = 0; i <= j; i++)
+        bar[i] = '=';
+      if (j+1 < len)
+        bar[j+1] = '>';
+      return "    ["+new String(bar)+"] "+prog.toPercent();
+    } private void formatJobAd(Ad ad) {
+      System.out.printf("%3d  %-12s  %8s  %8s  %9s  %s\n",
+        ad.getInt("job_id"), ad.get("status", "(unknown)"),
+        time(ad.getAd("queue_timer")), time(ad.getAd("run_timer")),
+        StorkUtil.prettySize(ad.getLong("progress.bytes.total")),
+        Throughput.pretty(ad.getLong("progress.bytes.avg")));
+      System.out.println(progressBar(ad.getAd("progress.bytes"), 50));
+
+      System.out.println("    "+ad.get("src.uri"));
+      System.out.println("    "+ad.get("dest.uri"));
+
+      if (ad.has("message"))
+        System.out.println("    Message: "+ad.get("message"));
+
+      System.out.println();
     }
 
     public void handle(Ad ad) {
@@ -232,14 +321,34 @@ public class StorkClient {
           System.out.println(0);
         else if (ad.has("count"))
           System.out.println(ad.getInt("count"));
+        return;
+      }
+
+      // Print this so the user knows what exactly was requested.
+      if (cmd.has("status")) {
+        System.out.print("Searching for "+cmd.get("status")+" jobs");
+        if (cmd.has("range"))
+          System.out.println(" with ID(s): "+cmd.get("range")+"\n");
+        else
+          System.out.println("...\n");
+      } else if (cmd.has("range")) {
+        System.out.println("Searching for jobs with ID(s): "+cmd.get("range")+"\n");
       }
 
       // Check if there was an error.
       if (ad.has("error"))
         throw new FatalEx(ad.get("error"));
+      if (!ad.has("jobs"))
+        throw new FatalEx("unexpected reply format");
 
       // Print all the job ads. TODO: Better formatting.
-      System.out.println(ad);
+      if (!raw) {
+        printTableHeader();
+        for (Ad a : ad.getAds("jobs"))
+          formatJobAd(a);
+      } else {
+        System.out.println(ad);
+      }
 
       // Report how many ads we received.
       int count = ad.getInt("count");
@@ -430,7 +539,7 @@ public class StorkClient {
           if (System.console() != null) {
             echo = false;
             System.out.print("Begin typing submit ads (ctrl+D to end):\n\n");
-          } ad = ad.parse(System.in, true);
+          } ad = Ad.parse(System.in, true);
       } parsedArgs = true;
 
       // Check if this is an ad list with only one ad.
@@ -526,6 +635,7 @@ public class StorkClient {
     try {
       return handler(cmd).parser().parent(base);
     } catch (Exception e) {
+      e.printStackTrace();
       return null;
     }
   }
@@ -571,7 +681,7 @@ public class StorkClient {
       if (ad.has("error"))
         System.err.println("Error: "+ad.get("error"));
     } catch (Exception e) {
-      e.printStackTrace();
+      //e.printStackTrace();
       System.err.println("Error: "+e.getMessage());
     }
   }

@@ -23,7 +23,7 @@ import org.gridforum.jgss.*;
 // TODO: Document supported options.
 
 public class GridFTPSession extends StorkSession {
-  private StorkCred cred = null;
+  private StorkCred<?> cred = null;
   private Optimizer optimizer = null;
   private ControlChannel cc;
 
@@ -252,7 +252,7 @@ public class GridFTPSession extends StorkSession {
     // Begin transferring according to optimizer.
     while (!xl.isEmpty()) {
       Ad b = optimizer.sample(), update;
-      TransferProgress prog = new TransferProgress();
+      Throughput prog = new Throughput();
       int s = b.getInt("pipelining");
       int p = b.getInt("parallelism");
       int c = b.getInt("concurrency");
@@ -292,11 +292,11 @@ public class GridFTPSession extends StorkSession {
       else
         xs = xl.split(-1);
 
-      prog.transferStarted(xs.size(), xs.count());
+      prog.reset(xs.size());
       transferList(cc, xs);
-      prog.transferEnded(true);
+      prog.finish(true);
 
-      b.put("throughput", prog.throughputValue(true)/1E6);
+      b.put("throughput", prog.avg/1E6);
       optimizer.report(b);
     }
 

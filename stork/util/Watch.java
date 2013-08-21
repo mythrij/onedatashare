@@ -6,14 +6,14 @@ package stork.util;
 // mechanism to measure elapsed time.
 
 public class Watch {
-  public long start_time, end_time;
+  public volatile long start, end = -1;
 
   private static long abs_base = System.currentTimeMillis();
-  private static long rel_base = System.nanoTime() / (long)1E6;
+  private static long rel_base = System.nanoTime();
 
   // Create an unstarted watch.
   public Watch() {
-    this(-1, -1);
+    this(-1);
   }
 
   // Create a watch, and start it now if started is true.
@@ -22,33 +22,13 @@ public class Watch {
   }
 
   // Create a watch with a given start time.
-  public Watch(long start_time) {
-    this(start_time, -1);
-  }
-
-  // Create a watch with both a given start and end time.
-  public Watch(long start_time, long end_time) {
-    setTimes(start_time, end_time);
-  }
-
-  // Set the start/end time and update the underlying ad.
-  private synchronized void setTimes(long st, long et) {
-    if (st == start_time) {
-      start_time = st;
-      if (st < 0) st = -1;
-      else start_time = st;
-    }
-
-    if (et == end_time) {
-      end_time = et;
-      if (et < 0) et = -1;
-      else end_time = et;
-    }
+  public Watch(long start) {
+    this.start = start;
   }
 
   // Get the current time since epoch in milliseconds.
   public static long now() {
-    return abs_base + (System.nanoTime()/(long)1E6 - rel_base);
+    return abs_base + (System.nanoTime() - rel_base)/(long)1E6;
   }
 
   // Get the elapsed time since a given time.
@@ -75,29 +55,33 @@ public class Watch {
 
   // Start (or restart) the timer.
   public synchronized Watch start() {
-    setTimes(now(), -1);
+    start = now();
     return this;
   }
 
-  // Get either the current time or the total time if ended. Returns 0
-  // if not started.
+  // Returns the elapsed time of this watch either now or at a given
+  // time. Will always return a non-negative number.
   public synchronized long elapsed() {
-    return (end_time >= 0) ? end_time-start_time : since(start_time);
+    return elapsed(now());
+  } public synchronized long elapsed(long now) {
+    if (end  >= 0 && now > end) now = end;
+    if (start < 0 || now < start) return 0;
+    return now-start;
   }
 
   // Stop the timer.
   public synchronized long stop() {
-    setTimes(start_time, now());
-    return end_time-start_time;
+    end = now();
+    return end-start;
   }
 
   // Get start and end times. Returns -1 if not started/ended.
-  public long startTime() { return start_time; }
-  public long endTime()   { return end_time; }
+  public long startTime() { return start; }
+  public long endTime()   { return end; }
 
   // Check if the timer is started/stopped.
-  public synchronized boolean isStarted() { return start_time != -1; }
-  public synchronized boolean isStopped() { return end_time != -1; }
+  public boolean isStarted() { return start != -1; }
+  public boolean isStopped() { return end   != -1; }
 
   // Display the elapsed time as a pretty string.
   public String toString() {

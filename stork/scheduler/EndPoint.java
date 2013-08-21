@@ -13,8 +13,8 @@ import java.net.URI;
 
 public class EndPoint {
   public URI uri = null;
-  public StorkCred cred_token = null;
-  public TransferModule module = null;
+  public StorkCred<?> cred_token = null;
+  public transient TransferModule module = null;
 
   private static TransferModuleTable tmt = TransferModuleTable.instance();
   private static CredManager cm = CredManager.instance();
@@ -26,12 +26,11 @@ public class EndPoint {
     this(StorkUtil.makeURI(s));
   } public EndPoint(URI u) {
     if (u == null)
-      throw new FatalEx("missing uri field from endpoint");
+      throw new FatalEx("missing URI field from endpoint");
     uri = u;
   }
 
   public static EndPoint unmarshal(String s) {
-    System.out.println("Creating endpoint from: "+s);
     return new EndPoint(s);
   }
 
@@ -56,5 +55,10 @@ public class EndPoint {
     if (module == null)
       throw new RuntimeException("no module for "+proto()+" registered");
     return module.session(this);
+  }
+
+  // Create a session paired with another endpoint session.
+  public StorkSession pairWith(EndPoint e) {
+    return session().pair(e.session());
   }
 }

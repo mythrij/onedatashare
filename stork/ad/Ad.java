@@ -4,9 +4,13 @@ import static stork.util.StorkUtil.splitCSV;
 
 import java.util.*;
 import java.io.*;
+import java.lang.ref.*;
 import java.lang.reflect.*;
 
-public class Ad {
+public class Ad implements Serializable {
+  // There's some kind of irony here, isn't there? :)
+  static final long serialVersionUID = 5988172454007663702L;
+
   // An ad is either a list or a map, but never both. Never access these
   // directly, always access through list() or map().
   private Map<Object, AdObject> map = null;
@@ -32,6 +36,16 @@ public class Ad {
     if (list == null && make)
       list = new LinkedList<AdObject>();
     return list;
+  }
+
+  // Ad keys are interned using weak references.
+  private static Map<String, SoftReference<String>> internMap =
+    new WeakHashMap<String, SoftReference<String>>();
+  public static String intern(String k) {
+    SoftReference<String> s = internMap.get(k);
+    if (s == null)
+      internMap.put(k, s = new SoftReference<String>(k));
+    return s.get();
   }
 
   // Create a new ad, plain and simple.
@@ -77,7 +91,7 @@ public class Ad {
     this(); put(key, value);
   } public Ad(String key, Ad value) {
     this(); put(key, value);
-  } public Ad(String key, List value) {
+  } public Ad(String key, List<?> value) {
     this(); put(key, value);
   }
 
@@ -264,7 +278,7 @@ public class Ad {
         String k1 = key.substring(0, i);
         AdObject o = ad.map().get(k1);
         if (o == null)
-          ad.map().put(k1, AdObject.wrap(ad = new Ad()));
+          ad.map().put(intern(k1), AdObject.wrap(ad = new Ad()));
         else 
           ad = o.asAd();
         key = key.substring(i+1);
@@ -273,7 +287,7 @@ public class Ad {
       // No more ads to traverse, insert object.
       synchronized (ad) {
         if (value != null)
-          ad.map().put(key, AdObject.wrap(value));
+          ad.map().put(intern(key), AdObject.wrap(value));
         else
           ad.map().remove(key);
       }
@@ -560,10 +574,11 @@ public class Ad {
 
     // Do the deed.
     try {
-      if (m)  // If we're marshalling...
+      if (m) {  // If we're marshalling...
         putObject(f.getName(), f.get(o));
-      else    // Else unmarshalling (ao is not null).
+      } else {  // Else unmarshalling (ao is not null).
         f.set(o, ao.as(f.getType()));
+      }
     } catch (RuntimeException e) {
       throw e;
     } catch (Exception e) {
@@ -577,7 +592,7 @@ public class Ad {
   // Helper method to get all interesting fields in a class.
   private static Set<Field> fieldsFrom(Object o) {
     return fieldsFrom(o.getClass());
-  } private static Set<Field> fieldsFrom(Class c) {
+  } private static Set<Field> fieldsFrom(Class<?> c) {
     Set<Field> fields = new HashSet<Field>();
     fields.addAll(Arrays.asList(c.getDeclaredFields()));
     fields.addAll(Arrays.asList(c.getFields()));

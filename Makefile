@@ -9,8 +9,10 @@ PROJECT = stork
 JARFILE = lib/$(PROJECT)-$(VERSION).jar
 
 CLASSPATH = 'lib/*:build'
-JFLAGS = -J-Xmx512m -g -cp $(CLASSPATH) -Xlint:unchecked \
-				 #-target 1.7 -source 1.6
+DBGFLAG = -g  # Uncomment to compile with debugging info.
+JFLAGS = -J-Xmx512m $(DBGFLAG) \
+	-classpath $(CLASSPATH) -sourcepath $(PROJECT) \
+	-Xlint:all
 JC = javac
 JAR = jar -J-Xmx512m
 

@@ -4,6 +4,8 @@ import java.util.*;
 import java.math.*;
 import java.lang.reflect.*;
 
+// Beware all ye who enter, for here there be dragons.
+
 public class AdObject implements Comparable<AdObject> {
   Object object;
 
@@ -27,37 +29,56 @@ public class AdObject implements Comparable<AdObject> {
     map(String.class,  "asString");
     map(Number.class,  "asNumber");
     map(Integer.class, "asInt");
-    map(Double.class,  "asObject");
+    map(Double.class,  "asDouble");
     map(Float.class,   "asFloat");
     map(Byte.class,    "asByte");
     map(Long.class,    "asLong");
     map(Short.class,   "asShort");
     map(Boolean.class, "asBoolean");
+    map(Character.class, "asChar");
     map(int.class,     "asInt");
-    map(double.class,  "asObject");
+    map(double.class,  "asDouble");
     map(float.class,   "asFloat");
     map(byte.class,    "asByte");
     map(long.class,    "asLong");
     map(short.class,   "asShort");
     map(boolean.class, "asBooleanValue");
+    map(char.class,    "asChar");
     map(Map.class,     "asMap");
     map(List.class,    "asList");
     map(java.net.URI.class, "asURI");
   }
 
   private AdObject(Object o) {
+    object = marshal(o);
+  }
+
+  // Convert an object to an ad primitive type.
+  // FIXME: Aaaa isn't there a better way?
+  private static Object marshal(Object o) {
     if (o == null)
-      object = null;
-    else if (o instanceof Collection)
-      object = new Ad((Collection) o);
-    else if (o instanceof Iterable)
-      object = new Ad((Iterable) o);
-    else if (o instanceof Map)
-      object = new Ad((Map) o);
-    else if (o.getClass().isArray())
-      object = new Ad((Object[]) o);
-    else
-      object = o;
+      return o;
+    if (o instanceof String)
+      return o;
+    if (o instanceof Number)
+      return o;
+    if (o instanceof Boolean)
+      return o;
+    if (o instanceof java.net.URI)
+      return o.toString();
+    if (o instanceof Character)
+      return o.toString();
+    if (o instanceof Enum)
+      return o.toString();
+    if (o instanceof Collection)
+      return new Ad((Collection) o);
+    if (o instanceof Iterable)
+      return new Ad((Iterable) o);
+    if (o instanceof Map)
+      return new Ad((Map) o);
+    if (o.getClass().isArray())
+      return new Ad((Object[]) o);
+    return Ad.marshal(o);
   }
 
   public static AdObject wrap(Object o) {
@@ -114,6 +135,8 @@ public class AdObject implements Comparable<AdObject> {
     return asNumber().longValue();
   } public short asShort() {
     return asNumber().shortValue();
+  } public char asChar() {
+    return asString().charAt(0);
   }
 
   public Boolean asBoolean() {
@@ -134,11 +157,11 @@ public class AdObject implements Comparable<AdObject> {
     throw new RuntimeException("cannot convert to ad");
   }
 
-  public List asList() {
+  public List<?> asList() {
     return new Ad(asAd()).list();
   }
 
-  public Map asMap() {
+  public Map<?,?> asMap() {
     return new Ad(asAd()).map();
   }
 
@@ -157,8 +180,31 @@ public class AdObject implements Comparable<AdObject> {
     }
   }
 
-  public <C extends Object> C as(Class<C> c) {
-    try {
+  // Helper method for converting primitive classes to their wrappers.
+  private static Class<?> fixPrimitiveClass(Class<?> c) {
+    if (c == int.class)
+      return Integer.class;
+    if (c == double.class)
+      return Double.class;
+    if (c == float.class)
+      return Float.class;
+    if (c == byte.class)
+      return Byte.class;
+    if (c == long.class)
+      return Long.class;
+    if (c == short.class)
+      return Short.class;
+    if (c == boolean.class)
+      return Boolean.class;
+    if (c == char.class)
+      return Character.class;
+    return c;
+  }
+
+  public Object as(Class<?> c) {
+    if (c.isPrimitive()) {
+      c = fixPrimitiveClass(c);
+    } try {
       // Check if it's an array.
       if (c.isArray())
         return c.cast(asArray(c.getComponentType()));
@@ -171,7 +217,7 @@ public class AdObject implements Comparable<AdObject> {
       if (m != null)
         return c.cast(m.invoke(null, object));
       // Just unmarshal the ad into the object.
-      return asAd().unmarshalAs((Class<C>)c);
+      return asAd().unmarshalAs(c);
     } catch (RuntimeException e) {
       throw e;
     } catch (Exception e) {
@@ -211,7 +257,7 @@ public class AdObject implements Comparable<AdObject> {
   }
 
   // Check if the enclosed object is of a given type.
-  public boolean is(Class c) {
+  public boolean is(Class<?> c) {
     return c.isInstance(object);
   }
 

@@ -20,20 +20,18 @@ import org.globus.ftp.extended.*;
 class ListAdSink implements DataSink {
   private Ad ad, files = null, dirs = null;
   private Reader reader;
-  private StringBuilder sb;
   private boolean closed = false;
   private FTPListParser parser;
 
   // Pass an ad to write into and whether or not this is an mlsx listing.
   public ListAdSink(Ad ad, boolean mlsx) {
     this.ad = ad;
-    sb = new StringBuilder();
     parser = new FTPListParser(mlsx ? 'M' : 0);
   }
 
   // Write a byte array of MLSD output to the sink.
   public synchronized void write(byte[] buf) {
-    sb.append(new String(buf));
+    parser.write(buf);
   }
 
   // Write a JGlobus buffer to the sink.
@@ -53,13 +51,8 @@ class ListAdSink implements DataSink {
 
   public synchronized void close() throws IOException {
     if (!closed) {
-      finalizeList();
+      ad.put("files", parser.getAds()).put("time", parser.time);
       closed = true;
     } notifyAll();
-  }
-
-  // Parse all of the buffered listing contents and store in ad.
-  public void finalizeList() {
-    ad.put("files", parser.parse(sb.toString()));
   }
 }

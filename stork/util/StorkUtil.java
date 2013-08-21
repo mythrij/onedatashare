@@ -32,7 +32,7 @@ public abstract class StorkUtil {
 
     // Print debugging output.
     public static void D(Object... o) {
-      System.out.println(join(o));
+      Log.fine(o);
     }
   }
 
@@ -189,6 +189,22 @@ public abstract class StorkUtil {
     } catch (Exception e) {
       throw new FatalEx("couldn't parse URI: "+e.getMessage(), e);
     }
+  }
+
+  // Convert a size into a human-readable string.
+  public static String prettySize(long s) {
+    return prettySize((double)s, ' ');
+  } public static String prettySize(double s) {
+    return prettySize(s, ' ');
+  } private static String prettySize(double s, char pre) {
+    if (s >= 1000) switch (pre) {
+      case ' ': return prettySize(s/1000, 'k');
+      case 'k': return prettySize(s/1000, 'M');
+      case 'M': return prettySize(s/1000, 'G');
+      case 'G': return prettySize(s/1000, 'T');
+    } if (pre == ' ') {
+      return String.format("%d", (int) s);
+    } return String.format("%.02f%c", s, pre);
   }
 
   // Normalize a path. Squash /'s, resolve .'s and ..'s, and fix

@@ -6,166 +6,37 @@ import stork.ad.*;
 // Used to track transfer progress. Just tell this thing when some
 // bytes or a file are done and it will update its state with that
 // information and, if an AdSink is attached, publish an ad to it.
-//
-// FYI: All times here are in milliseconds!
 
 public class TransferProgress {
-  private long start_time = -1, end_time = -1;
-  private Progress byte_progress = new Progress();
-  private Progress file_progress = new Progress();
-  private Pipe<Ad>.End pipe = null;
+  public final transient Watch watch = new Watch();
+  public final Progress files = new Progress();
+  public final Throughput bytes = new Throughput();
 
-  // Metrics used to calculate instantaneous throughput.
-  private double q = 500.0; // Time quantum for throughput.
-  private long lst = -1;  // last sample time
-  private long btq = 0;  // bytes this quantum
-  private long blq = 0;  // bytes last quantum
-
-  // Pretty format a throughput.
-  public static String prettyThrp(double tp, char pre) {
-    if (tp >= 1000) switch (pre) {
-      case ' ': return prettyThrp(tp/1000, 'k');
-      case 'k': return prettyThrp(tp/1000, 'M');
-      case 'M': return prettyThrp(tp/1000, 'G');
-      case 'G': return prettyThrp(tp/1000, 'T');
-    } return String.format("%.2f%cB/s", tp, pre);
-  }
-
-  // Pretty format a duration (in milliseconds);
-  public static String prettyTime(long t) {
-    if (t < 0) return null;
-
-    long i = t % 1000,
-         s = (t/=1000) % 60,
-         m = (t/=60) % 60,
-         h = (t/=60) % 24,
-         d = t / 24;
-
-    return (d > 0) ? String.format("%dd%02dh%02dm%02ds", d, h, m, s) :
-           (h > 0) ? String.format("%dh%02dm%02ds", h, m, s) :
-           (m > 0) ? String.format("%dm%02ds", m, s) :
-                     String.format("%d.%02ds", s, i/10);
-  }
-
-  // Can be used to change time quantum. Minimum 1ms.
-  public synchronized void setQuantum(double t) {
-    q = (t < 1.0) ? 1.0 : t;
-    btq = blq = 0;
-  }
-
-  // Get the Ad representation of this transfer progress.
-  public Ad getAd() {
-    return getAd(new Ad());
-  }
-
-  private Ad getAd(Ad ad) {
-    ad.put("byte_progress", byte_progress.toString());
-    ad.put("progress", byte_progress.toPercent());
-    ad.put("file_progress", file_progress.toString());
-    if (end_time == -1) {
-      ad.put("throughput", throughput(false));
-      if (duration() >= 1000)
-        ad.put("avg_throughput", throughput(true));
-    } else {
-      ad.put("avg_throughput", throughput(true));
-    } return ad;
-  }
+  private transient Pipe<Ad>.End pipe = null;
 
   // Called when a transfer starts.
-  public synchronized void transferStarted(long bytes, int files) {
-    start_time = now();
-    end_time = -1;
-    byte_progress.done = file_progress.done = 0;
-    byte_progress.total = bytes;
-    file_progress.total = files;
+  public synchronized void transferStarted(long b, int f) {
+    watch.start();
+    bytes.reset(b);
+    files.reset(f);
   }
 
   // Called when a transfer ends. If successful, assume any unreported
   // bytes and files have finished and report them ourselves.
   public synchronized void transferEnded(boolean success) {
-    if (end_time == -1) {
-      end_time = now();
-      if (success)
-        done(byte_progress.remaining(), (int) file_progress.remaining());
+    watch.stop();
+    if (success) {
+      files.finish();
+      bytes.finish(true);
     }
   }
 
   // Called when some bytes/file have finished transferring.
-  public synchronized void done(long bytes) {
-    done(bytes, 0);
-  } public synchronized void done(long bytes, int files) {
-    long now = now();
-    long d = now-lst;
-
-    // See how to calculate bytes this quantum.
-    if (lst == -1) {
-      btq = bytes;
-    } else if (d >= 2*q) {
-      blq = btq = (long) (bytes*(q/d));
-    } else if (d >= q) {
-      blq = (long) (bytes*(1-q/d) + btq*(2-d/q));
-      btq = (long) (bytes*(q/d));
-    } else {
-      blq = (long) (blq*(1-d/q) + btq*(d/q));
-      btq = (long) (btq*(1-d/q) + bytes);
-    } lst = now;
-
-    if (bytes > 0) byte_progress.add(bytes);
-    if (files > 0) file_progress.add(files);
-  }
-
-  // Get the throughput in bytes per second. When doing instantaneous
-  // throughput, takes current time quantum as well as last quantum into
-  // account (the last scaled by how far into this quantum we are).
-  public double throughputValue(boolean avg) {
-    double d;  // Duration in ms.
-    long b;  // Bytes over duration.
-
-    if (avg) {  // Calculate average
-      if (start_time == -1)
-        return -1.0;
-      d = (double) duration();
-      b = byte_progress.done;
-    } else if (end_time >= 0) {
-      return -1.0;  // If we've ended, inst thrp means nothing!
-    } else {  // Calculate instantaneous
-      if (lst == -1)
-        return -1.0;
-      d = (double) (now()-lst);
-      if (d >= 2*q)
-        return 0.0;
-      else if (d >= q)
-        //b = (long) (btq*(1-(d-q)/q));
-        b = btq;
-      else
-        b = (long) (btq*(d/q) + blq*(1-d/q));
-      d = q;
-    }
-
-    if (d <= 0.0)
-      return 0.0;
-    return b/d*1000.0;
-  }
-
-  public String throughput(boolean avg) {
-    double t = throughputValue(avg);
-    return (t >= 0) ? prettyThrp(t, ' ') : null;
-  }
-
-  // Get the duration of the transfer in milliseconds.
-  public long duration() {
-    if (start_time == -1)
-      return 0;
-    if (end_time == -1)
-      return now()-start_time;
-    return end_time-start_time;
-  }
-
-  public Progress byteProgress() {
-    return byte_progress;
-  }
-
-  public Progress fileProgress() {
-    return file_progress;
+  public synchronized void done(long b) {
+    done(b, 0);
+  } public synchronized void done(long b, int f) {
+    Log.fine("Bytes done: ", b, "  files done: ", f);
+    if (b > 0) bytes.add(b);
+    if (f > 0) files.add(f);
   }
 }

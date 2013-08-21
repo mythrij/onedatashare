@@ -15,6 +15,23 @@ public class Progress {
     return total-done;
   }
 
+  // Reset this progress tracker and set the total.
+  public void reset(long t) {
+    done = 0;
+    total = t;
+  }
+
+  // Finish this progress automatically, e.g. when we know a transfer has
+  // completed successfully and we don't want to fill the progress the rest
+  // of the way.
+  public void finish() {
+    if (done < total)
+      add(total-done, 0);
+    else
+      add(0, 0);
+  }
+
+  // Everything should call this so subclasses can just hook this guy.
   public void add(long d, long t) {
     done += d; total += t;
     if (done > total) done = total;
@@ -30,8 +47,8 @@ public class Progress {
 
   public String toPercent() {
     if (total <= 0)
-      return null;
-    return String.format("%.2f%%", 100.0 * done / total);
+      return "0.00%";
+    return String.format("%.0f%%", 100.0 * done / total);
   }
 
   public String toString() {

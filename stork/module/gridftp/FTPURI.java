@@ -36,7 +36,7 @@ public class FTPURI {
   public final String user, pass;
   public final String path;
 
-  public FTPURI(URI uri, StorkCred cred) {
+  public FTPURI(URI uri, StorkCred<?> cred) {
     this.uri = uri;
     host = uri.getHost();
     proto = uri.getScheme();

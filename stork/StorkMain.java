@@ -30,9 +30,7 @@ public class StorkMain {
       bts = props.getProperty("buildtime", bts);
     } catch (Exception e) {
       /* Who cares... */
-    } finally {
-      return StorkUtil.join(app, ver, '('+bts+')');
-    }
+    } return StorkUtil.join(app, ver, '('+bts+')');
   }
 
   static {
@@ -61,6 +59,7 @@ public class StorkMain {
     bare_opts.addCommand("q", "query the Stork queue");
     bare_opts.addCommand("status", "an alias for q");
     bare_opts.addCommand("rm", "cancel or unschedule a job");
+    bare_opts.addCommand("ls", "retrieve a remote directory listing");
     bare_opts.addCommand("info", "get state information from a Stork server");
     bare_opts.addCommand("raw", "send a raw command ad to a Stork server");
     bare_opts.addCommand("help", "display usage information for a command");
@@ -132,6 +131,7 @@ public class StorkMain {
   // run (either stork_server or one of the client commands) and the
   // rest of the arguments will be put into a new array and passed
   // to relevant parsers.
+  // TODO: Refactor this embarrassing mess.
   public static void main(String[] args) {
     String cmd = null;
     Ad env = def_env;

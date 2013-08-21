@@ -32,7 +32,7 @@ public class SFTPSession extends StorkSession {
     // Establish the session connection. TODO: scp vs. sftp
     try {
       jsch = new JSch();
-      jsch.setConfig("StrictHostKeyChecking", "no");
+      JSch.setConfig("StrictHostKeyChecking", "no");
 
       session = jsch.getSession(ui[0], uri.getHost(), port);
       session.setUserInfo(new UserInfo() {

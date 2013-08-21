@@ -9,10 +9,10 @@ import java.util.*;
 public class CredManager {
   private static CredManager instance = null;
 
-  private Map<UUID, StorkCred> cred_map;
+  private Map<UUID, StorkCred<?>> cred_map;
 
   public CredManager() {
-    cred_map = new LinkedHashMap<UUID, StorkCred>();
+    cred_map = new LinkedHashMap<UUID, StorkCred<?>>();
   }
 
   // Get an instance of the credential manager.
@@ -23,13 +23,13 @@ public class CredManager {
   }
 
   // Get a credential from the credential map given a token.
-  public synchronized StorkCred getCred(String token) {
+  public synchronized StorkCred<?> getCred(String token) {
     try {
       return getCred(UUID.fromString(token));
     } catch (Exception e) {
       return null;
     }
-  } public synchronized StorkCred getCred(UUID token) {
+  } public synchronized StorkCred<?> getCred(UUID token) {
     return (token == null) ? null : cred_map.get(token);
   }
 
@@ -46,7 +46,7 @@ public class CredManager {
 
   // Put a credential into the map and return an automatically
   // generated token for the credential.
-  public synchronized String putCred(StorkCred cred) {
+  public synchronized String putCred(StorkCred<?> cred) {
     UUID uuid;
     do {  // Better safe than sorry. :)
       uuid = UUID.randomUUID();

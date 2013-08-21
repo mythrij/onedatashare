@@ -1,5 +1,7 @@
 Before August 30th
 ------------------
-- Server state serialization.
+- Credential serialization.
 - Test GridFTP module.
 - Take a look at SFTP module.
+- SPDY for the server.
+- Test for resource leaks.

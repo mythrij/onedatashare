@@ -11,8 +11,8 @@ import java.net.URI;
 // A transfer module which executes as an independent process.
 
 public class ExternalModule extends TransferModule {
-  private Ad info_ad = null;
-  private File exe;
+  private transient Ad info_ad = null;
+  private transient File exe;
 
   // Inner class representing a transfer.
   class ExternalTransfer extends Thread {

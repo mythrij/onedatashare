@@ -10,15 +10,18 @@ import org.globus.myproxy.*;
 import org.ietf.jgss.*;
 import org.gridforum.jgss.*;
 
-// A wrapper for a GSS credential. TODO: Provide additional methods.
+// A wrapper for a GSS credential.
 
 public class StorkGSSCred extends StorkCred<GSSCredential> {
+  private String cred_bytes = null;
+  private String mp_user = null;
+  private String mp_pass = null;
+  private String mp_host = null;
+  private int    mp_port = -1;
+
   public StorkGSSCred(String user, GSSCredential cred) {
     super(user, cred);
-  }
-
-  public String type() {
-    return "gss_cert";
+    type = "gss_cert";
   }
 
   // Return a credential based on certificate bytes.
@@ -39,9 +42,7 @@ public class StorkGSSCred extends StorkCred<GSSCredential> {
   // Read a certificate from a local file.
   public static StorkGSSCred fromFile(String cred_file) {
     return fromFile(new File(cred_file));
-  }
-
-  public static StorkGSSCred fromFile(File cred_file) {
+  } public static StorkGSSCred fromFile(File cred_file) {
     try {
       FileInputStream fis = new FileInputStream(cred_file);
       byte[] cred_bytes = new byte[(int) cred_file.length()];
@@ -55,7 +56,7 @@ public class StorkGSSCred extends StorkCred<GSSCredential> {
 
   // Create a new credential using MyProxy.
   public static StorkGSSCred
-    fromMyProxy(String host, int port, String user, String pass)
+  fromMyProxy(String host, int port, String user, String pass)
   throws Exception {
     if (port < 0) port = MyProxy.DEFAULT_PORT;
 

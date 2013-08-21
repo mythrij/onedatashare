@@ -3,7 +3,10 @@ package stork.scheduler;
 import stork.ad.*;
 import stork.module.*;
 import stork.util.*;
+import static stork.util.StorkUtil.join;
+
 import java.util.*;
+import java.io.*;
 
 // A class for looking up transfer modules by protocol and handle.
 
@@ -23,8 +26,22 @@ public class TransferModuleTable {
     return instance;
   }
 
+  // Add a directory of executables to the transfer module table.
+  // TODO: Do this in parallel and detect misbehaving externals.
+  public void registerDirectory(File dir) {
+    if (!dir.isDirectory()) {
+      Log.warning('"', dir, "\" is not a directory!");
+    } else for (File f : dir.listFiles()) {
+      // Skip over things that obviously aren't transfer modules.
+      if (f.isFile() && !f.isHidden() && f.canExecute())
+        register(f);
+    }
+  }
+
   // Add a transfer module to the table.
-  public void register(TransferModule tm) {
+  public void register(File f) {
+    register(new ExternalModule(f));
+  } public void register(TransferModule tm) {
     // Check if handle is in use.
     if (!by_handle.containsKey(tm.handle)) {
       by_handle.put(tm.handle, tm);
@@ -35,15 +52,20 @@ public class TransferModuleTable {
     }
 
     // Add the protocols for this module.
+    Set<String> good = new TreeSet<String>(), bad = new TreeSet<String>();
     for (String p : tm.protocols) {
-      if (!by_proto.containsKey(p)) {
-        Log.info("  Registering protocol: ", p);
+      if (byProtocol(p) == null) {
+        good.add(p);
         by_proto.put(p, tm);
       } else {
-        Log.info("  Protocol ", p, " already registered, not registering");
-        continue;
+        bad.add(p);
       }
     }
+
+    if (!good.isEmpty())
+      Log.info("  Registering protocol(s): ", join(good.toArray()));
+    if (!bad.isEmpty())
+      Log.info("  Protocols already registered: ", join(bad.toArray()));
   }
 
   // Get all of the transfer module info ads in a list.

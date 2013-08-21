@@ -5,6 +5,7 @@ import stork.util.*;
 // An interface for credentials.
 
 public abstract class StorkCred<O> {
+  protected String type;
   private String owner;
   private O cred_obj;
   private final Watch timer;
@@ -17,10 +18,12 @@ public abstract class StorkCred<O> {
   }
 
   // Get the string representation of the credential type.
-  public abstract String type();
+  public String type() {
+    return type;
+  }
 
   // Get/set the id of the user this credential is for.
-  public StorkCred owner(String o) {
+  public StorkCred<?> owner(String o) {
     owner = o;
     return this;
   } public String owner() {
@@ -28,7 +31,7 @@ public abstract class StorkCred<O> {
   }
 
   // Get/set the object held by this credential wrapper.
-  public StorkCred credential(O c) {
+  public StorkCred<?> credential(O c) {
     if (c != null)
       cred_obj = c;
     return this;

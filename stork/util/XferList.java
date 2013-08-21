@@ -4,7 +4,10 @@ import java.util.*;
 import stork.ad.*;
 
 // A list of files and directories to transfer.
-// TODO: Refactor this entire thing to be not bad.
+
+// FIXME: This entire thing is an utterly terrible kludge. It really
+// needs to just be thrown out and replaced with something actually not
+// garbage.
 
 public class XferList implements Iterable<XferList.Entry> {
   private LinkedList<Entry> list = new LinkedList<Entry>();
@@ -23,11 +26,13 @@ public class XferList implements Iterable<XferList.Entry> {
   }
 
   // Create an XferList for a file.
+  // XXX Oh god the hacks.
   public XferList(String src, String dest, long size) {
     sp = StorkUtil.dirname(src);
     dp = StorkUtil.dirname(dest);
-    if (size == 0) size = -1;  // FIXME XXX THIS IS A HACK, REMOVE ME
-    add(StorkUtil.basename(src), size);
+    if (size == 0) size = -1;  // AAAAAA
+    Entry e = add(StorkUtil.basename(src), size);  // WTFFF
+    e.dpath = StorkUtil.basename(dest);  // OH GODDDD
     root = new Entry("");
   }
 
@@ -58,7 +63,7 @@ public class XferList implements Iterable<XferList.Entry> {
   // FIXME Single-file transfers using same source and dest file!
   public class Entry {
     private XferList parent = XferList.this;
-    public String path;
+    public String path, dpath;
     public final boolean dir;
     public boolean done = false;
     public final long size;
@@ -71,14 +76,14 @@ public class XferList implements Iterable<XferList.Entry> {
       else if (!path.endsWith("/"))
         path += "/";
       path = path.replaceFirst("^/+", "");
-      this.path = path;
+      dpath = this.path = path;
       size = off = 0;
       dir = true;
     }
 
     // Create a file entry.
     Entry(String path, long size) {
-      this.path = path;
+      dpath = this.path = path;
       this.size = (size < 0) ? 0 : size;
       off = 0;
       dir = false;
@@ -86,7 +91,7 @@ public class XferList implements Iterable<XferList.Entry> {
 
     // Create an entry based off another entry with a new path.
     Entry(String path, Entry e) {
-      this.path = path;
+      dpath = this.path = path;
       dir = e.dir; done = e.done;
       size = e.size; off = e.off; len = e.len;
     }
@@ -131,7 +136,7 @@ public class XferList implements Iterable<XferList.Entry> {
     }
 
     public String dpath() {
-      return parent.dp + path;
+      return parent.dp + dpath;
     }
 
     public String toString() {

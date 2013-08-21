@@ -2,27 +2,43 @@ package stork.scheduler;
 
 import stork.ad.*;
 import stork.util.*;
+import static stork.scheduler.JobStatus.*;
 
 import java.util.*;
 
 // A blocking queue for Stork jobs. Allows for scheduling of jobs and
 // searching of past jobs.
 
-public class JobQueue extends ArrayList<StorkJob> {
-  private transient LinkedList<StorkJob> new_jobs;
+public class JobQueue {
+  private transient LinkedList<StorkJob> waiting;
+  private ArrayList<StorkJob> all;
 
   // Initialize all the queues and stuff.
   public JobQueue() {
-    new_jobs = new LinkedList<StorkJob>();
+    waiting = new LinkedList<StorkJob>();
+    all = new ArrayList<StorkJob>();
   }
 
-  // Take a new job from the queue, blocking until one is available.
+  // Ugh, I wish we didn't have to do this, but ad deserialization is kind
+  // of bad at collection subclasses.
+  public static JobQueue unmarshal(Ad ad) {
+    JobQueue jq = new JobQueue();
+    
+    for (Ad a : ad.getAds("all")) {
+      StorkJob j = a.unmarshalAs(StorkJob.class);
+      if (!j.isComplete())
+        j.status(scheduled);
+      jq.put(j);
+    } return jq;
+  }
+
+  // Take a waiting job from the queue, blocking until one is available.
   public synchronized StorkJob take() {
-    while (new_jobs.isEmpty()) try {
+    while (waiting.isEmpty()) try {
       wait();
     } catch (Exception e) {
       onInterrupt();
-    } return new_jobs.pop();
+    } return waiting.pop();
   }
 
   // Put a new job into the queue.
@@ -32,11 +48,12 @@ public class JobQueue extends ArrayList<StorkJob> {
     if (job.status() == JobStatus.scheduled)
       schedule(job);
 
-    if (job.jobId() == -1) {
-      super.add(job);
-      job.jobId(super.size());
+    if (job.jobId() <= 0) {
+      all.add(job);
+      job.jobId(all.size());
     } else {
-      add(job.jobId(), job);
+      all.ensureCapacity(job.jobId());
+      all.add(job.jobId()-1, job);
     } notifyAll();
 
     return job;
@@ -46,14 +63,14 @@ public class JobQueue extends ArrayList<StorkJob> {
   public synchronized void schedule(StorkJob job) {
     schedule(job, false);
   } public synchronized void schedule(StorkJob job, boolean first) {
-    if (first) new_jobs.push(job);
-    else       new_jobs.add(job);
+    if (first) waiting.push(job);
+    else       waiting.add(job);
   }
 
   // Get a job by its id.
   public synchronized StorkJob get(int job_id) {
     try {
-      return super.get(job_id-1);
+      return all.get(job_id-1);
     } catch (Exception e) {
       return null;
     }
@@ -70,8 +87,8 @@ public class JobQueue extends ArrayList<StorkJob> {
 
     // Filter fields.
     String user_id = null;
-    Range range = new Range(1, super.size());
-    EnumSet<JobStatus> status = JobStatus.all.filter();
+    Range range = null;
+    EnumSet<JobStatus> status = JobStatus.pending.filter();
 
     // Parse fields from input ad.
     if (ad != null) {
@@ -80,6 +97,10 @@ public class JobQueue extends ArrayList<StorkJob> {
         range = Range.parseRange(ad.get("range"));
       if (ad.has("status"))
         status = JobStatus.byName(ad.get("status")).filter();
+      else if (range != null)
+        status = JobStatus.all.filter();
+      if (range == null)
+        range = new Range(1, all.size());
     }
 
     // Perform a simple but not very efficient O(n) selection.

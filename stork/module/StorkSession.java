@@ -119,6 +119,13 @@ public abstract class StorkSession {
     closed = true;
   }
 
+  // Close both this session and its pair.
+  public synchronized void closeBoth() {
+    if (pair != null)
+      pair.close();
+    close();
+  }
+
   // Pair this session with another session. Calls pairCheck() first
   // to see if the sessions are compatible. Returns paired session.
   public synchronized StorkSession pair(StorkSession other) {

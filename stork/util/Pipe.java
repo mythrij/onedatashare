@@ -80,40 +80,4 @@ public class Pipe<T> {
       e.close();
     closed = true;
   }
-
-  // Testers
-  // -------
-  public static void main(String[] args) {
-    for (String s : args) switch (Integer.parseInt(s)) {
-      case 1: test1(); break;
-      case 2: test2(); break;
-    }
-  }
-
-  // Test a simple one-ended pipe.
-  public static void test1() {
-    Pipe<String>.End p = new Pipe<String>().new End();
-    String s;
-
-    p.put("hello");
-    p.put("there");
-    p.put("goodbye");
-    p.close();
-
-    while ((s = p.get()) != null)
-      System.out.println(s);
-  }
-
-  // Test two-way communication.
-  public static void test2() {
-    Pipe<String> pipe = new Pipe<String>();
-    Pipe<String>.End p1 = pipe.new End();
-    Pipe<String>.End p2 = pipe.new End();
-
-    p1.put("hello");
-    p2.put("goodbye");
-
-    System.out.println(p1.get());
-    System.out.println(p2.get());
-  }
 }

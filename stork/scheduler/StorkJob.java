@@ -20,19 +20,20 @@ import java.net.URI;
 //   files_done  - indication that some files have been transferred
 //   complete    - true if success, false if failure
 
+@SuppressWarnings("fallthrough")
 public class StorkJob {
   private int job_id = 0;
   private JobStatus status = null;
   private EndPoint src = null, dest = null;
   private String x509_proxy = null;
   private String user_id = null;
-  private transient TransferProgress tp = new TransferProgress();
+  private TransferProgress progress = new TransferProgress();
 
   private int attempts = 0, max_attempts = 10;
   private String message = null;
 
-  private transient Watch queue_timer = new Watch(),
-                          run_timer   = new Watch();
+  private Watch queue_timer = null;
+  private Watch run_timer   = null;
 
   // Create and enqueue a new job from a user input ad.
   // TODO: Strict filtering and checking.
@@ -52,7 +53,7 @@ public class StorkJob {
   // Gets the job info as an ad, merged with progress ad.
   // TODO: More proper filtering.
   public synchronized Ad getAd() {
-    return Ad.marshal(this).merge(tp.getAd()).remove("x509_proxy");
+    return Ad.marshal(this).remove("x509_proxy");
   }
 
   // Get the user_id of the user who owns this job.
@@ -72,9 +73,9 @@ public class StorkJob {
     // Update state.
     switch (s) {
       case scheduled:
-        queue_timer.start(); break;
+        queue_timer = new Watch(true); break;
       case processing:
-        run_timer.start(); break;
+        run_timer = new Watch(true); break;
       case removed:
       case failed:
       case complete:
@@ -135,10 +136,22 @@ public class StorkJob {
     return status;
   }
 
+  // Return whether or not the job has terminated.
+  public boolean isComplete() {
+    switch (status) {
+      case scheduled:
+      case processing:
+      case paused:
+        return false;
+      default:
+        return true;
+    }
+  }
+
   // Run the job and watch it to completion.
   // FIXME: Race condition?
   public void run() {
-    StorkSession ss = null, ds = null;
+    StorkSession session = null;
 
     try {
       synchronized (this) {
@@ -149,34 +162,32 @@ public class StorkJob {
       }
 
       // Establish connections to end-points.
-      ss = src.session();
-      ds = dest.session();
-      ss.pair(ds);
+      session = src.pairWith(dest);
 
       // Create a pipe to process progress ads from the module.
       Pipe<Ad> pipe = new Pipe<Ad>();
       pipe.new End(false) {
         public void store(Ad ad) {
           if (ad.has("bytes_total") || ad.has("files_total"))
-            tp.transferStarted(ad.getLong("bytes_total"),
+            progress.transferStarted(ad.getLong("bytes_total"),
                                ad.getInt("files_total"));
           if (ad.has("bytes_done") || ad.has("files_done"))
-            tp.done(ad.getLong("bytes_done"), ad.getInt("files_done"));
+            progress.done(ad.getLong("bytes_done"), ad.getInt("files_done"));
           if (ad.getBoolean("complete"))
-            tp.transferEnded(ad.get("error") == null);
+            progress.transferEnded(!ad.has("error"));
         }
       };
 
       // Begin the transfer after attaching pipe.
       pipe.new End().put(new Ad());
-      ss.setPipe(pipe.new End());
-      ss.transfer(src.path(), dest.path());
+      session.setPipe(pipe.new End());
+      session.transfer(src.path(), dest.path());
 
       // We made it!
       status(complete);
     } catch (Exception e) {
       // Tell the transfer progress we're done.
-      tp.transferEnded(false);
+      progress.transferEnded(false);
 
       if (e instanceof FatalEx || !shouldReschedule()) {
         status(failed);
@@ -185,8 +196,7 @@ public class StorkJob {
         attempts++;
       } message = e.getMessage();
     } finally {
-      if (ss != null) ss.close();
-      if (ds != null) ds.close();
+      if (session != null) session.closeBoth();
     }
   }
 }

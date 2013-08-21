@@ -89,7 +89,7 @@ public class StorkScheduler {
           // Alert the user if it failed.
           case failed:
             Log.info("Job "+job.jobId()+" failed!");
-        }
+        } dumpState();
       } catch (Exception e) {
         continue;
       }
@@ -139,15 +139,11 @@ public class StorkScheduler {
           // Let the magic happen.
           req.done(handler.handle(req));
         } catch (Exception e) {
+          e.printStackTrace();
           String m = e.getMessage();
           req.done(new Ad("error", m == null ? e.toString() : m));
         } finally {
           Log.fine("Worker done with request: "+req.cmd);
-
-          // Used for debugging thread leaks.
-          //System.out.println("Thread count: "+getAllStackTraces().size());
-          //for (Thread t : getAllStackTraces().keySet())
-            //System.out.println(t);
         }
       }
     }
@@ -220,7 +216,9 @@ public class StorkScheduler {
   // I cannot believe how simple this thing is for what it does.
   class StorkSubmitHandler extends StorkCommand {
     public Ad handle(RequestContext req) {
-      return job_queue.put(StorkJob.create(req.ad)).getAd();
+      Ad ad = job_queue.put(StorkJob.create(req.ad)).getAd();
+      dumpState();
+      return ad;
     }
   }
 
@@ -292,30 +290,11 @@ public class StorkScheduler {
   // Iterate over libexec directory and add transfer modules to list.
   public void populateModules() {
     // Load built-in modules.
-    // TODO: Not this...
+    // TODO: Automatic discovery for built-in modules.
     xfer_modules.register(new GridFTPModule());
     xfer_modules.register(new SFTPModule());
-
-    // Iterate over and populate external module list.
-    // TODO: Do this in parallel and detect misbehaving externals.
-    if (env.has("libexec")) {
-      File dir = new File(env.get("libexec"));
-
-      if (dir.isDirectory()) for (File f : dir.listFiles()) {
-        // Skip over things that obviously aren't transfer modules.
-        if (!f.isFile() || f.isHidden() || !f.canExecute())
-          continue;
-
-        try {
-          xfer_modules.register(new ExternalModule(f));
-        } catch (Exception e) {
-          e.printStackTrace();
-          Log.warning(f, ": ", e.getMessage());
-        }
-      } else {
-        Log.warning("libexec is not a directory!");
-      }
-    }
+    if (env.has("libexec"))
+      xfer_modules.registerDirectory(new File(env.get("libexec")));
 
     // Check if anything got added.
     if (xfer_modules.modules().isEmpty())
