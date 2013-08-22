@@ -26,7 +26,7 @@ public class EndPoint {
     this(StorkUtil.makeURI(s));
   } public EndPoint(URI u) {
     if (u == null)
-      throw new FatalEx("missing URI field from endpoint");
+      throw new RuntimeException("missing URI field from endpoint");
     uri = u;
   }
 

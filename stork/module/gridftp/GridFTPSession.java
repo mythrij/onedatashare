@@ -5,6 +5,7 @@ import stork.module.*;
 import stork.util.*;
 import stork.scheduler.*;
 import static stork.util.StorkUtil.Static.*;
+import static stork.module.ModuleException.*;
 import stork.stat.*;
 import stork.cred.*;
 
@@ -113,7 +114,7 @@ public class GridFTPSession extends StorkSession {
       cc.execute("CWD "+path+"/");
     } catch (Exception e) {
       cp.oc.close();
-      throw new TempEx(e.getMessage());
+      throw abort(false, e);
     }
 
     work.add("");
@@ -153,7 +154,7 @@ public class GridFTPSession extends StorkSession {
       } catch (Exception e) {
         if (total < 2) {
           cp.oc.close();
-          throw new TempEx(e.getMessage(), e);
+          throw abort(false, e);
         }
       }
     }
@@ -170,10 +171,10 @@ public class GridFTPSession extends StorkSession {
         return StorkUtil.size(path);
       Reply r = cc.exchange("SIZE "+path);
       if (!Reply.isPositiveCompletion(r))
-        throw new FatalEx("file does not exist: "+path);
+        throw abort("file does not exist: "+path);
       return Long.parseLong(r.getMessage());
     } catch (Exception e) {
-      throw new FatalEx(e);
+      throw abort(e);
     }
   }
 
@@ -184,9 +185,9 @@ public class GridFTPSession extends StorkSession {
 
     // Some quick sanity checking.
     if (src == null || src.isEmpty())
-      throw new FatalEx("src path is empty");
+      throw abort("src path is empty");
     if (dest == null || dest.isEmpty())
-      throw new FatalEx("dest path is empty");
+      throw abort("dest path is empty");
 
     D("Transferring: ", src, " -> ", dest);
 
@@ -206,7 +207,7 @@ public class GridFTPSession extends StorkSession {
     try {
       transfer(xl);
     } catch (Exception e) {
-      throw new FatalEx(e.getMessage(), e);
+      throw abort(e.getMessage(), e);
     }
   }
 

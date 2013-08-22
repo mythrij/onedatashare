@@ -3,6 +3,7 @@ package stork.module;
 import stork.ad.*;
 import stork.util.*;
 import stork.scheduler.*;
+import static stork.module.ModuleException.*;
 import java.net.URI;
 
 // Abstract base class for a Stork transfer module.
@@ -49,7 +50,7 @@ public abstract class TransferModule {
     try {
       return session(ep).list(ep.path(), null);
     } catch (Exception e) {
-      throw new FatalEx("couldn't list: "+e.getMessage());
+      throw abort(true, "couldn't list", e);
     }
   }
 

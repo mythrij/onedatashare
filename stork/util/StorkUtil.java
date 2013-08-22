@@ -183,26 +183,32 @@ public abstract class StorkUtil {
       URI u = new URI(uri).normalize();
 
       if (u.getScheme() == null || u.getScheme().isEmpty())
-        throw new FatalEx("no protocol specified");
+        throw new RuntimeException("no protocol specified");
 
       return u;
     } catch (Exception e) {
-      throw new FatalEx("couldn't parse URI: "+e.getMessage(), e);
+      throw new RuntimeException("couldn't parse URI: "+e.getMessage(), e);
     }
   }
 
   // Convert a size into a human-readable string.
   public static String prettySize(long s) {
-    return prettySize((double)s, ' ');
+    return prettySize((double)s, (char)10);
   } public static String prettySize(double s) {
-    return prettySize(s, ' ');
+    return prettySize(s, (char)10);
   } private static String prettySize(double s, char pre) {
     if (s >= 1000) switch (pre) {
-      case ' ': return prettySize(s/1000, 'k');
-      case 'k': return prettySize(s/1000, 'M');
+      // Uppercase characters for base 10.
+      case 10 : return prettySize(s/1000, 'K');
+      case 'K': return prettySize(s/1000, 'M');
       case 'M': return prettySize(s/1000, 'G');
       case 'G': return prettySize(s/1000, 'T');
-    } if (pre == ' ') {
+      // Uppercase characters for base 2.
+      case  2 : return prettySize(s/1024, 'k');
+      case 'k': return prettySize(s/1024, 'm');
+      case 'm': return prettySize(s/1024, 'g');
+      case 'g': return prettySize(s/1024, 't');
+    } if (pre <= 10) {
       return String.format("%d", (int) s);
     } return String.format("%.02f%c", s, pre);
   }
@@ -213,7 +219,7 @@ public abstract class StorkUtil {
     try {
       path = new URI(null, null, path, null).normalize().getPath();
     } catch (Exception e) {
-      throw new FatalEx("invalid path");
+      throw new RuntimeException("invalid path");
     } if (path.startsWith("/~")) {
       path = path.substring(1);
     } return path;

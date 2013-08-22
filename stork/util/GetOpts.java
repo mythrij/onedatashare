@@ -141,7 +141,7 @@ public class GetOpts {
         return new Ad().put(name, s);
       if (optional)
         return new Ad().put(name, true);
-      throw new FatalEx(name+" requires an argument!");
+      throw new RuntimeException(name+" requires an argument!");
     }
   }
 
@@ -155,11 +155,11 @@ public class GetOpts {
     o.c = c; o.desc = desc;
 
     if (n == null || n.isEmpty())
-      throw new FatalEx("Option name cannot be null or empty!");
+      throw new RuntimeException("Option name cannot be null or empty!");
     if (c != 0 && by_char.containsKey(c))
-      throw new FatalEx("Option already exists with short name: "+c);
+      throw new RuntimeException("Option already exists with short name: "+c);
     if (n != null && by_name.containsKey(n))
-      throw new FatalEx("Option already exists with name: "+n);
+      throw new RuntimeException("Option already exists with name: "+n);
     if (c != 0)
       by_char.put(c, o);
     by_name.put(n, o);

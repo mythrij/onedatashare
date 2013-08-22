@@ -104,6 +104,8 @@ public class Ad implements Serializable {
     return parse(is, false);
   } public static Ad parse(File f) {
     return parse(f, false);
+  } public static Ad parse(Reader r) {
+    return parse(r, false);
   }
 
   public static Ad parse(CharSequence cs, boolean body_only) {
@@ -125,6 +127,8 @@ public class Ad implements Serializable {
         // Ugh, whatever...
       }
     }
+  } public static Ad parse(Reader r, boolean body_only) {
+    return new AdParser(r, body_only).parse();
   }
 
   // Access methods

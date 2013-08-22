@@ -1,22 +1,19 @@
 package stork.module.gridftp;
 
 import stork.ad.*;
-import stork.module.*;
 import stork.util.*;
+import static stork.module.ModuleException.*;
 import static stork.util.StorkUtil.Static.*;
 import stork.stat.*;
 import stork.cred.*;
 
-import java.net.*;
 import java.util.*;
-import java.io.*;
+import java.net.*;
 
 import org.globus.ftp.*;
 import org.globus.ftp.vanilla.*;
 import org.globus.ftp.extended.*;
 import org.globus.ftp.dc.*;
-import org.ietf.jgss.*;
-import org.gridforum.jgss.*;
 
 // Wrapper for the JGlobus control channel classes which abstracts away
 // differences between local and remote transfers.
@@ -87,7 +84,7 @@ public class ControlChannel extends Pipeline<String, Reply> {
     port = u.port;
 
     if (u.file)
-      throw new FatalEx("making remote connection to invalid URL");
+      throw abort("making remote connection to invalid URL");
     local = false;
     facade = null;
     gridftp = u.gridftp;
@@ -101,7 +98,7 @@ public class ControlChannel extends Pipeline<String, Reply> {
         if (u.cred != null) try {
           fc.authenticate(u.cred.credential(), null);
         } catch (Exception e) {
-          throw new FatalEx("could not authenticate (certificate issue?) "+e);
+          throw abort("could not authenticate (certificate issue?) "+e);
         } else {
           String user = (u.user == null) ? "anonymous" : u.user;
           String pass = (u.pass == null) ? "" : u.pass;
@@ -109,9 +106,9 @@ public class ControlChannel extends Pipeline<String, Reply> {
           if (Reply.isPositiveIntermediate(r)) try {
             execute(("PASS "+pass).trim());
           } catch (Exception e) {
-            throw new FatalEx("bad password");
+            throw abort("bad password");
           } else if (!Reply.isPositiveCompletion(r)) {
-            throw new FatalEx("bad username");
+            throw abort("bad username");
           }
         }
 
@@ -127,22 +124,22 @@ public class ControlChannel extends Pipeline<String, Reply> {
         if (Reply.isPositiveIntermediate(r)) try {
           execute("PASS "+pass);
         } catch (Exception e) {
-          throw new FatalEx("bad password");
+          throw abort("bad password");
         } else if (!Reply.isPositiveCompletion(r)) {
-          throw new FatalEx("bad username");
+          throw abort("bad username");
         }
       }
     } catch (Exception e) {
       if (e instanceof RuntimeException)
         throw (RuntimeException) e;
-      throw new FatalEx("couldn't establish channel: "+e.getMessage(), e);
+      throw abort("couldn't establish channel: "+e.getMessage(), e);
     }
   }
 
   // Make a local control channel connection to a remote control channel.
   public ControlChannel(ControlChannel rc) {
     if (rc.local)
-      throw new FatalEx("making local facade for local channel");
+      throw abort("making local facade for local channel");
     local = true;
     gridftp = rc.gridftp;
     facade = new HackedFTPServerFacade(rc.fc);
@@ -165,13 +162,13 @@ public class ControlChannel extends Pipeline<String, Reply> {
       case 'E': return org.globus.ftp.GridFTPSession.MODE_EBLOCK;
       case 'B': return org.globus.ftp.GridFTPSession.MODE_BLOCK;
       case 'S': return org.globus.ftp.GridFTPSession.MODE_STREAM;
-      default : throw new FatalEx("bad mode: "+m);
+      default : throw abort("bad mode: "+m);
     }
   } private static int typeIntValue(char t) {
     switch (t) {
       case 'A': return Session.TYPE_ASCII;
       case 'I': return Session.TYPE_IMAGE;
-      default : throw new FatalEx("bad type: "+t);
+      default : throw abort("bad type: "+t);
     }
   }
 
@@ -206,7 +203,7 @@ public class ControlChannel extends Pipeline<String, Reply> {
     try {
       fc.write(new Command(cmd));
     } catch (Exception e) {
-      throw new FatalEx("read error: "+e.getMessage(), e);
+      throw abort("read error: "+e.getMessage(), e);
     }
   }
 
@@ -215,7 +212,7 @@ public class ControlChannel extends Pipeline<String, Reply> {
     try {
       return cc.read();
     } catch (Exception e) {
-      throw new FatalEx("read error: "+e.getMessage(), e);
+      throw abort("read error: "+e.getMessage(), e);
     }
   }
 
@@ -242,7 +239,7 @@ public class ControlChannel extends Pipeline<String, Reply> {
       ListAdSink sink = new ListAdSink(ad, false);
 
       if (!Reply.isPositiveCompletion(r))
-        throw new FatalEx("couldn't list: "+r);
+        throw abort("couldn't list: "+r);
       sink.write(r.getMessage().getBytes());
       try {
         sink.close();
@@ -265,7 +262,7 @@ public class ControlChannel extends Pipeline<String, Reply> {
       Reply r = readChannel();
 
       if (!Reply.isPositivePreliminary(r)) {
-        throw new FatalEx("transfer failed to start: "+r);
+        throw abort("transfer failed to start: "+r);
       } while (true) switch ((r = readChannel()).getCode()) {
         case 111:  // Restart marker
           break;   // Just ignore for now...
@@ -276,7 +273,7 @@ public class ControlChannel extends Pipeline<String, Reply> {
           if (sess != null) sess.reportProgress(new Ad("files_done", 1));
           return r;
         default:
-          throw new FatalEx("unexpected reply: "+r.getCode());
+          throw abort("unexpected reply: "+r.getCode());
       }
     }
   }
@@ -285,7 +282,7 @@ public class ControlChannel extends Pipeline<String, Reply> {
   public Reply execute(String cmd) {
     Reply r = exchange(cmd);
     if (!Reply.isPositiveCompletion(r))
-      throw new FatalEx("bad reply: "+r);
+      throw abort("bad reply: "+r);
     return r;
   }
 
@@ -303,7 +300,7 @@ public class ControlChannel extends Pipeline<String, Reply> {
     }
   }
 
-  public void abort() {
+  public void abortChannel() {
     try {
       if (local)
         facade.abort();

@@ -57,6 +57,8 @@ public class AdSorter {
   // Get the sorted linked ad from the sorter.
   public List<Ad> getAds() {
     return new LinkedList<Ad>(reverse ? set.descendingSet() : set);
+  } public Ad asAd() {
+    return new Ad(set);
   }
 
   // Get the number of ads in the sorter.

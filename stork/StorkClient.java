@@ -59,6 +59,9 @@ public class StorkClient {
         if (is == null || os == null)
           throw new Exception("problem with socket");
 
+        // Get server info message.
+        Ad info = Ad.parse(is);
+
         // Write command ad to the server.
         do {
           ad = command();
@@ -68,8 +71,9 @@ public class StorkClient {
           os.flush();
 
           handle(ad = Ad.parse(is));
-          return ad;
         } while (hasMoreCommands());
+
+        return ad;
       } catch (RuntimeException e) {
         throw e;
       } catch (Exception e) {
@@ -208,6 +212,7 @@ public class StorkClient {
   static class StorkQHandler extends StorkCommand {
     boolean count_only = false;
     boolean raw = false;
+    int watch = -1;
     Ad cmd = null;
 
     public GetOpts parser() {
@@ -227,9 +232,10 @@ public class StorkClient {
       opts.add('n', "limit", "retrieve at most N results").parser =
         opts.new SimpleParser("limit", "N", false);
       opts.add('r', "reverse", "reverse printing order (oldest first)");
-      opts.add('w', "watch",
-               "fetch queue every T seconds (default 2)").parser =
-        opts.new SimpleParser("watch", "T", true);
+      //opts.add('w', "watch",
+               //"fetch queue every T seconds (default 2)").parser =
+        //opts.new SimpleParser("watch", "T", true);
+      opts.add('w', "watch", "fetch queue every T seconds (default 2)");
       opts.add("daglog", "output results to FILE in DAGMan log format")
         .parser = opts.new SimpleParser("daglog", "FILE", false);
 
@@ -237,22 +243,24 @@ public class StorkClient {
     }
 
     public Ad command() {
-      Ad ad = new Ad();
-      Ad res;
       Range range = new Range();
       String status = null;
-      int watch = -1;
+
+      // If we've already got cmd, return it.
+      if (cmd != null)
+        return cmd;
+      cmd = new Ad();
 
       if (env.has("watch"))
         watch = env.getInt("watch", 2);
 
-      ad.put("command", "q");
+      cmd.put("command", "q");
 
       // Check command line options.
       if (env.getBoolean("count"))
-        ad.put("count", count_only = true);
+        cmd.put("count", count_only = true);
       if (env.getBoolean("reverse"))
-        ad.put("reverse", true);
+        cmd.put("reverse", true);
 
       // Parse arguments
       for (String s : args) {
@@ -268,10 +276,10 @@ public class StorkClient {
       }
 
       if (!range.isEmpty())
-        ad.put("range", range.toString());
+        cmd.put("range", range.toString());
       if (status != null)
-        ad.put("status", status);
-      return cmd = ad;
+        cmd.put("status", status);
+      return cmd;
     }
 
     // Print a job ad in a nice and pretty format.
@@ -321,7 +329,15 @@ public class StorkClient {
           System.out.println(0);
         else if (ad.has("count"))
           System.out.println(ad.getInt("count"));
+        else
+          System.out.println(ad.size());
         return;
+      }
+
+      // If we're watching, clear the screen. TODO: Portability.
+      if (watch > 0) {
+        System.out.print("\033[H\033[2J");
+        System.out.print("Querying every "+watch+"s...\n\n");
       }
 
       // Print this so the user knows what exactly was requested.
@@ -336,57 +352,41 @@ public class StorkClient {
       }
 
       // Check if there was an error.
-      if (ad.has("error"))
-        throw new FatalEx(ad.get("error"));
-      if (!ad.has("jobs"))
-        throw new FatalEx("unexpected reply format");
+      if (ad.isMap()) {
+        if (ad.has("error"))
+          throw new RuntimeException(ad.get("error"));
+        throw new RuntimeException("unexpected reply format");
+      }
 
       // Print all the job ads. TODO: Better formatting.
       if (!raw) {
         printTableHeader();
-        for (Ad a : ad.getAds("jobs"))
+        for (Ad a : ad.getAds())
           formatJobAd(a);
       } else {
         System.out.println(ad);
       }
 
       // Report how many ads we received.
-      int count = ad.getInt("count");
-      String not_found = ad.get("not_found");
+      if (ad.size() > 0)
+        System.out.println("Found "+ad.size()+" job(s).");
+      else
+        System.out.println("No jobs found.");
 
-      if (count > 0) {
-        String msg = "Received "+count+" job ad(s)";
-        if (not_found != null)
-          msg += ", but some jobs were not found: "+not_found;
-        else
-          msg += ".";
-        System.out.println(msg);
-      } else {
-        System.out.println("No jobs found...");
+      // Sleep if we're watching.
+      while (watch > 0) try {
+        System.out.println("\nPress ctrl-C to stop querying.");
+        Thread.sleep(watch*1000);
+        break;
+      } catch (Exception e) {
+        // Sleep again...
       }
+    }
 
-      // If we're watching, keep resending every interval.
-      // TODO: Make sure clearing is portable.
-      /*
-      if (watch > 0) while (true) {
-        System.out.print("\033[H\033[2J");
-        System.out.print("Querying every "+watch+" sec...\n\n");
-        res = sendRequest(ad);
-
-        if (!res.success()) break;
-
-        try {
-          Thread.sleep(watch*1000);
-        } catch (Exception e) { break; }
-      } else {
-        res = sendRequest(ad);
-      } return res;
-      */
+    public boolean hasMoreCommands() {
+      return watch > 0;
     }
   }
-
-  // Kind of stupidly hacked together thing that periodicially checks the
-  // status of 
 
   static class StorkRmHandler extends StorkCommand {
     public GetOpts parser() {
@@ -410,13 +410,13 @@ public class StorkClient {
 
       // Arg check.
       if (args.length < 1)
-        throw new FatalEx("not enough arguments");
+        throw new RuntimeException("not enough arguments");
 
       // Parse arguments.
       for (String s : args) {
         Range r = Range.parseRange(s);
         if (r == null)
-          throw new FatalEx("invalid argument: "+s);
+          throw new RuntimeException("invalid argument: "+s);
         range.swallow(r);
       }
 
@@ -528,7 +528,7 @@ public class StorkClient {
       // own ad.
       if (!parsedArgs) switch (args.length) {
         default:
-          throw new FatalEx("wrong number of arguments");
+          throw new RuntimeException("wrong number of arguments");
         case 2:  // src_url and dest_url
           ad = new Ad("src",  args[0]).put("dest", args[1]);
           break;
@@ -539,7 +539,10 @@ public class StorkClient {
           if (System.console() != null) {
             echo = false;
             System.out.print("Begin typing submit ads (ctrl+D to end):\n\n");
-          } ad = Ad.parse(System.in, true);
+            ad = Ad.parse(System.console().reader());
+          } else {
+            ad = Ad.parse(System.in, true);
+          }
       } parsedArgs = true;
 
       // Check if this is an ad list with only one ad.
@@ -605,12 +608,12 @@ public class StorkClient {
       if (args.length > 0) try {
         return Ad.parse(new FileInputStream(args[0]));
       } catch (Exception e) {
-        throw new FatalEx("couldn't read ad from file");
+        throw new RuntimeException("couldn't read ad from file");
       } else try {
         System.out.print("Type a command ad:\n\n");
         return Ad.parse(System.in);
       } catch (Exception e) {
-        throw new FatalEx("couldn't read ad from stream");
+        throw new RuntimeException("couldn't read ad from stream");
       }
     }
         

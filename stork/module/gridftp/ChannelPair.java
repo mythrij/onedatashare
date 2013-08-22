@@ -3,9 +3,9 @@ package stork.module.gridftp;
 import stork.ad.*;
 import stork.module.*;
 import stork.util.*;
-import static stork.util.StorkUtil.Static.*;
 import stork.stat.*;
 import stork.cred.*;
+import static stork.module.ModuleException.*;
 
 import java.net.*;
 import java.util.*;
@@ -35,10 +35,8 @@ public class ChannelPair {
 
   // Create a control channel pair.
   public ChannelPair(ControlChannel sc, ControlChannel dc) {
-    if (sc == null || dc == null) {
-      throw new FatalEx("ChannelPair called with null args");
-    } if (sc.local && dc.local) {
-      throw new FatalEx("file-to-file not supported");
+    if (sc.local && dc.local) {
+      throw abort("file-to-file not supported");
     } else if (sc.local) {
       rc = this.dc = dc;
       oc = this.sc = sc;
@@ -54,7 +52,7 @@ public class ChannelPair {
   // Pair a channel with a new local channel. Note: doesn't duplicate().
   public ChannelPair(ControlChannel cc) {
     if (cc.local)
-      throw new FatalEx("cannot create local pair for local channel");
+      abort("cannot create local pair for local channel");
     rc = dc = cc;
     oc = sc = new ControlChannel(cc);
   }
@@ -85,10 +83,10 @@ public class ChannelPair {
         if (i != 6)
           throw new Exception(""+i);
         port = ((bytes[4]&0xFF)<<8) + (bytes[5]&0xFF);
-        D("Port: "+port);
-        D("      "+(port&0xFFFF));
+        Log.fine("Port: "+port);
+        Log.fine("      "+(port&0xFFFF));
       } catch (Exception e) {
-        throw new FatalEx("malformed PASV reply", e);
+        abort("malformed PASV reply", e);
       }
     } public int getPort() {
       return port & 0xFFFF;
@@ -119,8 +117,8 @@ public class ChannelPair {
         byte[] hpb = hp.bytes;
         byte[] ccb = rc.getIP().getAddress();
 
-        D("Current HostPort: "+hp.getHost()+":"+hp.getPort());
-        D("                  "+s);
+        Log.fine("Current HostPort: "+hp.getHost()+":"+hp.getPort());
+        Log.fine("                  "+s);
 
         try {
           if (hpb[0] != ccb[0] || hpb[1] != ccb[1] || hpb[2] != ccb[2])
@@ -129,12 +127,12 @@ public class ChannelPair {
           hp.bytes = ccb;
         }
 
-        D("Making active connection to: "+hp.getHost()+":"+hp.getPort());
+        Log.fine("Making active connection to: "+hp);
 
         if (oc.local) try {
           oc.facade.setActive(hp);
         } catch (Exception e) {
-          throw new FatalEx(e.getMessage(), e);
+          abort(e);
         } else if (oc.fc.isIPv6()) {
           oc.execute("EPRT "+hp.toFtpCmdArgument());
         } else {
@@ -196,9 +194,9 @@ public class ChannelPair {
     } catch (Exception e) { /* who cares */ }
   }
 
-  public void abort() {
+  public void abortPair() {
     try {
-      sc.abort(); dc.abort();
+      sc.abortChannel(); dc.abortChannel();
     } catch (Exception e) { /* who cares */ }
   }
 
@@ -220,9 +218,9 @@ public class ChannelPair {
       if (sc.local) try {
         sc.facade.retrieve(new FileMap(path, off, len));
       } catch (Exception ex) {
-        throw new TempEx("could not retrieve: "+ex.getMessage(), ex);
+        abort(false, "could not retrieve", ex);
       } else if (len > -1) {
-        sc.write(J("ERET P", off, len, path), hs);
+        sc.write(StorkUtil.join("ERET P", off, len, path), hs);
       } else {
         if (off > 0)
           sc.write("REST "+off);
@@ -234,9 +232,9 @@ public class ChannelPair {
       if (dc.local) try {
         dc.facade.store(new FileMap(dpath, off, len));
       } catch (Exception ex) {
-        throw new TempEx("could not store: "+ex.getMessage(), ex);
+        abort(false, "could not store", ex);
       } else if (len > -1) {
-        dc.write(J("ESTO A", off, dpath), hd);
+        dc.write(StorkUtil.join("ESTO A", off, dpath), hd);
       } else {
         if (off > 0)
           dc.write("REST "+off);

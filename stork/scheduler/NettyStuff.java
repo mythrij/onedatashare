@@ -2,6 +2,7 @@ package stork.scheduler;
 
 import stork.util.*;
 import stork.ad.*;
+import stork.*;
 
 import io.netty.bootstrap.*;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -13,7 +14,7 @@ import io.netty.channel.socket.*;
 import static io.netty.util.CharsetUtil.UTF_8;
 
 import java.io.*;
-import java.net.InetSocketAddress;
+import java.net.*;
 
 // A bunch of classes under one namespace that implement various
 // pieces needed to use Netty for network communications.
@@ -52,6 +53,8 @@ public abstract class NettyStuff {
         } catch (Error e) {
           e.printStackTrace();
           throw e;
+        } finally {
+          //ctx.close();
         }
       }
     };
@@ -84,6 +87,11 @@ public abstract class NettyStuff {
       pl.addLast("decoder", codec.decoder);
       pl.addLast("encoder", codec.encoder);
       pl.addLast(new AdServerHandler(sched));
+
+      // Write welcome ad.
+      ch.write(new Ad("host", ch.localAddress().getHostName())
+                 .put("name", "Stork")
+                 .put("version", StorkMain.version()));
     }
   }
 

@@ -118,19 +118,20 @@ public class StorkScheduler {
         // Try handling the command.
         try {
           if (req.cmd == null)
-            throw new FatalEx("no command specified");
+            throw new RuntimeException("no command specified");
 
           StorkCommand handler = cmd_handlers.get(req.cmd);
 
           if (handler == null)
-            throw new FatalEx("invalid command: "+req.cmd);
+            throw new RuntimeException("invalid command: "+req.cmd);
 
           // Check if the handler requires a logged in user.
           if (env.getBoolean("registration")) {
             if (handler.requiresLogin()) try {
               req.user = StorkUser.login(req.ad);
             } catch (RuntimeException e) {
-              throw new FatalEx("action requires login: "+e.getMessage());
+              throw new RuntimeException(
+                "action requires login: "+e.getMessage());
             }
           }
 
@@ -167,16 +168,9 @@ public class StorkScheduler {
 
       // Add jobs to the ad sorter.
       sorter.add(job_queue.get(req.ad).getAds());
-      int count = sorter.size();
 
-      if (count < 1)
-        throw new FatalEx("no jobs found");
-
-      Ad ad = new Ad("count", count);
-
-      if (!req.ad.getBoolean("count"))
-        ad.put("jobs", sorter.getAds());
-      return ad;
+      return (req.ad.getBoolean("count")) ? new Ad("count", sorter.size())
+                                          : sorter.asAd();
     }
   }
 
@@ -386,9 +380,9 @@ public class StorkScheduler {
         // Some initial sanity checks.
         if (state_file.exists()) {
           if (state_file.exists() && !state_file.isFile())
-            throw new FatalEx("state file is a directory");
+            throw new RuntimeException("state file is a directory");
           if (!state_file.canWrite())
-            throw new FatalEx("cannot write to state file");
+            throw new RuntimeException("cannot write to state file");
         }
 
         temp_file = File.createTempFile(
@@ -400,7 +394,7 @@ public class StorkScheduler {
         pw = null;
 
         if (!temp_file.renameTo(state_file))
-          throw new FatalEx("could not rename temp file");
+          throw new RuntimeException("could not rename temp file");
       } catch (Exception e) {
         Log.warning("couldn't save state: "+
                            state_file+": "+e.getMessage());

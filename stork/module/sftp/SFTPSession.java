@@ -4,6 +4,8 @@ import stork.ad.*;
 import stork.util.*;
 import stork.cred.*;
 import stork.module.*;
+import static stork.module.ModuleException.*;
+
 import java.net.URI;
 import com.jcraft.jsch.*;
 
@@ -30,10 +32,10 @@ public class SFTPSession extends StorkSession {
     final String[] ui = StorkUserinfo.split(uri.getUserInfo());
 
     // Establish the session connection. TODO: scp vs. sftp
-    try {
-      jsch = new JSch();
-      JSch.setConfig("StrictHostKeyChecking", "no");
+    jsch = new JSch();
+    JSch.setConfig("StrictHostKeyChecking", "no");
 
+    try {
       session = jsch.getSession(ui[0], uri.getHost(), port);
       session.setUserInfo(new UserInfo() {
         public String getPassphrase() { return null; }
@@ -41,7 +43,7 @@ public class SFTPSession extends StorkSession {
         public boolean promptPassphrase(String m) { return true; }
         public boolean promptPassword(String m) { return true; }
         public boolean promptYesNo(String m) { return true; }
-        public void showMessage(String m) { throw new FatalEx(m); }
+        public void showMessage(String m) { throw abort(m); }
       });
       session.setDaemonThread(true);
       session.connect();
@@ -49,16 +51,16 @@ public class SFTPSession extends StorkSession {
       channel = (ChannelSftp) session.openChannel("sftp");
       channel.connect();
     } catch (Exception e) {
-      throw new FatalEx("error connecting", e);
+      throw abort(e);
     }
   }
 
   // Get a directory listing of a path from the session.
   protected Ad listImpl(String path, Ad opts) {
-    try {
-      Ad ad = new Ad("name", path);
-      AdSorter sorter = new AdSorter("dir", "name");
+    Ad ad = new Ad("name", path);
+    AdSorter sorter = new AdSorter("dir", "name");
 
+    try {
       for (Object o : channel.ls(path)) {
         ChannelSftp.LsEntry ls = (ChannelSftp.LsEntry) o;
         String name = ls.getFilename();
@@ -81,11 +83,11 @@ public class SFTPSession extends StorkSession {
         // Add file to list.
         sorter.add(a);
       }
-
-      return ad.put("files", sorter.getAds());
     } catch (Exception e) {
-      throw new FatalEx("could not list: "+path, e);
+      throw abort(e);
     }
+
+    return ad.put("files", sorter.getAds());
   }
 
   // Get the size of a file given by a path.
@@ -99,7 +101,7 @@ public class SFTPSession extends StorkSession {
 
   // Transfer from this session to a paired session. opts can be null.
   protected void transferImpl(String src, String dest, Ad opts) {
-    throw new FatalEx("sftp transfer is not supported");
+    throw abort("sftp transfer is not supported");
   }
 
   // Close the session and free any resources.

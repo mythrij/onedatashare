@@ -3,6 +3,7 @@ package stork.module;
 import stork.ad.*;
 import stork.util.*;
 import stork.scheduler.*;
+import static stork.module.ModuleException.*;
 import java.net.URI;
 
 // Represents a connection to a remote end-point. A session should
@@ -91,7 +92,7 @@ public abstract class StorkSession {
   public void transfer(String src, String dest, Ad opts) {
     checkConnected();
     if (pair == null)
-      throw new FatalEx("session is not paired");
+      throw abort("session is not paired");
     if (opts == null)
       opts = new Ad();
     src = StorkUtil.normalizePath(src);
@@ -102,7 +103,7 @@ public abstract class StorkSession {
   // Check if the session hasn't been closed. Throws exception if so.
   private void checkConnected() {
     if (!isConnected())
-      throw new FatalEx("session has been closed");
+      throw abort("session has been closed");
   }
 
   // Check if the session is connected or if it's closed.
@@ -130,13 +131,13 @@ public abstract class StorkSession {
   // to see if the sessions are compatible. Returns paired session.
   public synchronized StorkSession pair(StorkSession other) {
     if (other != null && pair == other)
-      throw new FatalEx("these sessions are already paired");
+      throw abort("these sessions are already paired");
     if (other == this)
-      throw new FatalEx("cannot pair a session with itself");
+      throw abort("cannot pair a session with itself");
     if (other != null && (!pairCheck(other) || !other.pairCheck(this)))
-      throw new FatalEx("other session is not compatible with this session");
+      throw abort("other session is not compatible with this session");
     if (other != null && other.pair != null)
-      throw new FatalEx("other session is already paired");
+      throw abort("other session is already paired");
     if (other == null)
       return null;
     if (pair != null)

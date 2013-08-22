@@ -157,7 +157,7 @@ public class StorkJob {
       synchronized (this) {
         // Must be scheduled to be able to run.
         if (status != JobStatus.scheduled)
-          throw new FatalEx("trying to run unscheduled job");
+          throw new RuntimeException("trying to run unscheduled job");
         status(processing);
       }
 
@@ -185,16 +185,18 @@ public class StorkJob {
 
       // We made it!
       status(complete);
-    } catch (Exception e) {
+    } catch (ModuleException e) {
       // Tell the transfer progress we're done.
       progress.transferEnded(false);
 
-      if (e instanceof FatalEx || !shouldReschedule()) {
+      if (e.isFatal() || !shouldReschedule()) {
         status(failed);
       } else {
         status(scheduled);
         attempts++;
       } message = e.getMessage();
+    } catch (Exception e) {
+      status(failed);
     } finally {
       if (session != null) session.closeBoth();
     }

@@ -28,14 +28,9 @@ public class Throughput extends Progress {
   } public static String pretty(double tp) {
     return pretty(tp, ' ');
   } private static String pretty(double tp, char pre) {
-    if (tp < 0) {
+    if (tp < 0)
       return "--";
-    } if (tp >= 1000) switch (pre) {
-      case ' ': return pretty(tp/1000, 'k');
-      case 'k': return pretty(tp/1000, 'M');
-      case 'M': return pretty(tp/1000, 'G');
-      case 'G': return pretty(tp/1000, 'T');
-    } return String.format("%.2f%s/s", tp, (pre+"B").trim());
+    return StorkUtil.prettySize(tp)+"B/s";
   }
 
   // Can be used to change time quantum. Minimum 1ms.

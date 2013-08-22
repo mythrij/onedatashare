@@ -1,28 +1,12 @@
 package stork.module.gridftp;
 
-import stork.ad.*;
-import stork.module.*;
 import stork.util.*;
-import static stork.util.StorkUtil.Static.*;
-import stork.stat.*;
-import stork.cred.*;
-
-import stork.ad.*;
-import stork.module.*;
-import stork.util.*;
-import static stork.util.StorkUtil.Static.*;
-import stork.stat.*;
+import static stork.module.ModuleException.*;
 import stork.cred.*;
 
 import java.net.*;
 import java.util.*;
 import java.io.*;
-
-import org.globus.ftp.*;
-import org.globus.ftp.vanilla.*;
-import org.globus.ftp.extended.*;
-import org.ietf.jgss.*;
-import org.gridforum.jgss.*;
 
 // Wraps a URI and a credential into one object and makes sure the URI
 // represents a supported protocol. Also parses out a bunch of stuff.
@@ -50,7 +34,7 @@ public class FTPURI {
       this.cred = null;
     else if (cred instanceof StorkGSSCred)
       this.cred = (StorkGSSCred) cred;
-    else throw new FatalEx("unsupported credential type: "+cred.type());
+    else throw abort("unsupported credential type: "+cred.type());
 
     if (uri.getPath().startsWith("/~"))
       path = uri.getPath().substring(1);
@@ -59,7 +43,7 @@ public class FTPURI {
 
     // Check protocol and determine port.
     if (proto == null || proto.isEmpty()) {
-      throw new FatalEx("no protocol specified");
+      throw abort("no protocol specified");
     } if ("gridftp".equals(proto) || "gsiftp".equals(proto)) {
       port = (p > 0) ? p : 2811;
       gridftp = true; ftp = false; file = false;
@@ -70,7 +54,7 @@ public class FTPURI {
       port = -1;
       gridftp = false; ftp = false; file = true;
     } else {
-      throw new FatalEx("unsupported protocol: "+proto);
+      throw abort("unsupported protocol: "+proto);
     }
   }
 }

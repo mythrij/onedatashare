@@ -39,7 +39,7 @@ public class StorkUser {
   public StorkUser(String uid) {
     uid = normalize(uid);
     if (uid == null)
-      throw new FatalEx("no user ID was provided");
+      throw new RuntimeException("no user ID was provided");
     user_id = uid;
   }
 
@@ -51,7 +51,7 @@ public class StorkUser {
     } else if (ad.has("password")) {
       u.setPassword(ad.get("password"));
     } else {
-      throw new FatalEx("no password was provided");
+      throw new RuntimeException("no password was provided");
     } return u;
   }
 
@@ -73,9 +73,9 @@ public class StorkUser {
   // hashing and whatnot. Throws if there's an error.
   public synchronized void setPassword(String pass) {
     if (pass == null)
-      throw new FatalEx("no password was provided");
+      throw new RuntimeException("no password was provided");
     if (pass.length() < PASS_LEN)
-      throw new FatalEx("password shorter than "+PASS_LEN+" characters");
+      throw new RuntimeException("password shorter than "+PASS_LEN+" characters");
 
     // TODO: Randomly generate salt instead of doing this.
     String salt = generateSalt();
@@ -99,7 +99,7 @@ public class StorkUser {
       if (map().containsKey(su.user_id)) try {
         return login(ad);
       } catch (Exception e) {
-        throw new FatalEx("this user id is already in use");
+        throw new RuntimeException("this user id is already in use");
       } map().put(su.user_id, su);
     } return su;
   }
@@ -135,27 +135,27 @@ public class StorkUser {
   // successful. Throws an exception if there's a problem.
   public static StorkUser login(Ad ad) {
     if (!ad.has("user_id"))
-      throw new FatalEx("missing field: user_id");
+      throw new RuntimeException("missing field: user_id");
 
     String user = normalize(ad.get("user_id"));
     String pass = ad.get("password");
     String hash = ad.get("pass_hash");
 
     if (pass == null && hash == null)
-      throw new FatalEx("no password or password hash supplied");
+      throw new RuntimeException("no password or password hash supplied");
 
     StorkUser su = lookup(user);
 
     if (su == null)
-      throw new FatalEx("invalid username or password");
+      throw new RuntimeException("invalid username or password");
     if (su.pass_hash == null)
-      throw new FatalEx("user is disabled");
+      throw new RuntimeException("user is disabled");
 
     if (hash == null)
       hash = su.hash(pass);
 
     if (!hash.equals(su.pass_hash))
-      throw new FatalEx("invalid username or password");
+      throw new RuntimeException("invalid username or password");
     return su;
   }
 
@@ -193,7 +193,7 @@ public class StorkUser {
 
       return StorkUtil.formatBytes(digest, "%02x");
     } catch (Exception e) {
-      throw new FatalEx("couldn't hash password");
+      throw new RuntimeException("couldn't hash password");
     }
   }
 }

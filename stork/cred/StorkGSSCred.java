@@ -35,7 +35,7 @@ public class StorkGSSCred extends StorkCred<GSSCredential> {
           GSSCredential.INITIATE_AND_ACCEPT);
       return new StorkGSSCred(null, cred);
     } catch (Exception e) {
-      throw new FatalEx("couldn't parse certificate", e);
+      throw new RuntimeException("couldn't parse certificate", e);
     }
   }
 
@@ -50,7 +50,7 @@ public class StorkGSSCred extends StorkCred<GSSCredential> {
 
       return fromBytes(cred_bytes);
     } catch (Exception e) {
-      throw new FatalEx("couldn't read certificate file", e);
+      throw new RuntimeException("couldn't read certificate file", e);
     }
   }
 
