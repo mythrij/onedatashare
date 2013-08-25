@@ -77,21 +77,7 @@ public class Ad implements Serializable {
   }
 
   // Create an ad with given key and value.
-  public Ad(String key, int value) {
-    this(); put(key, value);
-  } public Ad(String key, long value) {
-    this(); put(key, value);
-  } public Ad(String key, double value) {
-    this(); put(key, value);
-  } public Ad(String key, boolean value) {
-    this(); put(key, value);
-  } public Ad(String key, Number value) {
-    this(); put(key, value);
-  } public Ad(String key, String value) {
-    this(); put(key, value);
-  } public Ad(String key, Ad value) {
-    this(); put(key, value);
-  } public Ad(String key, List<?> value) {
+  public Ad(Object key, Object value) {
     this(); put(key, value);
   }
 
@@ -193,7 +179,7 @@ public class Ad implements Serializable {
     return getAd(s, null);
   } public Ad getAd(Object s, Ad def) {
     AdObject o = getObject(s);
-    return (s != null) ? o.asAd() : def;
+    return (o != null) ? o.asAd() : def;
   } public Ad[] getAds(Object s) {
     return getAll(Ad.class, s);
   } public Ad[] getAds() {

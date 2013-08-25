@@ -20,7 +20,6 @@ public class FTPListParser {
   char list_type;
   StringBuilder sb = new StringBuilder();
   AdSorter sorter;
-  long time = 0;
 
   // Create a parser with an optional known type suggestion.
   public FTPListParser() {
@@ -42,14 +41,12 @@ public class FTPListParser {
   private void parseData(CharSequence data) {
     Matcher m = line_pattern.matcher(data);
 
-    Watch w = new Watch(true);
     while (m.find()) {
       String line = m.group(1);
       Ad ad = parseEntry(line);
       if (ad != null && !ignoreName(ad.get("name")))
         sorter.add(ad);
     }
-    time += w.elapsed();
   }
 
   // Finalize the parser and get the sorted ads. Any more calls to this

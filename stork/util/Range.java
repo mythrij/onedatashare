@@ -2,10 +2,10 @@ package stork.util;
 
 import java.util.*;
 
-// Isn't crazy that Java doesn't have one of these natively?!
+// TODO: See if we can refactor this, because it's ancient.
 
 public class Range implements Iterable<Integer> {
-  private boolean empty = true;
+  private transient boolean empty = true;
   private int start = 0, end = 0;
   private Range subrange = null;
 
@@ -44,7 +44,7 @@ public class Range implements Iterable<Integer> {
                 e = Integer.parseInt(b[1]);
       } r.swallow(s, e);
     } catch (Exception ugh) {
-      return null;
+      throw new RuntimeException("invalid range format");
     } return r;
   }
 
@@ -82,7 +82,9 @@ public class Range implements Iterable<Integer> {
   }
 
   // Swallow a range, subrange by subrange.
-  public Range swallow(Range r) {
+  public Range swallow(String r) {
+    return swallow(parseRange(r));
+  } public Range swallow(Range r) {
     if (empty)
       return become(r);
     while (r != null && !r.empty) {

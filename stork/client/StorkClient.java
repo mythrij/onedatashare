@@ -1,0 +1,109 @@
+package stork.client;
+
+import stork.*;
+import stork.ad.*;
+import stork.util.*;
+
+import java.io.*;
+import java.net.*;
+import java.util.*;
+import java.text.*;
+
+// The base class for all client commands.
+
+public abstract class StorkClient extends Command {
+  protected Ad env = null;
+  protected boolean raw = false;
+
+  public StorkClient(String prog) {
+    super(prog);
+    add('R', "raw", "display raw messages from server");
+  }
+
+  // Execute a command on the connected Stork server.
+  public final void execute(Ad env) {
+    this.env = env;
+    Socket sock = connect(Stork.settings.connect);
+    raw = env.getBoolean("raw");
+
+    // TODO: Ugh, this is really idiotic here too, deal with it later.
+    env.unmarshal(Stork.settings);
+    env.addAll(Ad.marshal(Stork.settings));
+
+    try {
+      InputStream  is = sock.getInputStream();
+      OutputStream os = sock.getOutputStream();
+      Ad ad;
+
+      // Some sanity checking
+      if (is == null || os == null)
+        throw new Exception("problem with socket");
+
+      // Get server info message.
+      try {
+        Ad info = Ad.parse(is);
+        //System.out.println("Connected to "+info.get("host")+"...\n");
+      } catch (Exception e) {
+        throw new RuntimeException("remote system was not a Stork server");
+      }
+
+      // Write command ad to the server.
+      do {
+        ad = fillCommand(new Ad()).put("command", prog);
+
+        // Write command to server.
+        os.write((ad+"\n").getBytes("UTF-8"));
+        os.flush();
+
+        ad = Ad.parse(is);
+
+        if (ad == null)
+          throw new RuntimeException("incomplete response from server");
+        if (raw)
+          System.out.println(ad);
+        else
+          handle(ad);
+      } while (hasMoreCommands());
+
+      if (ad.has("error"))
+        throw new RuntimeException("server: "+ad.get("error"));
+    } catch (RuntimeException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    } finally {
+      complete();
+    }
+  }
+
+  // TODO: Support for different endpoints.
+  private static Socket connect(URI u) {
+    try {
+      return new Socket(u.getHost(), u.getPort());
+    } catch (Exception e) {
+      throw new RuntimeException("couldn't connect to: "+u, e);
+    }
+  }
+
+  ////////////////////////////
+  // Override these things. //
+  ////////////////////////////
+
+  // Override this if the handler sends multiple command ads.
+  public boolean hasMoreCommands() {
+    return false;
+  }
+
+  // Return the command ad to send to the server.
+  public Ad fillCommand(Ad ad) {
+    return ad.addAll(env.getAd("args"));
+  }
+
+  // Handle each response from the server.
+  public void handle(Ad ad) {
+    System.out.println(ad);
+  }
+
+  // Anything else that needs to be done at the end of a command.
+  public void complete() { }
+}

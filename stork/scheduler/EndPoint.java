@@ -36,9 +36,9 @@ public class EndPoint {
 
   public String proto() {
     if (uri == null)
-      throw new RuntimeException("endpoint has no URI");
+      throw new RuntimeException("missing URI");
     if (uri.getScheme() == null)
-      throw new RuntimeException("scheme omitted from URI");
+      throw new RuntimeException("bad URI: no scheme specified");
     return uri.getScheme();
   }
 

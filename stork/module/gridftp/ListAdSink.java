@@ -51,7 +51,7 @@ class ListAdSink implements DataSink {
 
   public synchronized void close() throws IOException {
     if (!closed) {
-      ad.put("files", parser.getAds()).put("time", parser.time);
+      ad.put("files", parser.getAds());
       closed = true;
     } notifyAll();
   }

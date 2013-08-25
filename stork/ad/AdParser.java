@@ -156,7 +156,7 @@ public class AdParser {
 
       // Check if it's anonymous or not.
       // FIXME: These switch cases should not be hardcoded...
-      switch (c = expect(EQ+SEP+CB)) {
+      switch (c = expect(EQ+SEP+CB, " \t\b")) {
         case ':': // Check for assignment.
         case '=':
           // Determine the key.

@@ -6,85 +6,64 @@ import java.util.*;
 
 // Represents a client request to be handled. Maintains a list
 // of ads to be sent to the requestor.
+// TODO: Refactor this.
 
 public class RequestContext {
   public final Ad ad;
   public final String cmd;
   public StorkUser user = null;
-  private LinkedList<Ad> replies;
+  private Ad reply = null;
+  private Bell<Ad> bell;
 
-  private Bell<Ad> reply_bell, end_bell;
-
-  private boolean is_done = false;
   public Ad status_ad = null;
 
   public RequestContext(Ad ad) {
-    this(ad, null, null);
-  } public RequestContext(Ad ad, Bell<Ad> reply_bell) {
-    this(ad, reply_bell, null);
-  } public RequestContext(Ad ad, Bell<Ad> reply_bell, Bell<Ad> end_bell) {
+    this(ad, null);
+  } public RequestContext(Ad ad, Bell<Ad> bell) {
     cmd = ad.get("command");
     this.ad = ad.remove("command");
-    this.reply_bell = reply_bell;
-    this.end_bell = end_bell;
-    replies = new LinkedList<Ad>();
+    this.bell = bell;
   }
 
-  // Put an ad in the reply queue.
-  public synchronized void putReply(Object obj) {
-    Ad ad = Ad.marshal(obj);
-    if (!is_done) {
-      replies.add(ad);
-      if (reply_bell != null) reply_bell.ring(ad);
-      notifyAll();
-    }
-  }
-
-  // Get the topmost reply, optionally blocking until there is one. If
-  // we're not blocking and there's no request, returns null. Also
-  // returns null when the request is complete.
+  // Get the reply, if there is one. Optionally can block until there
+  // is one.
   public synchronized Ad getReply() {
     return getReply(true);
   } public synchronized Ad getReply(boolean blocking) {
-    if (replies.isEmpty() && (is_done || !blocking)) {
+    if (reply == null && !blocking) {
       return null;
-    } while (replies.isEmpty() && !is_done) try {
+    } while (reply == null) try {
       wait();
-    } catch (Exception e) {
-      // Whatever.
-    } try {
-      return replies.pop();
-    } finally {
-      notifyAll();
-    }
+    } catch (Exception e) {  // Interrupted...
+      break;
+    } return reply;
+  }
+
+  // Cancel the request.
+  public synchronized void cancel() {
+    cancel(null);
+  } public synchronized void cancel(String reason) {
+    if (reason == null)
+      reason = "(unspecified)";
+    reply(new Ad("error", reason));
+  }
+
+  // Check if the request has been served or canceled.
+  public synchronized boolean isDone() {
+    return reply != null;
   }
 
   // Called when the request is done being served.
-  public synchronized void done(Object last) {
-    if (!is_done) {
-      status_ad = Ad.marshal(last);
-      if (end_bell != null)
-        end_bell.ring(status_ad);
-      is_done = true;
-    } notifyAll();
-  }
-
-  // Returns true if there will never be more ads to read.
-  public synchronized boolean isDone() {
-    return replies.size() <= 0 && is_done;
-  }
-
-  // Wait for the request to be complete. Returns the status ad.
-  public synchronized Ad waitFor() {
-    while (!is_done) try {
-      wait();
-    } catch (Exception e) {
-      // Who cares...
-    } return status_ad;
-  }
-
-  // Get the whole list of unread replies. Doesn't clear list.
-  public synchronized List<Ad> getReplies() {
-    return new LinkedList<Ad>(replies);
+  public synchronized void reply(Ad msg) {
+    if (reply != null) {
+      throw new RuntimeException("reply was already called");
+    } else if (msg == null) {
+      cancel();
+    } else {
+      reply = msg;
+      if (bell != null)
+        bell.ring(reply);
+      notifyAll();
+    }
   }
 }

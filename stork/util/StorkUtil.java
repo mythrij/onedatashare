@@ -6,6 +6,11 @@ import java.io.*;
 import java.net.URI;
 
 // A bunch of static utility functions, how fun!
+//
+// TODO: Most of these things were placed here because they provided
+// common utility that wasn't available elsewhere. Some of this utility
+// may be better suited being taken out of here and made into another
+// class, so see if there's anything we should do that with.
 
 public abstract class StorkUtil {
   // Some pre-compiled regexes.

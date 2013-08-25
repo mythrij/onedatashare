@@ -35,29 +35,6 @@ public class StorkScheduler {
   private transient LinkedBlockingQueue<RequestContext> req_queue =
     new LinkedBlockingQueue<RequestContext>();
 
-  // Construct and return a usage/options parser object.
-  public static GetOpts getParser(GetOpts base) {
-    GetOpts opts = new GetOpts().parent(base);
-
-    opts.prog = "server";
-    opts.args = new String[] { "[option]..." };
-    opts.desc = new String[] {
-      "The Stork server is the core of the Stork system, handling "+
-      "connections from clients and scheduling transfers. This command "+
-      "is used to start a Stork server.",
-      "Upon startup, the Stork server loads stork.conf and begins "+
-      "listening for clients."
-    };
-
-    opts.add('d', "daemonize",
-      "run the server in the background, redirecting output to a log "+
-      "file (if specified)");
-    opts.add('l', "log", "redirect output to a log file at PATH").parser =
-      opts.new SimpleParser("log", "PATH", false);
-
-    return opts;
-  }
-
   // A thread which runs continuously and starts jobs as they're found.
   private class StorkQueueThread extends Thread {
     StorkQueueThread() {
@@ -104,19 +81,13 @@ public class StorkScheduler {
 
     // Continually remove jobs from the queue and start them.
     public void run() {
-      while (true) {
-        RequestContext req;
+      while (true) try {
+        Ad ad = null;
+        RequestContext req = req_queue.take();
+        Log.fine("Worker pulled request from queue: ", req.cmd);
 
-        // Try to take something from the queue.
-        try {
-          req = req_queue.take();
-          Log.fine("Worker pulled request from queue: "+req.cmd);
-        } catch (Exception e) {
-          continue;
-        }
-
-        // Try handling the command.
-        try {
+        // Try handling the command if it's not done already.
+        if (!req.isDone()) try {
           if (req.cmd == null)
             throw new RuntimeException("no command specified");
 
@@ -129,7 +100,7 @@ public class StorkScheduler {
           if (env.getBoolean("registration")) {
             if (handler.requiresLogin()) try {
               req.user = StorkUser.login(req.ad);
-            } catch (RuntimeException e) {
+            } catch (Exception e) {
               throw new RuntimeException(
                 "action requires login: "+e.getMessage());
             }
@@ -138,21 +109,25 @@ public class StorkScheduler {
           req.ad.remove("pass_hash");
 
           // Let the magic happen.
-          req.done(handler.handle(req));
+          ad = handler.handle(req);
         } catch (Exception e) {
           e.printStackTrace();
           String m = e.getMessage();
-          req.done(new Ad("error", m == null ? e.toString() : m));
+          ad = new Ad("error", m == null ? e.toString() : m);
         } finally {
-          Log.fine("Worker done with request: "+req.cmd);
+          assert(ad != null);
+          req.reply(ad);
+          Log.fine("Worker done with request: ", req.cmd, ad);
         }
+      } catch (Exception e) {
+        // Probably we got interrupted. Just continue.
       }
     }
   }
 
   // Stork command handlers should implement this interface.
   static abstract class StorkCommand {
-    public abstract Object handle(RequestContext req);
+    public abstract Ad handle(RequestContext req);
 
     // Override this for commands that don't require logon.
     public boolean requiresLogin() {
@@ -163,14 +138,14 @@ public class StorkScheduler {
   class StorkQHandler extends StorkCommand {
     public Ad handle(RequestContext req) {
       AdSorter sorter = new AdSorter("job_id");
+      boolean count = req.ad.getBoolean("count");
 
       sorter.reverse(req.ad.getBoolean("reverse"));
 
       // Add jobs to the ad sorter.
       sorter.add(job_queue.get(req.ad).getAds());
 
-      return (req.ad.getBoolean("count")) ? new Ad("count", sorter.size())
-                                          : sorter.asAd();
+      return count ? new Ad("count", sorter.size()) : sorter.asAd();
     }
   }
 
@@ -193,13 +168,13 @@ public class StorkScheduler {
 
   // Handle user registration.
   class StorkUserHandler extends StorkCommand {
-    public StorkUser handle(RequestContext req) {
+    public Ad handle(RequestContext req) {
       if ("register".equals(req.ad.get("action", ""))) {
         StorkUser su = StorkUser.register(req.ad);
         Log.info("Registering user: "+su.user_id);
         dumpState();
-        return su;
-      } return StorkUser.login(req.ad);
+        return Ad.marshal(su);
+      } return Ad.marshal(StorkUser.login(req.ad));
     }
 
     public boolean requiresLogin() {
@@ -304,11 +279,11 @@ public class StorkScheduler {
     if (jn < 1) {
       jn = 10;
       Log.warning("invalid value for max_jobs, "+
-                         "defaulting to "+jn);
+                  "defaulting to "+jn);
     } if (wn < 1) {
       wn = 4;
       Log.warning("invalid value for workers, "+
-                         "defaulting to "+wn);
+                  "defaulting to "+wn);
     }
 
     thread_pool = new Thread[jn];
@@ -328,15 +303,16 @@ public class StorkScheduler {
   // Put a command in the server's request queue with an optional reply
   // bell and end bell.
   public RequestContext putRequest(Ad ad) {
-    return putRequest(ad, null, null);
-  } public RequestContext putRequest(Ad ad, Bell<Ad> reply_bell) {
-    return putRequest(ad, reply_bell, null);
-  } public RequestContext putRequest(Ad ad, Bell<Ad> rb, Bell<Ad> eb) {
-    RequestContext rc = new RequestContext(ad, rb, eb);
+    return putRequest(ad, null);
+  } public RequestContext putRequest(Ad ad, Bell<Ad> bell) {
+    RequestContext rc = new RequestContext(ad, bell);
     try {
-      req_queue.put(rc);
+      req_queue.add(rc);
     } catch (Exception e) {
-      // Ugh...
+      // This can happen if the queue is full. Which right now it never
+      // should be, but who knows.
+      Log.warning("Rejecting request: ", ad);
+      rc.cancel("rejected request");
     } return rc;
   }
 

@@ -103,9 +103,9 @@ public class AdObject implements Comparable<AdObject> {
   }
 
   public String asString() {
-    return object.toString();
+    return (object != null) ? object.toString() : null;
   } public String toString() {
-    return object.toString();
+    return (object != null) ? object.toString() : null;
   }
 
   public java.net.URI asURI() {
