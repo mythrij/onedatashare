@@ -196,7 +196,7 @@ public class ChannelPair {
 
   public void abortPair() {
     try {
-      sc.abortChannel(); dc.abortChannel();
+      sc.kill(); dc.kill();
     } catch (Exception e) { /* who cares */ }
   }
 

@@ -9,6 +9,8 @@ import java.util.*;
 import java.io.*;
 import java.net.*;
 
+// The stork command without any arguments.
+//
 // Handles parsing config files and command line arguments (or rather
 // handles delegating command line parsing, to be precise) and initing
 // and running Stork commands according to passed arguments.
@@ -84,6 +86,7 @@ public class Stork extends Command {
     add("info", "view Stork server settings", StorkInfo.class);
     add("raw", "send commands for debugging", StorkRaw.class);
     add("submit", "submit a job to the server", StorkSubmit.class);
+    add("user", "log in or register", stork.client.StorkUser.class);
 
     foot = new String[] {
       "Stork is still undergoing testing and development. "+

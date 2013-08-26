@@ -29,4 +29,12 @@ public class StorkRm extends StorkClient {
   public Ad fillCommand(Ad ad) {
     return ad.put("range", range.toString());
   }
+
+  public void handle(Ad ad) {
+    String s;
+    if ((s = ad.get("removed")) != null)
+      System.out.println("Removed job(s): "+s);
+    if ((s = ad.get("not_removed")) != null)
+      System.out.println("The follow job(s) could not be removed: "+s);
+  }
 }

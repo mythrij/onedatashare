@@ -35,6 +35,8 @@ public class StorkJob {
   private Watch queue_timer = null;
   private Watch run_timer   = null;
 
+  private transient Thread thread = null;
+
   // Create and enqueue a new job from a user input ad.
   // TODO: Strict filtering and checking.
   public static StorkJob create(Ad ad) {
@@ -68,19 +70,20 @@ public class StorkJob {
   } public synchronized StorkJob status(JobStatus s) {
     assert !s.isFilter;
 
-    status = s;
-
     // Update state.
-    switch (s) {
+    switch (status = s) {
       case scheduled:
         queue_timer = new Watch(true); break;
       case processing:
         run_timer = new Watch(true); break;
       case removed:
+        if (thread != null)
+          thread.interrupt();
       case failed:
       case complete:
         queue_timer.stop();
         run_timer.stop();
+        progress.transferEnded(false);
     } return this;
   }
 
@@ -91,31 +94,26 @@ public class StorkJob {
     job_id = id;
   }
 
-  // Called when the job gets removed. Returns true if the job had its
-  // state updated, and false otherwise (e.g., the job was already
-  // complete or couldn't be removed).
-  public synchronized boolean remove(String reason) {
-    switch (status) {
-      // Try to stop the job. If we can't, don't do anything.
-      case processing:
-        run_timer.stop();
+  // Called when the job gets removed from the queue.
+  public synchronized void remove(String reason) {
+    if (isComplete())
+      throw new RuntimeException("job cannot be removed");
+    message = reason;
+    status(removed);
+  }
 
-      // Fall through to set removed status.
-      case scheduled:
-        message = reason;
-        status(JobStatus.removed);
-        return true;
-
-      // In any other case, the job has ended, do nothing.
-      default:
-        return false;
-    }
+  // This will increment the attempts counter, and set the status
+  // back to scheduled. It does not actually put the job back into
+  // the scheduler queue.
+  public synchronized void reschedule() {
+    attempts++;
+    status(scheduled);
   }
 
   // Check if the job should be rescheduled.
   public synchronized boolean shouldReschedule() {
     // If we've failed, don't reschedule.
-    if (status == failed)
+    if (isComplete())
       return false;
 
     // Check for custom max attempts.
@@ -156,9 +154,10 @@ public class StorkJob {
     try {
       synchronized (this) {
         // Must be scheduled to be able to run.
-        if (status != JobStatus.scheduled)
+        if (status != scheduled)
           throw new RuntimeException("trying to run unscheduled job");
         status(processing);
+        thread = Thread.currentThread();
       }
 
       // Establish connections to end-points.
@@ -178,27 +177,32 @@ public class StorkJob {
         }
       };
 
-      // Begin the transfer after attaching pipe.
+      // Set the pipe.
       pipe.new End().put(new Ad());
       session.setPipe(pipe.new End());
+
+      // Now let the transfer module do the rest.
       session.transfer(src.path(), dest.path());
 
-      // We made it!
+      // No exceptions happened. We did it!
       status(complete);
     } catch (ModuleException e) {
-      // Tell the transfer progress we're done.
-      progress.transferEnded(false);
-
-      if (e.isFatal() || !shouldReschedule()) {
+      if (e.isFatal() || !shouldReschedule())
         status(failed);
-      } else {
-        status(scheduled);
-        attempts++;
-      } message = e.getMessage();
+      else
+        reschedule();
+      message = e.getMessage();
     } catch (Exception e) {
-      status(failed);
+      // Only change the state if the exception isn't from an interrupt.
+      if (e != Pipeline.PIPELINE_ABORTED) {
+        status(failed);
+        message = e.getMessage();
+      }
     } finally {
-      if (session != null) session.closeBoth();
+      // Any time we're not running, the sessions should be closed.
+      thread = null;
+      if (session != null)
+        session.closeBoth();
     }
   }
 }

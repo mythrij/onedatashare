@@ -300,16 +300,18 @@ public class ControlChannel extends Pipeline<String, Reply> {
     }
   }
 
-  public void abortChannel() {
+  // Cancel transfers and abort the control channel as soon as possible.
+  public synchronized void kill() {
     try {
       if (local)
         facade.abort();
       else
-        exchange("ABOR");
-      kill();
+        fc.exchange(new Command("ABOR"));
     } catch (Exception e) {
       // Who cares.
-    }
+    } finally {
+      super.kill();
+    } throw abort();
   }
 
   // Change the mode of this channel.

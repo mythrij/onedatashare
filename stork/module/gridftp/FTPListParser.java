@@ -135,7 +135,6 @@ public class FTPListParser {
         String[] t = line.split(" ", 2);
         String[] facts = t[0].split(";+");
         String name = t[1];
-        System.out.println("NAME: '"+name+"'");
 
         if (t.length != 2)
           throw null;

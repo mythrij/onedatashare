@@ -129,7 +129,7 @@ public class Range implements Iterable<Integer> {
   public int size() {
     if (empty)
       return 0;
-    if (subrange == null)
+    if (subrange != null)
       return end-start+1+subrange.size();
     return end-start+1;
   }

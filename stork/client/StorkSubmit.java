@@ -115,6 +115,7 @@ public class StorkSubmit extends StorkClient {
     if (env.getBoolean("quiet")) return;
 
     boolean condor = env.getBoolean("condor_mode");
+    boolean brief  = env.getBoolean("brief");
 
     // Print something if there was an error.
     if (error) {
@@ -128,11 +129,12 @@ public class StorkSubmit extends StorkClient {
     // expects and that's it.
     if (condor) {
       System.out.println("Request assigned id: "+ad.get("job_id"));
+    } else if (brief) {
+      System.out.println(ad.get("job_id"));
     } else if (!error) {
       // Check if the job was successfully submitted.
-      System.out.print("Job accepted and assigned id: ");
-      System.out.println(ad.get("job_id"));
       System.out.println(ad);
+      System.out.println("Job accepted and assigned ID: "+ad.get("job_id"));
     }
   }
 
@@ -142,7 +144,7 @@ public class StorkSubmit extends StorkClient {
 
     if (accepted == 0) {
       throw new RuntimeException(
-        "0 of "+submitted+"jobs successfully submitted");
+        "0 of "+submitted+" jobs successfully submitted");
     } else {
       System.out.println("Success: "+
         accepted+" of "+submitted+" jobs successfully submitted");

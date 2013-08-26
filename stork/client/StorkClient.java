@@ -66,7 +66,7 @@ public abstract class StorkClient extends Command {
       } while (hasMoreCommands());
 
       if (ad.has("error"))
-        throw new RuntimeException("server: "+ad.get("error"));
+        throw new RuntimeException("from server: "+ad.get("error"));
     } catch (RuntimeException e) {
       throw e;
     } catch (Exception e) {

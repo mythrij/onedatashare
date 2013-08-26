@@ -24,8 +24,12 @@ public abstract class Pipeline<C,R> extends Thread {
   //protected Handler default_handler = null;
   private boolean dead = false;
 
+  // This exception gets thrown whenever the pipe gets killed.
+  public static final RuntimeException PIPELINE_ABORTED = null;
+
   // Constructor
   public Pipeline(int l) {
+    super("pipeline");
     sent = new LinkedList<PipedCommand>();
     done = new LinkedList<Wrapper>();
     setPipelining(l);
@@ -87,16 +91,15 @@ public abstract class Pipeline<C,R> extends Thread {
   // Should be run as a thread. Reads replies from sent commands with the
   // read handler then adds them to the done queue.
   public synchronized void run() {
-    while (!dead) try {
+    while (!dead) {
       while (!dead && sent.isEmpty()) waitFor();
-      if (!dead) try {
+      if (dead) return;
+      try {
         R r = sent.peek().handle();
         if (r != null) addReply(r);
       } catch (RuntimeException e) {
         addReply(e);
       } sent.pop(); notifyAll();
-    } catch (Exception e) {
-      // waitFor() interrupted, ignore...
     }
   }
 
@@ -151,6 +154,7 @@ public abstract class Pipeline<C,R> extends Thread {
     if (!isAlive()) return;
     dead = true;
     notifyAll();
+    throw PIPELINE_ABORTED;
   }
 
   // wait() without the stupid exception handling boilerplate.
@@ -158,7 +162,8 @@ public abstract class Pipeline<C,R> extends Thread {
     try {
       wait();
     } catch (Exception e) {
-      // Try again...
+      Log.info("pipeline interrupted");
+      kill();
     }
   }
 }

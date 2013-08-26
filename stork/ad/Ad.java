@@ -496,9 +496,18 @@ public class Ad implements Serializable {
 
   // Unmarshal this ad into an object. This operation can throw a runtime
   // exception. Should we reset fields if there's an exception?
+  @SuppressWarnings({"unchecked"})
   public synchronized <O> O unmarshal(O o) {
-    if (o.getClass() == Ad.class) {
+    Class<?> c = o.getClass();
+    if (c == Ad.class) {
       ((Ad)o).addAll(this);
+    } else if (isMap() && o instanceof Map) {
+      for (Map.Entry<Object, AdObject> e : map().entrySet())
+        ((Map)o).put(e.getKey(), e.getValue().asObject());
+    } else if (isList() && o instanceof Collection) {
+      ((Collection)o).addAll(list());
+    /*} else if (o.getClass().isArray()) {
+      return 0getAll(o.getClass());*/
     } else {
       for (Field f : fieldsFrom(o))
         marshalField(f, o, false);
@@ -506,17 +515,8 @@ public class Ad implements Serializable {
   }
 
   // Construct a new instance of a class and marshal into it.
-  public <O> O unmarshalAs(Class<O> clazz, Object... args) {
-    Class<?>[] ca = new Class<?>[args.length];
-    for (int i = 0; i < args.length; i++) {
-      // Hmm, what to do about null arguments...
-      ca[i] = (args[i] != null) ? args[i].getClass() : Object.class;
-    } try {
-      Constructor<O> c = clazz.getConstructor(ca);
-      return unmarshal(c.newInstance(args));
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    }
+  public <O> O unmarshalAs(Class<O> clazz) {
+    return clazz.cast(AdObject.wrap(this).as(clazz));
   }
 
   // Marshal an object into an ad.

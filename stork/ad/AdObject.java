@@ -202,7 +202,9 @@ public class AdObject implements Comparable<AdObject> {
   }
 
   public Object as(Class<?> c) {
-    if (c.isPrimitive()) {
+    if (object == null) {
+      return null;
+    } if (c.isPrimitive()) {
       c = fixPrimitiveClass(c);
     } try {
       // Check if it's an array.
@@ -221,7 +223,7 @@ public class AdObject implements Comparable<AdObject> {
     } catch (RuntimeException e) {
       throw e;
     } catch (Exception e) {
-      throw new RuntimeException(e);
+      throw new RuntimeException(c.toString(), e);
     }
   }
 

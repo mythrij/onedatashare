@@ -82,8 +82,8 @@ public class JobQueue {
   //   status - the name of a job status filter
   //   user_id - the user to select for
   // The results are returned as a list.
-  public Ad get(Ad ad) {
-    Ad list = new Ad();
+  public List<StorkJob> get(Ad ad) {
+    List<StorkJob> list = new LinkedList<StorkJob>();
 
     // Filter fields.
     String user_id = null;
@@ -109,8 +109,14 @@ public class JobQueue {
       if (j != null)
       if (status.contains(j.status()))
       if (user_id == null || user_id.equals(j.user_id()))
-        list.put(j.getAd());
+        list.add(j);
     } return list;
+  }
+
+  // Perform a query and return a list of ads instead of jobs.
+  public void getAds(Ad ad, AdSorter sorter) {
+    for (StorkJob j : get(ad))
+      sorter.add(j.getAd());
   }
 
   // Do this whenever a wait is interrupted. Could potentially throw

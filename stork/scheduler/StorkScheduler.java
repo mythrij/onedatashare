@@ -23,7 +23,7 @@ import java.util.concurrent.*;
 public class StorkScheduler {
   public Ad env = new Ad();
   public JobQueue job_queue = new JobQueue();
-  public Map<String, StorkUser> users = new HashMap<String, StorkUser>();
+  public StorkUser.UserMap users = new StorkUser.UserMap();
 
   private transient Thread[] thread_pool;
   private transient Thread[] worker_pool;
@@ -38,6 +38,7 @@ public class StorkScheduler {
   // A thread which runs continuously and starts jobs as they're found.
   private class StorkQueueThread extends Thread {
     StorkQueueThread() {
+      super("stork queue thread");
       setDaemon(true);
     }
 
@@ -76,6 +77,7 @@ public class StorkScheduler {
   // A thread which handles client requests.
   private class StorkWorkerThread extends Thread {
     StorkWorkerThread() {
+      super("Stork worker thread");
       setDaemon(true);
     }
 
@@ -99,7 +101,7 @@ public class StorkScheduler {
           // Check if the handler requires a logged in user.
           if (env.getBoolean("registration")) {
             if (handler.requiresLogin()) try {
-              req.user = StorkUser.login(req.ad);
+              req.user = users.login(req.ad);
             } catch (Exception e) {
               throw new RuntimeException(
                 "action requires login: "+e.getMessage());
@@ -143,7 +145,7 @@ public class StorkScheduler {
       sorter.reverse(req.ad.getBoolean("reverse"));
 
       // Add jobs to the ad sorter.
-      sorter.add(job_queue.get(req.ad).getAds());
+      job_queue.getAds(req.ad, sorter);
 
       return count ? new Ad("count", sorter.size()) : sorter.asAd();
     }
@@ -169,12 +171,12 @@ public class StorkScheduler {
   // Handle user registration.
   class StorkUserHandler extends StorkCommand {
     public Ad handle(RequestContext req) {
-      if ("register".equals(req.ad.get("action", ""))) {
-        StorkUser su = StorkUser.register(req.ad);
+      if ("register".equals(req.ad.get("action"))) {
+        StorkUser su = users.register(req.ad);
         Log.info("Registering user: "+su.user_id);
         dumpState();
         return Ad.marshal(su);
-      } return Ad.marshal(StorkUser.login(req.ad));
+      } return Ad.marshal(users.login(req.ad));
     }
 
     public boolean requiresLogin() {
@@ -182,7 +184,6 @@ public class StorkScheduler {
     }
   }
 
-  // I cannot believe how simple this thing is for what it does.
   class StorkSubmitHandler extends StorkCommand {
     public Ad handle(RequestContext req) {
       Ad ad = job_queue.put(StorkJob.create(req.ad)).getAd();
@@ -191,41 +192,29 @@ public class StorkScheduler {
     }
   }
 
-  // FIXME: This doesn't work right now; cause this to work.
   class StorkRmHandler extends StorkCommand {
     public Ad handle(RequestContext req) {
-      Ad ad = req.ad;
-      StorkJob j;
-      String reason = "removed by user";
-      Range r, cdr = new Range();
+      Range r = new Range(req.ad.get("range"));
+      Range sdr = new Range(), cdr = new Range();
 
-      if (!ad.has("range"))
-        return new Ad("error", "no job_id range specified");
-
-      r = Range.parseRange(ad.get("range"));
-
-      if (r == null)
-        return new Ad("error", "could not parse range");
-
-      if (ad.has("reason"))
-        reason = reason+" ("+ad.get("reason")+")";
+      if (r.isEmpty())
+        throw new RuntimeException("no jobs specified");
 
       // Find ad in job list, set it as removed.
-      for (int job_id : r) try {
-        j = job_queue.get(job_id);
-        j.remove(reason);
-      } catch (IndexOutOfBoundsException oobe) {
-        cdr.swallow(job_id);
+      for (StorkJob j : job_queue.get(req.ad)) try {
+        j.remove("removed by user");
+        sdr.swallow(j.jobId());
       } catch (Exception e) {
-        return new Ad("error", e.getMessage());
+        cdr.swallow(j.jobId());
       }
 
       // See if there's anything in our "couldn't delete" range.
-      if (cdr.size() == 0)
-        return new Ad();
-      if (cdr.size() == r.size())
-        return new Ad("error", "no jobs were removed");
-      return new Ad("message", "the following jobs weren't removed: "+cdr);
+      if (sdr.isEmpty())
+        throw new RuntimeException("no jobs were removed");
+      Ad ad = new Ad("removed", sdr.toString());
+      if (!cdr.isEmpty())
+        ad.put("not_removed", cdr.toString());
+      return ad;
     }
   }
 
@@ -238,7 +227,7 @@ public class StorkScheduler {
     // Send server information. But for now, don't send anything until we
     // know what sort of information is good to send.
     Ad sendServerInfo(RequestContext req) {
-      return new Ad("error", "server info is currently unavailable");
+      return new Ad("error", "server info is not implemented");
     }
 
     public Ad handle(RequestContext req) {
@@ -326,6 +315,7 @@ public class StorkScheduler {
   // to dump the server state.
   private class DumpStateThread extends Thread {
     public DumpStateThread() {
+      super("server dump thread");
       setDaemon(true);
     }
 
@@ -360,6 +350,8 @@ public class StorkScheduler {
           if (!state_file.canWrite())
             throw new RuntimeException("cannot write to state file");
         }
+
+        Log.info("Dumping server state...");
 
         temp_file = File.createTempFile(
           ".stork_state", "tmp", state_file.getParentFile());
