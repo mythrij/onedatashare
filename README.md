@@ -68,39 +68,28 @@ necessary libraries in the repository since I've got other stuff to do.
 Commands
 ========
 
-stork server
-------------
-Used to start a Stork server. Right now it just outputs everything to
-the command line until proper daemonization and automatic process
-killing with a PID file is supported. For now, you can daemonize it
-using, e.g.:
+* `stork server` --- Used to start a Stork server. Right now it just
+outputs everything to the command line until proper daemonization and
+automatic process killing with a PID file is supported. For now, you
+can daemonize it using, e.g.: `nohup stork server > /dev/null &`
 
-    nohup stork server > /dev/null &
+* `stork q` --- List all the jobs in the Stork queue along with
+information about them, such as their status and progress. Can be used
+to find information about specific jobs by passing a job ID. Can also
+be used to filter jobs by their status.
 
-stork q
--------
-List all the jobs in the Stork queue along with information
-about them, such as their status and progress. Can be used to find
-information about specific jobs by passing a job ID. Can also be
-used to filter jobs by their status.
+* `stork submit` --- Submit a job to a Stork server. Can be passed a
+source and destination URL, a text file containing one or more jobs,
+or no arguments to read jobs from standard input.
 
-stork submit
-------------
-Submit a job to a Stork server. Can be passed a source and destination
-URL, a file containing one or more job descriptors, 
+* `stork rm` --- Cancel or terminate a submitted job or set of jobs.
 
-stork rm
---------
-Cancel or terminate a submitted job or set of jobs.
+* `stork info` --- Display configuration information about the server.
+Can also be used to find information about transfer modules.
 
-stork info
-----------
-Display configuration information about the server. Can
-also be used to find information about transfer modules.
+* `stork ls` --- List a remote URL.
 
-stork ls
---------
-List a remote URL.
+* `stork user` --- Login to a Stork server or register as a new user.
 
 More information can be found by running `stork --help`.
 
@@ -111,12 +100,12 @@ The Stork configuration file (stork.conf) can be used to change
 settings for the server and client tools. The search order for the
 configuration file is as follows:
 
- 1) `$STORK_CONFIG`
- 2) `~/.stork.conf`
- 3) `/etc/stork.conf`
- 4) `$STORK/stork.conf`
- 5) `/usr/local/stork/stork.conf`
- 6) `stork.conf in currect directory`
+ 1) $STORK\_CONFIG
+ 2) ~/.stork.conf
+ 3) /etc/stork.conf
+ 4) $STORK/stork.conf
+ 5) /usr/local/stork/stork.conf
+ 6) stork.conf in currect directory
 
 Even if the file can't be found automatically, every valid config
 variable has a default value. The Stork server will issue a warning

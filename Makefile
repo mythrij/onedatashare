@@ -6,6 +6,7 @@ VERSION = 0.0.5
 
 # =============
 PROJECT = stork
+CMDS = info ls q raw rm server status submit user
 JARFILE = lib/$(PROJECT)-$(VERSION).jar
 
 CLASSPATH = 'lib/*:build'
@@ -13,11 +14,10 @@ DBGFLAG = -g  # Uncomment to compile with debugging info.
 JFLAGS = -J-Xmx512m $(DBGFLAG) \
 	-classpath $(CLASSPATH) -sourcepath $(PROJECT) \
 	-Xlint:all
-JC = javac
+JC  = javac
 JAR = jar -J-Xmx512m
-
-# Used to generate legacy command commands.
-CMDS = help info ls q raw rm server status submit user
+TAR = tar
+LN  = ln
 
 .PHONY: all install clean init release classes $(PROJECT)_cmds
 .SUFFIXES: .java .class
@@ -36,6 +36,7 @@ all: $(CLASSES) | build
 	$(JC_CMD) $(TO_BUILD)
 	@$(MAKE) --no-print-directory build/build_tag 
 	@$(MAKE) --no-print-directory $(JARFILE)
+	@$(MAKE) --no-print-directory $(PROJECT)_cmds
 
 build:
 	@mkdir -p build
@@ -50,21 +51,21 @@ build/%.class: %.java | build
 classes: $(TO_BUILD) | build
 
 # Legacy underscore-named bins.
-$(PROJECT)_cmds: $(patsubst %,/bin/$(PROJECT)_%/$(CMDS))
+$(PROJECT)_cmds: $(patsubst %,bin/$(PROJECT)_%,$(CMDS))
 
-bin/$(PROJECT)_%: bin/
-	ln -s bin/$(PROJECT) $<
+bin/$(PROJECT)_%: bin/$(PROJECT)
+	$(LN) -s $(PROJECT) $@
 
 release: $(PROJECT).tar.gz
 
 src-release: $(PROJECT)-src.tar.gz
 
 $(PROJECT).tar.gz: $(JARFILE) 
-	tar czf $(PROJECT).tar.gz bin libexec --exclude='*/CVS' \
+	$(TAR) czf $(PROJECT).tar.gz bin libexec --exclude='*/CVS' \
 		--transform 's,^,$(PROJECT)/,'
 
 $(PROJECT)-src.tar.gz: dist-clean
-	tar czf $(PROJECT)-src.tar.gz * --exclude='*/CVS'
+	$(TAR) czf $(PROJECT)-src.tar.gz * --exclude='*/CVS'
 
 build/build_tag: $(CLASSES) | build
 	@echo generating build tag
