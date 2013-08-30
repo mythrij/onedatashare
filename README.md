@@ -185,9 +185,13 @@ to maintain compatibility with HTCondor components that interfaced with
 previous Stork versions.
 
 The following line can be added to the `stork.conf` file to enable
-HTCondor compatibility mode:
+compatibility mode for legacy components expecting a specific output
+format from Stork commands:
 
     condor_mode = true
+
+Additional legacy support features are planning, including DAGMan
+logging output.
 
 For those who are unfamiliar and want to learn more:
 
