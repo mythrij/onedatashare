@@ -101,10 +101,15 @@ settings for the server and client tools. The search order for the
 configuration file is as follows:
 
 1) $STORK\_CONFIG
+
 2) ~/.stork.conf
+
 3) /etc/stork.conf
+
 4) $STORK/stork.conf
+
 5) /usr/local/stork/stork.conf
+
 6) stork.conf in currect directory
 
 Even if the file can't be found automatically, every valid config
