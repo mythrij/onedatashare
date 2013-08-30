@@ -345,6 +345,7 @@ public abstract class Command {
       if (e == OPT_EXCEPT) {
         usageAndExit(1, e.getMessage());
       } else {
+        e.printStackTrace();
         System.out.println("Error: "+e.getMessage());
       }
     }

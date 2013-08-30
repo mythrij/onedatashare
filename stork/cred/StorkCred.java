@@ -1,6 +1,7 @@
 package stork.cred;
 
 import stork.util.*;
+import stork.ad.*;
 
 // An interface for credentials.
 
@@ -15,6 +16,19 @@ public abstract class StorkCred<O> {
     this.owner = owner;
     cred_obj = cred;
     timer = new Watch(true);
+  }
+
+  // Create a credential from an ad.
+  // TODO: This is very hacky and can be done better.
+  public static StorkCred<?> create(Ad ad) {
+    String type = ad.get("type", "").toLowerCase();
+    if (type.isEmpty()) {
+      throw new RuntimeException("no credential type provided");
+    } if (type.equals("gss_cert")) {
+      return new StorkGSSCred(ad);
+    } if (type.equals("userinfo")) {
+      return new StorkUserinfo(ad);
+    } throw new RuntimeException("invalid credential type: "+type);
   }
 
   // Get the string representation of the credential type.
@@ -42,5 +56,13 @@ public abstract class StorkCred<O> {
   // Get the duration of the credential in milliseconds.
   public long duration() {
     return timer.elapsed();
+  }
+
+  // Get an ad suitable for showing to users. It should not include
+  // sensitive information.
+  public Ad getAd() {
+    return new Ad("type", type)
+             .put("owner", owner)
+             .put("timer", timer);
   }
 }

@@ -198,22 +198,17 @@ public abstract class StorkUtil {
 
   // Convert a size into a human-readable string.
   public static String prettySize(long s) {
-    return prettySize((double)s, (char)10);
+    return prettySize((double)s, (char)0);
   } public static String prettySize(double s) {
-    return prettySize(s, (char)10);
+    return prettySize(s, (char)0);
   } private static String prettySize(double s, char pre) {
     if (s >= 1000) switch (pre) {
       // Uppercase characters for base 10.
-      case 10 : return prettySize(s/1000, 'K');
-      case 'K': return prettySize(s/1000, 'M');
+      case  0 : return prettySize(s/1000, 'k');
+      case 'k': return prettySize(s/1000, 'M');
       case 'M': return prettySize(s/1000, 'G');
       case 'G': return prettySize(s/1000, 'T');
-      // Uppercase characters for base 2.
-      case  2 : return prettySize(s/1024, 'k');
-      case 'k': return prettySize(s/1024, 'm');
-      case 'm': return prettySize(s/1024, 'g');
-      case 'g': return prettySize(s/1024, 't');
-    } if (pre <= 10) {
+    } if (pre == 0) {
       return String.format("%d", (int) s);
     } return String.format("%.02f%c", s, pre);
   }
@@ -240,8 +235,10 @@ public abstract class StorkUtil {
 
   // Read a file into a string.
   public static String readFile(String path) {
+    return readFile(new File(path));
+  } public static String readFile(File f) {
     try {
-      return new Scanner(new File(path), "UTF-8").useDelimiter("\\A").next();
+      return new Scanner(f, "UTF-8").useDelimiter("\\A").next();
     } catch (Exception e) {
       throw new RuntimeException(e);
     }

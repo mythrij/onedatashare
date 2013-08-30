@@ -36,6 +36,7 @@ public class StorkJob {
   private Watch run_timer   = null;
 
   private transient Thread thread = null;
+  private transient StorkScheduler sched = null;
 
   // Create and enqueue a new job from a user input ad.
   // TODO: Strict filtering and checking.
@@ -44,12 +45,18 @@ public class StorkJob {
     ad.rename("src_url",  "src.url");
     ad.rename("dest_url", "dest.url");
 
-    System.out.println(ad);
     StorkJob j = ad.unmarshalAs(StorkJob.class).status(scheduled);
 
     if (j.src == null || j.dest == null)
       throw new RuntimeException("src or dest was null");
     return j;
+  }
+
+  // Call this before scheduling and before executing.
+  public StorkJob scheduler(StorkScheduler s) {
+    src.scheduler(sched = s);
+    dest.scheduler(s);
+    return this;
   }
 
   // Gets the job info as an ad, merged with progress ad.
@@ -96,7 +103,7 @@ public class StorkJob {
 
   // Called when the job gets removed from the queue.
   public synchronized void remove(String reason) {
-    if (isComplete())
+    if (isTerminated())
       throw new RuntimeException("job cannot be removed");
     message = reason;
     status(removed);
@@ -113,7 +120,7 @@ public class StorkJob {
   // Check if the job should be rescheduled.
   public synchronized boolean shouldReschedule() {
     // If we've failed, don't reschedule.
-    if (isComplete())
+    if (isTerminated())
       return false;
 
     // Check for custom max attempts.
@@ -121,9 +128,9 @@ public class StorkJob {
       return false;
 
     // Check for configured max attempts.
-    //max = env.getInt("max_attempts", 10);
-    //if (max > 0 && attempts >= max)
-      //return false;
+    int max = sched.env.getInt("max_attempts");
+    if (max > 0 && attempts >= max)
+      return false;
 
     return true;
   }
@@ -135,7 +142,7 @@ public class StorkJob {
   }
 
   // Return whether or not the job has terminated.
-  public boolean isComplete() {
+  public boolean isTerminated() {
     switch (status) {
       case scheduled:
       case processing:

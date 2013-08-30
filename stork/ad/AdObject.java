@@ -45,7 +45,7 @@ public class AdObject implements Comparable<AdObject> {
     map(boolean.class, "asBooleanValue");
     map(char.class,    "asChar");
     map(Map.class,     "asMap");
-    map(List.class,    "asList");
+    map(Collection.class, "asList");
     map(java.net.URI.class, "asURI");
   }
 
@@ -154,15 +154,15 @@ public class AdObject implements Comparable<AdObject> {
   public Ad asAd() {
     if (object instanceof Ad)
       return (Ad)object;
-    throw new RuntimeException("cannot convert to ad");
+    throw new RuntimeException("cannot convert "+object.getClass()+" to ad");
   }
 
-  public List<?> asList() {
-    return new Ad(asAd()).list();
+  public Collection<?> asList() {
+    return asAd().intoCollection(new LinkedList<Object>());
   }
 
   public Map<?,?> asMap() {
-    return new Ad(asAd()).map();
+    return asAd().intoMap(new HashMap<String,Object>());
   }
 
   // Helper function to try to find an unmarshal method.

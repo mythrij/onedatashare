@@ -82,7 +82,7 @@ public class AdPrinter {
     if (ad.isEmpty())
       return;
 
-    if (ad.isMap()) for (Map.Entry<Object, AdObject> e : ad.map().entrySet()) {
+    if (ad.isMap()) for (Map.Entry<String, AdObject> e : ad.map().entrySet()) {
       if (!first)
         sb.append(s);
       first = false;

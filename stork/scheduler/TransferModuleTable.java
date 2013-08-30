@@ -54,7 +54,7 @@ public class TransferModuleTable {
     // Add the protocols for this module.
     Set<String> good = new TreeSet<String>(), bad = new TreeSet<String>();
     for (String p : tm.protocols) {
-      if (byProtocol(p) == null) {
+      if (by_proto.get(p) == null) {
         good.add(p);
         by_proto.put(p, tm);
       } else {
@@ -77,13 +77,19 @@ public class TransferModuleTable {
   }
 
   // Get a transfer module by its handle.
-  public TransferModule byHandle(String handle) {
-    return by_handle.get(handle);
+  public TransferModule byHandle(String h) {
+    TransferModule tm = by_handle.get(h);
+    if (tm != null)
+      return tm;
+    throw new RuntimeException("no module '"+h+"' registered");
   }
 
   // Get a transfer module by protocol.
   public TransferModule byProtocol(String p) {
-    return by_proto.get(p);
+    TransferModule tm = by_proto.get(p);
+    if (tm != null)
+      return tm;
+    throw new RuntimeException("no module for protocol '"+p+"' registered");
   }
 
   // Get a set of all the modules.

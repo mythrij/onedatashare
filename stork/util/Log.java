@@ -8,7 +8,8 @@ import static java.util.logging.Level.*;
 public abstract class Log {
   private final static Logger log = Logger.getAnonymousLogger();
 
-  // Convenience logging methods that take variadic arguments.
+  // Convenience logging methods that take variadic arguments. The last
+  // object can optionally be a throwable to print a stack trace.
   public static void log(Level l, Object... o) {
     if (log.isLoggable(l)) {
       // Get the caller.
@@ -19,7 +20,15 @@ public abstract class Log {
           break;
       }
 
+      // Check for a throwable.
+      Throwable t = null;
+      if (o.length > 0 && o[o.length-1] instanceof Throwable) {
+        t = (Throwable) o[o.length-1];
+        o[o.length-1] = null;
+      }
+
       LogRecord lr = new LogRecord(l, StorkUtil.joinWith("", o));
+      lr.setThrown(t);
 
       if (i < st.length) {
         lr.setSourceClassName(st[i].getClassName());

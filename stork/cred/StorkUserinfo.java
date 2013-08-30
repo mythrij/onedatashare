@@ -1,5 +1,7 @@
 package stork.cred;
 
+import stork.ad.*;
+
 import java.net.*;
 
 // A username and password credential.
@@ -9,6 +11,8 @@ public class StorkUserinfo extends StorkCred<String[]> {
     super(stork_user, new String[] { user, pass });
   } public StorkUserinfo(String stork_user, String userinfo) {
     super(stork_user, split(userinfo));
+  } public StorkUserinfo(Ad ad) {
+    this(ad.get("user_id"), ad.get("user"), ad.get("pass"));
   }
 
   public String type() {

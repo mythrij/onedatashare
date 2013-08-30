@@ -10,51 +10,86 @@ import java.net.URI;
 // A descriptor of an end-point from a job ad. Automatically handles
 // lookup of cred token and transfer module.
 // TODO: Support for multiple end-points?
+// TODO: Delegate lookups to job ad.
 
 public class EndPoint {
-  public URI uri = null;
-  public StorkCred<?> cred_token = null;
-  public transient TransferModule module = null;
-
-  private static TransferModuleTable tmt = TransferModuleTable.instance();
-  private static CredManager cm = CredManager.instance();
+  private URI uri;
+  private String cred;
+  private String module;
+  private transient StorkScheduler sched = null;
 
   // Create a new endpoint from a URI.
-  public EndPoint() {
-    // Does nothing.
+  private EndPoint() {
+    // Only used by deserialization.
   } public EndPoint(String s) {
-    this(StorkUtil.makeURI(s));
+    uri(s);
   } public EndPoint(URI u) {
-    if (u == null)
-      throw new RuntimeException("missing URI field from endpoint");
+    uri(u);
+  } public EndPoint(Ad ad) {
+    uri(ad.get("uri"));
+    cred(ad.get("cred"));
+    module(ad.get("module"));
+  }
+
+  // Unmarshal strings as end-points with a URI.
+  public static EndPoint unmarshal(String u) {
+    return new EndPoint(u);
+  }
+
+  // Quick hack so we can perform lookups in the context of a scheduler.
+  // Be sure to set this before doing anything else.
+  public void scheduler(StorkScheduler s) {
+    sched = s;
+    validate();
+  }
+
+  // Validate that this thing was created properly.
+  public void validate() {
+    uri();
+    cred();
+    module();
+  }
+
+  // Get or set the URI.
+  public void uri(String s) {
+    uri(StorkUtil.makeURI(s));
+  } public void uri(URI u) {
     uri = u;
-  }
-
-  public static EndPoint unmarshal(String s) {
-    return new EndPoint(s);
-  }
-
-  public String proto() {
+  } public URI uri() {
     if (uri == null)
       throw new RuntimeException("missing URI");
     if (uri.getScheme() == null)
-      throw new RuntimeException("bad URI: no scheme specified");
-    return uri.getScheme();
+      throw new RuntimeException("no scheme specified");
+    return uri;
+  }
+
+  // Get or set the cred token.
+  public void cred(String c) {
+    cred = c;
+  } public StorkCred<?> cred() {
+    return (cred != null) ? sched.creds.get(cred) : null;
+  }
+
+  // Get or set the transfer module.
+  public void module(String m) {
+    module = m;
+  } public TransferModule module() {
+    if (module == null)
+      return sched.xfer_modules.byProtocol(proto());
+    return sched.xfer_modules.byHandle(module);
+  }
+
+  public String proto() {
+    return uri().getScheme();
   }
 
   public String path() {
-    if (uri == null)
-      throw new RuntimeException("endpoint has no URI");
-    return uri.getPath();
+    return uri().getPath();
   }
 
   // Create a session for this endpoint.
   public StorkSession session() {
-    if (module == null)
-      module = tmt.byProtocol(proto());
-    if (module == null)
-      throw new RuntimeException("no module for "+proto()+" registered");
-    return module.session(this);
+    return module().session(this);
   }
 
   // Create a session paired with another endpoint session.

@@ -50,7 +50,7 @@ public class Watch {
            (h > 0) ? String.format("%dh%02dm%02ds", h, m, s) :
            (m > 0) ? String.format("%dm%02ds", m, s) :
            (s > 0) ? String.format("%d.%02ds", s, i/10) :
-                     String.format("%d.%04ds", s, i/10);
+                     String.format("%dms", i);
   }
 
   // Start (or restart) the timer.

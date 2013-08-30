@@ -57,7 +57,7 @@ public class StorkSubmit extends StorkClient {
     // own ad.
     switch (args.length) {
       case 2:  // src_url and dest_url
-        jobs = new Ad("src",  args[0]).put("dest", args[1]).getAds();
+        jobs = new Ad[]{ new Ad("src", args[0]).put("dest", args[1]) };
         break;
       case 1:  // From file
         jobs = Ad.parse(new File(args[0]), true).getAds();

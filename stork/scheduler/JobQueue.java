@@ -26,7 +26,7 @@ public class JobQueue {
     
     for (Ad a : ad.getAds("all")) {
       StorkJob j = a.unmarshalAs(StorkJob.class);
-      if (!j.isComplete())
+      if (!j.isTerminated())
         j.status(scheduled);
       jq.put(j);
     } return jq;
@@ -45,9 +45,6 @@ public class JobQueue {
   public synchronized StorkJob put(StorkJob job) {
     return put(job, false);
   } public synchronized StorkJob put(StorkJob job, boolean first) {
-    if (job.status() == JobStatus.scheduled)
-      schedule(job);
-
     if (job.jobId() <= 0) {
       all.add(job);
       job.jobId(all.size());
@@ -63,8 +60,11 @@ public class JobQueue {
   public synchronized void schedule(StorkJob job) {
     schedule(job, false);
   } public synchronized void schedule(StorkJob job, boolean first) {
-    if (first) waiting.push(job);
-    else       waiting.add(job);
+    put(job, first);
+    if (job.status() == scheduled) {
+      if (first) waiting.push(job);
+      else       waiting.add(job);
+    }
   }
 
   // Get a job by its id.

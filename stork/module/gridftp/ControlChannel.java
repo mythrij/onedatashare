@@ -132,7 +132,7 @@ public class ControlChannel extends Pipeline<String, Reply> {
     } catch (Exception e) {
       if (e instanceof RuntimeException)
         throw (RuntimeException) e;
-      throw abort("couldn't establish channel: "+e.getMessage(), e);
+      throw abort("couldn't establish channel", e);
     }
   }
 

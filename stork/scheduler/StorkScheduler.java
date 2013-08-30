@@ -3,6 +3,7 @@ package stork.scheduler;
 import stork.*;
 import stork.ad.*;
 import stork.util.*;
+import stork.cred.*;
 import stork.module.*;
 import stork.module.gridftp.*;
 import stork.module.sftp.*;
@@ -20,20 +21,30 @@ import java.util.concurrent.*;
 //
 // The entire state of the scheduler can be serialized and saved to disk,
 // and subsequently recovered if so desired.
+//
+// TODO: Break this thing up into a separate package.
+
 public class StorkScheduler {
   public Ad env = new Ad();
   public JobQueue job_queue = new JobQueue();
   public StorkUser.UserMap users = new StorkUser.UserMap();
+  public CredManager creds = new CredManager();
 
   private transient Thread[] thread_pool;
   private transient Thread[] worker_pool;
   private transient Thread   dump_state_thread;
 
-  private transient Map<String, StorkCommand> cmd_handlers;
-  private transient TransferModuleTable xfer_modules;
+  private transient Map<String, CommandHandler> cmd_handlers;
+  public transient TransferModuleTable xfer_modules;
 
   private transient LinkedBlockingQueue<RequestContext> req_queue =
     new LinkedBlockingQueue<RequestContext>();
+
+  // Put a job into the scheduling queue.
+  public void schedule(StorkJob job) {
+    job.scheduler(this);
+    job_queue.schedule(job);
+  }
 
   // A thread which runs continuously and starts jobs as they're found.
   private class StorkQueueThread extends Thread {
@@ -52,6 +63,9 @@ public class StorkScheduler {
         if (job == null)
           continue;
 
+        // This will validate both deserialized and submitted jobs.
+        job.scheduler(StorkScheduler.this);
+
         // Run the job then check the return status.
         switch (job.process()) {
           // If a job is still processing, something weird happened.
@@ -60,7 +74,7 @@ public class StorkScheduler {
           // If job is scheduled, put it back in the schedule queue.
           case scheduled:
             Log.info("Job "+job.jobId()+" rescheduling...");
-            job_queue.schedule(job); break;
+            schedule(job); break;
           // If the job was paused, put it in limbo until it's resumed.
           case paused:  // This can't happen yet!
             break;
@@ -93,7 +107,7 @@ public class StorkScheduler {
           if (req.cmd == null)
             throw new RuntimeException("no command specified");
 
-          StorkCommand handler = cmd_handlers.get(req.cmd);
+          CommandHandler handler = cmd_handlers.get(req.cmd);
 
           if (handler == null)
             throw new RuntimeException("invalid command: "+req.cmd);
@@ -128,7 +142,7 @@ public class StorkScheduler {
   }
 
   // Stork command handlers should implement this interface.
-  static abstract class StorkCommand {
+  static abstract class CommandHandler {
     public abstract Ad handle(RequestContext req);
 
     // Override this for commands that don't require logon.
@@ -137,7 +151,7 @@ public class StorkScheduler {
     }
   }
 
-  class StorkQHandler extends StorkCommand {
+  class StorkQHandler extends CommandHandler {
     public Ad handle(RequestContext req) {
       AdSorter sorter = new AdSorter("job_id");
       boolean count = req.ad.getBoolean("count");
@@ -151,11 +165,11 @@ public class StorkScheduler {
     }
   }
 
-  class StorkListHandler extends StorkCommand {
+  class StorkListHandler extends CommandHandler {
     public Ad handle(RequestContext req) {
       StorkSession sess = null;
       try {
-        EndPoint ep = req.ad.unmarshalAs(EndPoint.class);
+        EndPoint ep = new EndPoint(req.ad);
         sess = ep.session();
         return sess.list(ep.path(), req.ad);
       } finally {
@@ -169,7 +183,7 @@ public class StorkScheduler {
   }
 
   // Handle user registration.
-  class StorkUserHandler extends StorkCommand {
+  class StorkUserHandler extends CommandHandler {
     public Ad handle(RequestContext req) {
       if ("register".equals(req.ad.get("action"))) {
         StorkUser su = users.register(req.ad);
@@ -184,15 +198,19 @@ public class StorkScheduler {
     }
   }
 
-  class StorkSubmitHandler extends StorkCommand {
+  class StorkSubmitHandler extends CommandHandler {
     public Ad handle(RequestContext req) {
-      Ad ad = job_queue.put(StorkJob.create(req.ad)).getAd();
+      StorkJob job = StorkJob.create(req.ad);
+      job.scheduler(StorkScheduler.this);  // This will validate the job.
+
+      schedule(job);
       dumpState();
-      return ad;
+
+      return job.getAd();
     }
   }
 
-  class StorkRmHandler extends StorkCommand {
+  class StorkRmHandler extends CommandHandler {
     public Ad handle(RequestContext req) {
       Range r = new Range(req.ad.get("range"));
       Range sdr = new Range(), cdr = new Range();
@@ -218,7 +236,7 @@ public class StorkScheduler {
     }
   }
 
-  class StorkInfoHandler extends StorkCommand {
+  class StorkInfoHandler extends CommandHandler {
     // Send transfer module information.
     Ad sendModuleInfo(RequestContext req) {
       return Ad.marshal(xfer_modules.infoAds());
@@ -230,6 +248,18 @@ public class StorkScheduler {
       return new Ad("error", "server info is not implemented");
     }
 
+    // Send information about a credential or about all credentials.
+    Ad sendCredInfo(RequestContext req) {
+      String uuid = req.ad.get("cred");
+      if (uuid != null) try {
+        return creds.getCred(uuid).getAd();
+      } catch (Exception e) {
+        throw new RuntimeException("no credential could be found");
+      } else {
+        return creds.getCredInfos(req.ad.get("user_id"));
+      }
+    }
+
     public Ad handle(RequestContext req) {
       String type = req.ad.get("type", "module");
 
@@ -237,11 +267,22 @@ public class StorkScheduler {
         return sendModuleInfo(req);
       if (type.equals("server"))
         return sendServerInfo(req);
+      if (type.equals("cred"))
+        return sendCredInfo(req);
       return new Ad("error", "invalid type: "+type);
     }
 
     public boolean requiresLogin() {
       return false;
+    }
+  }
+
+  // Handles creating credentials.
+  class StorkCredHandler extends CommandHandler {
+    public Ad handle(RequestContext req) {
+      StorkCred<?> cred = StorkCred.create(req.ad);
+      String uuid = creds.add(cred);
+      return cred.getAd().put("uuid", uuid);
     }
   }
 
@@ -432,7 +473,7 @@ public class StorkScheduler {
 
   private StorkScheduler init() {
     // Initialize command handlers
-    cmd_handlers = new HashMap<String, StorkCommand>();
+    cmd_handlers = new HashMap<String, CommandHandler>();
     cmd_handlers.put("q", new StorkQHandler());
     cmd_handlers.put("ls", new StorkListHandler());
     cmd_handlers.put("status", new StorkQHandler());
@@ -440,6 +481,7 @@ public class StorkScheduler {
     cmd_handlers.put("rm", new StorkRmHandler());
     cmd_handlers.put("info", new StorkInfoHandler());
     cmd_handlers.put("user", new StorkUserHandler());
+    cmd_handlers.put("cred", new StorkCredHandler());
 
     // Initialize transfer module set
     xfer_modules = TransferModuleTable.instance();

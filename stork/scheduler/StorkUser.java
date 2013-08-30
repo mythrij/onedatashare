@@ -49,20 +49,13 @@ public class StorkUser {
   // A class which can be used to store users.
   @SuppressWarnings({"serial"})
   public static class UserMap extends HashMap<String, StorkUser> {
-    // TODO: Remove this terrible shit later when ads are good.
+    // TODO: Remove this terrible shit later when ads handle generics.
     public static UserMap unmarshal(Ad ad) {
-      Map<String, Ad> map = new HashMap<String, Ad>();
-      System.out.println(map);
-      UserMap um = new UserMap();
-      ad.unmarshal(map);
+      UserMap u = new UserMap();
 
-      System.out.println("Ad: "+ad);
-      System.out.println("Map: "+map);
-
-      for (String s : map.keySet()) {
-        StorkUser u = map.get(s).unmarshalAs(StorkUser.class);
-        um.put(s, u);
-      } return um;
+      for (String s : ad.keySet())
+        u.put(s, ad.getAd(s).unmarshal(new StorkUser(s)));
+      return u;
     }
 
     // Add a user to this user map based on a registration ad.

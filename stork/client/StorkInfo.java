@@ -13,7 +13,7 @@ public class StorkInfo extends StorkClient {
     desc = new String[] {
       "This command retrieves information about the server itself, "+
       "such as transfer modules available and server statistics.",
-      "Valid arguments for type: module (default), server"
+      "Valid arguments for type: module (default), server, cred"
     };
   }
 

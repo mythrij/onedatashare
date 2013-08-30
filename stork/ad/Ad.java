@@ -1,29 +1,28 @@
 package stork.ad;
 
-import static stork.util.StorkUtil.splitCSV;
-
 import java.util.*;
 import java.io.*;
 import java.lang.ref.*;
 import java.lang.reflect.*;
 
+// TODO: Generic serialization stuff.
+
 public class Ad implements Serializable {
-  // There's some kind of irony here, isn't there? :)
   static final long serialVersionUID = 5988172454007663702L;
 
   // An ad is either a list or a map, but never both. Never access these
   // directly, always access through list() or map().
-  private Map<Object, AdObject> map = null;
+  private Map<String, AdObject> map = null;
   private List<AdObject> list = null;
 
   // Make this ad a map if it's undetermined. Return the map.
-  Map<Object, AdObject> map() {
+  Map<String, AdObject> map() {
     return map(true);
-  } Map<Object, AdObject> map(boolean make) {
+  } Map<String, AdObject> map(boolean make) {
     if (list != null)
       throw new RuntimeException("cannot access ad as a map");
     if (map == null && make)
-      map = new LinkedHashMap<Object, AdObject>();
+      map = new LinkedHashMap<String, AdObject>();
     return map;
   }
 
@@ -317,6 +316,13 @@ public class Ad implements Serializable {
            isList() ? list().size() : 0;
   }
 
+  // Get the key set if this ad is a map.
+  public synchronized Set<String> keySet() {
+    if (isEmpty() || isList())
+      return Collections.emptySet();
+    return map().keySet();
+  }
+
   // Check if fields or values are present in the ad.
   public synchronized boolean containsKey(Object key) {
     return has(key.toString());
@@ -413,9 +419,9 @@ public class Ad implements Serializable {
       }
     } return this;
   } private synchronized Ad trimMap() {
-    Iterator<Map.Entry<Object, AdObject>> it = map().entrySet().iterator();
+    Iterator<Map.Entry<String, AdObject>> it = map().entrySet().iterator();
     while (it.hasNext()) {
-      Map.Entry<Object, AdObject> e = it.next();
+      Map.Entry<String, AdObject> e = it.next();
       AdObject o = e.getValue();
 
       if (o.asObject() instanceof String) {
@@ -502,7 +508,7 @@ public class Ad implements Serializable {
     if (c == Ad.class) {
       ((Ad)o).addAll(this);
     } else if (isMap() && o instanceof Map) {
-      for (Map.Entry<Object, AdObject> e : map().entrySet())
+      for (Map.Entry<String, AdObject> e : map().entrySet())
         ((Map)o).put(e.getKey(), e.getValue().asObject());
     } else if (isList() && o instanceof Collection) {
       ((Collection)o).addAll(list());
@@ -515,8 +521,32 @@ public class Ad implements Serializable {
   }
 
   // Construct a new instance of a class and marshal into it.
-  public <O> O unmarshalAs(Class<O> clazz) {
-    return clazz.cast(AdObject.wrap(this).as(clazz));
+  public <O> O unmarshalAs(Class<O> clazz, Object... args) {
+    Class<?>[] ca = new Class<?>[args.length];
+    Constructor<O> c = null;
+    for (int i = 0; i < args.length; i++) {
+      // Hmm, what to do about null arguments...
+      ca[i] = (args[i] != null) ? args[i].getClass() : Object.class;
+    } try {
+      // Get an inherited or public constructor first.
+      c = clazz.getConstructor(ca);
+      return unmarshal(c.newInstance(args));
+    } catch (Exception e) {
+      boolean accessible = false;
+      // If that didn't work, try to get a declared constructor.
+      try {
+        c = clazz.getDeclaredConstructor(ca);
+        accessible = c.isAccessible();
+        c.setAccessible(true);
+        return unmarshal(c.newInstance(args));
+      } catch (Exception e2) {
+        // Ugh, guess nothing worked.
+        throw new RuntimeException(e2);
+      } finally {
+        if (c != null)
+          c.setAccessible(accessible);
+      }
+    }
   }
 
   // Marshal an object into an ad.
@@ -587,6 +617,25 @@ public class Ad implements Serializable {
     fields.addAll(Arrays.asList(c.getDeclaredFields()));
     fields.addAll(Arrays.asList(c.getFields()));
     return fields;
+  }
+
+  // Package-private helper methods to unmarshal into lists and maps.
+  @SuppressWarnings({"unchecked"})
+  <T> Collection<T> intoCollection(Collection<T> c) {
+    if (isList()) for (AdObject o : list())
+      c.add((T)o.asObject());
+    else if (isMap()) for (AdObject o : map.values())
+      c.add((T)o.asObject());
+    return c;
+  }
+  @SuppressWarnings({"unchecked"})
+  <K,T> Map<K,T> intoMap(Map<K,T> m) {
+    int i = 0;
+    if (isList()) for (AdObject o : list())
+      m.put((K)Integer.valueOf(i++), (T)o.asObject());
+    else if (isMap()) for (Map.Entry<?,AdObject> e : map.entrySet())
+      m.put((K)e.getKey(), (T)e.getValue().asObject());
+    return m;
   }
 
   // Composition methods
