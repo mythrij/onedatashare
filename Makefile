@@ -16,7 +16,10 @@ JFLAGS = -J-Xmx512m $(DBGFLAG) \
 JC = javac
 JAR = jar -J-Xmx512m
 
-.PHONY: all install clean init release classes
+# Used to generate legacy command commands.
+CMDS = help info ls q raw rm server status submit user
+
+.PHONY: all install clean init release classes $(PROJECT)_cmds
 .SUFFIXES: .java .class
 
 # Recursive wildcard function from jgc.org.
@@ -46,6 +49,12 @@ build/%.class: %.java | build
 
 classes: $(TO_BUILD) | build
 
+# Legacy underscore-named bins.
+$(PROJECT)_cmds: $(patsubst %,/bin/$(PROJECT)_%/$(CMDS))
+
+bin/$(PROJECT)_%: bin/
+	ln -s bin/$(PROJECT) $<
+
 release: $(PROJECT).tar.gz
 
 src-release: $(PROJECT)-src.tar.gz
@@ -64,4 +73,4 @@ build/build_tag: $(CLASSES) | build
 	@echo buildtime = `date`     >> build/build_tag
 
 clean:
-	$(RM) -rf build lib/stork-*.jar $(PROJECT).tar.gz
+	$(RM) -rf build lib/$(PROJECT)-*.jar $(PROJECT).tar.gz bin/$(PROJECT)_*
