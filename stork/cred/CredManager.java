@@ -20,6 +20,15 @@ public class CredManager extends LinkedHashMap<UUID, StorkCred<?>> {
     return (token == null) ? null : get(token);
   }
 
+  public StorkCred<?> get(UUID u) {
+    System.out.println("Getting: "+u);
+    StorkCred<?> c = super.get(u);
+    if (c == null)
+      System.out.println(u+" wasn't found!");
+    System.out.println(keySet());
+    return c;
+  }
+
   // TODO: Remove me when ads support this.
   public static CredManager unmarshal(Ad ad) {
     CredManager cm = new CredManager();

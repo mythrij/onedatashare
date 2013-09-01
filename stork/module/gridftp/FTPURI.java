@@ -3,6 +3,7 @@ package stork.module.gridftp;
 import stork.util.*;
 import static stork.module.ModuleException.*;
 import stork.cred.*;
+import stork.scheduler.*;
 
 import java.net.*;
 import java.util.*;
@@ -10,31 +11,44 @@ import java.io.*;
 
 // Wraps a URI and a credential into one object and makes sure the URI
 // represents a supported protocol. Also parses out a bunch of stuff.
+// TODO: Remove this.
+
 public class FTPURI {
-  public final URI uri;
-  public final StorkGSSCred cred;
+  public URI uri;
+  public StorkGSSCred cred = null;
 
-  public final boolean gridftp, ftp, file;
-  public final String host, proto;
-  public final int port;
-  public final String user, pass;
-  public final String path;
+  public boolean gridftp, ftp, file;
+  public String host, proto;
+  public int port;
+  public String user, pass;
+  public String path;
 
-  public FTPURI(URI uri, StorkCred<?> cred) {
-    this.uri = uri;
+  private void setUserPass(String[] ui) {
+    if (ui == null)
+      return;
+    if (ui[0] != null)
+      user = ui[0];
+    if (ui[1] != null)
+      pass = ui[1];
+  }
+
+  public FTPURI(EndPoint e) {
+    this.uri = e.uri();
+    StorkCred<?> cred = e.cred();
+
     host = uri.getHost();
     proto = uri.getScheme();
     int p = uri.getPort();
-    String[] ui = StorkUserinfo.split(uri);
-    user = ui[0];
-    pass = ui[1];
+    setUserPass(StorkUserinfo.split(uri));
 
     // Only use the credential if we support it.
-    if (cred == null)
+    if (cred == null) {
       this.cred = null;
-    else if (cred instanceof StorkGSSCred)
+    } else if (cred instanceof StorkUserinfo) {
+      setUserPass(((StorkUserinfo) cred).credential());
+    } else if (cred instanceof StorkGSSCred) {
       this.cred = (StorkGSSCred) cred;
-    else throw abort("unsupported credential type: "+cred.type());
+    } else throw abort("unsupported credential type: "+cred.type());
 
     if (uri.getPath().startsWith("/~"))
       path = uri.getPath().substring(1);

@@ -45,16 +45,7 @@ public class GridFTPSession extends StorkSession {
   // opts may be null.
   public GridFTPSession(EndPoint e) {
     super(e);
-
-    // Check if we've been given a credential to use.
-    // TODO: Automatic instantiation from MyProxy as well.
-    /*
-    if (cred == null && has("x509_proxy"))
-      cred = StorkGSSCred.fromBytes(get("x509_proxy").getBytes());
-    */
-
-    // Establish a control channel connection to remote server.
-    cc = new ControlChannel(new FTPURI(e.uri(), e.cred()));
+    cc = new ControlChannel(e);
   }
 
   // StorkSession interface implementations

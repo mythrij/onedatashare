@@ -7,11 +7,14 @@ import static java.util.logging.Level.*;
 
 public abstract class Log {
   private final static Logger log = Logger.getAnonymousLogger();
+  public static boolean just_log_to_stdout_who_cares = false;
 
   // Convenience logging methods that take variadic arguments. The last
   // object can optionally be a throwable to print a stack trace.
   public static void log(Level l, Object... o) {
-    if (log.isLoggable(l)) {
+    if (just_log_to_stdout_who_cares) {
+      System.out.println(StorkUtil.joinWith("", o));
+    } else if (log.isLoggable(l)) {
       // Get the caller.
       int i;
       StackTraceElement[] st = Thread.currentThread().getStackTrace();

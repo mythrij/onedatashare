@@ -6,6 +6,7 @@ import static stork.module.ModuleException.*;
 import static stork.util.StorkUtil.Static.*;
 import stork.stat.*;
 import stork.cred.*;
+import stork.scheduler.*;
 
 import java.util.*;
 import java.net.*;
@@ -79,7 +80,9 @@ public class ControlChannel extends Pipeline<String, Reply> {
     }
   }
 
-  public ControlChannel(FTPURI u) {
+  public ControlChannel(EndPoint e) {
+    this(new FTPURI(e));
+  } public ControlChannel(FTPURI u) {
     my_uri = u;
     port = u.port;
 
