@@ -52,7 +52,7 @@ public class ChannelPair {
   // Pair a channel with a new local channel. Note: doesn't duplicate().
   public ChannelPair(ControlChannel cc) {
     if (cc.local)
-      abort("cannot create local pair for local channel");
+      throw abort("cannot create local pair for local channel");
     rc = dc = cc;
     oc = sc = new ControlChannel(cc);
   }
@@ -70,7 +70,7 @@ public class ChannelPair {
     return cp;
   }
 
-  // Our slightly better HostPort.
+  // Our slightly better HostPort, though it only works with IPv4.
   private static class BetterHostPort extends HostPort {
     public byte[] bytes;  // Only the first four bytes of this are used.
     public int port;
@@ -83,10 +83,8 @@ public class ChannelPair {
         if (i != 6)
           throw new Exception(""+i);
         port = ((bytes[4]&0xFF)<<8) + (bytes[5]&0xFF);
-        Log.fine("Port: "+port);
-        Log.fine("      "+(port&0xFFFF));
       } catch (Exception e) {
-        abort("malformed PASV reply", e);
+        throw abort("malformed PASV reply", e);
       }
     } public int getPort() {
       return port & 0xFFFF;
@@ -97,6 +95,23 @@ public class ChannelPair {
       return (bytes[0]&0xFF)+","+(bytes[1]&0xFF)+
          ","+(bytes[2]&0xFF)+","+(bytes[3]&0xFF)+
          ","+((port&0xFF00)>>8)+","+(port&0xFF);
+    } public void subnetHack(byte[] b) {
+      // Make sure the first three octets are the same as the control
+      // channel IP. If they're different, assume the server is a LIAR.
+      // We should try connecting to the control channel IP. If only the
+      // last octet is different, then don't worry, it probably knows
+      // what it's talking about. This is to fix issues with servers
+      // telling us their local IPs and then us trying to connect to it
+      // and waiting forever. This is just a hack and should be replaced
+      // with something more accurate, or, better yet, test if we can act
+      // as a passive mode client and have them connect to us, since that
+      // would be better and assumably we have control over that.
+      if (b[0] == bytes[0])
+      if (b[1] == bytes[1])
+      if (b[2] == bytes[2])
+        return;
+      bytes = b;
+      Log.fine("Adjusting server IP to: ", getHost());
     }
   }
 
@@ -104,35 +119,25 @@ public class ChannelPair {
   // We should ignore the returned IP in case of a malicious server, and
   // simply subtitute the remote server's IP.
   // TODO: EPSV support.
-  public void pipePassive() {
+  public ControlChannel.Wrapper pipePassive() {
     String cmd = rc.fc.isIPv6() ? "EPSV" : "PASV";
-    rc.write(cmd, rc.new Handler() {
+    return rc.write(cmd, rc.new Handler() {
       public Reply handleReply() {
         Reply r = rc.readChannel();
         String s = r.getMessage().split("[()]")[1];
         BetterHostPort hp = new BetterHostPort(s);
 
-        // Make sure the IP is "close" enough to the control channel IP
-        // that we should trust it. If not, change to channel IP.
-        byte[] hpb = hp.bytes;
-        byte[] ccb = rc.getIP().getAddress();
+        Log.fine("Current HostPort: ", hp.getHost(), ":", hp.getPort());
+        Log.fine("Current CC:       ", rc.getIP());
 
-        Log.fine("Current HostPort: "+hp.getHost()+":"+hp.getPort());
-        Log.fine("                  "+s);
+        hp.subnetHack(rc.getIP().getAddress());
 
-        try {
-          if (hpb[0] != ccb[0] || hpb[1] != ccb[1] || hpb[2] != ccb[2])
-            hp.bytes = ccb;
-        } catch (Exception e) {
-          hp.bytes = ccb;
-        }
-
-        Log.fine("Making active connection to: "+hp);
+        Log.fine("Making active connection to: ", hp.getHost());
 
         if (oc.local) try {
           oc.facade.setActive(hp);
         } catch (Exception e) {
-          abort(e);
+          throw abort(e);
         } else if (oc.fc.isIPv6()) {
           oc.execute("EPRT "+hp.toFtpCmdArgument());
         } else {
@@ -177,7 +182,8 @@ public class ChannelPair {
 
   // Flush both channels so they are synchronized.
   void sync() {
-    sc.flush(true); dc.flush(true);
+    dc.flush(true);
+    sc.flush(true);
   }
 
   // Make a directory on the destination.
@@ -218,7 +224,7 @@ public class ChannelPair {
       if (sc.local) try {
         sc.facade.retrieve(new FileMap(path, off, len));
       } catch (Exception ex) {
-        abort(false, "could not retrieve", ex);
+        throw abort(false, "could not retrieve", ex);
       } else if (len > -1) {
         sc.write(StorkUtil.join("ERET P", off, len, path), hs);
       } else {
@@ -232,7 +238,7 @@ public class ChannelPair {
       if (dc.local) try {
         dc.facade.store(new FileMap(dpath, off, len));
       } catch (Exception ex) {
-        abort(false, "could not store", ex);
+        throw abort(false, "could not store", ex);
       } else if (len > -1) {
         dc.write(StorkUtil.join("ESTO A", off, dpath), hd);
       } else {

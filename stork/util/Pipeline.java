@@ -44,15 +44,24 @@ public abstract class Pipeline<C,R> extends Thread {
     C cmd;
     Handler hnd;
     boolean ignore;
+    Wrapper wrapper;
 
-    PipedCommand(C c, boolean i, Handler h) {
-      cmd = c; ignore = i; hnd = h;
+    PipedCommand(C c, Handler h, Wrapper w) {
+      cmd = c; hnd = h; wrapper = w;
     }
 
     // If we're ignoring, keep handling till command is done.
-    synchronized R handle() {
-      R r = (hnd != null) ? hnd.handleReply() : handleReply();
-      return ignore ? null : r;
+    synchronized void handle() {
+      if (cmd == null) {
+        // It was a sync command.
+        wrapper.set();
+      } else try {
+        R r = (hnd != null) ? hnd.handleReply() : handleReply();
+        if (wrapper != null)
+          wrapper.set(r);
+      } catch (RuntimeException e) {
+        wrapper.set(e);
+      }
     }
 
     public String toString() {
@@ -60,24 +69,45 @@ public abstract class Pipeline<C,R> extends Thread {
     }
   }
 
-  // A wrapper for replies so exceptions can propagate correctly.
-  private class Wrapper {
-    R r = null; RuntimeException e = null;
-    Wrapper(R re, RuntimeException ex) { r = re; e = ex; }
+  // A proxy wrapper for replies or exceptions.
+  // TODO: Replace with a bell.
+  public class Wrapper {
+    private R r = null;
+    private RuntimeException e = null;
+    private boolean set = false;
+
+    Wrapper() { }
+    Wrapper(R r) { this.r = r; set = true; }
+
+    // Use this to wait for the wrapper to be set.
+    public synchronized R get() {
+      while (!set) try {
+        wait();
+      } catch (InterruptedException e) {
+        if (dead) throw PIPELINE_ABORTED;
+      } if (e != null) {
+        throw e;
+      } return r;
+    }
+
+    // Use these to set the wrapper value.
+    private synchronized void set() {
+      set = true;
+      notifyAll();
+    } public synchronized void set(R r) {
+      this.r = r;
+      set();
+    } public synchronized void set(RuntimeException e) {
+      this.e = e;
+      set();
+    }
   }
 
   // Implement write behavior in subclasses.
   public abstract void handleWrite(C c);
 
-  // Implement read behavior in subclasses. Return null when last reply
-  // has been read to indicate command is complete. If an exception is
-  // thrown, the assumption is the command failed and is complete.
-  //
-  // The "return null" method is a little hackish. Is there a better way?
   public abstract R handleReply();
 
-  // Subclass this to implement a custom handler that will be executed
-  // instead of handleReply().
   public abstract class Handler {
     public abstract R handleReply();
   }
@@ -90,62 +120,68 @@ public abstract class Pipeline<C,R> extends Thread {
 
   // Should be run as a thread. Reads replies from sent commands with the
   // read handler then adds them to the done queue.
-  public synchronized void run() {
+  public void run() {
     while (!dead) {
-      while (!dead && sent.isEmpty()) waitFor();
-      if (dead) return;
-      try {
-        R r = sent.peek().handle();
-        if (r != null) addReply(r);
-      } catch (RuntimeException e) {
-        addReply(e);
-      } sent.pop(); notifyAll();
+      PipedCommand c;
+      synchronized (this) {
+        while (!dead && sent.isEmpty()) waitFor();
+        if (dead) return;
+        c = sent.pop();
+        notifyAll();
+      } c.handle();
     }
   }
 
   // Add a reply or exception to the done list.
-  protected synchronized void addReply(R r) {
-    done.add(new Wrapper(r, null));
-  } protected synchronized void addReply(RuntimeException e) {
-    done.add(new Wrapper(null, e));
+  protected synchronized Wrapper addReplyProxy() {
+    Wrapper w = new Wrapper();
+    done.add(w);
+    return w;
+  } protected synchronized void addReply(R r) {
+    done.add(new Wrapper(r));
   }
 
   // Write a command to the queue to be piped. If ignore is specified, the
   // command's result will not be posted to the done queue.
-  public synchronized <H extends Handler> void write(C c, boolean i, H h) {
-    while (level > 0 && sent.size() >= level) waitFor();
-    handleWrite(c);
-    PipedCommand cmd = new PipedCommand(c, i, h);
-    sent.add(cmd); notifyAll();
-  } public <H extends Handler> void write(C c, H h) {
-    write(c, false, h);
-  } public void write(C c, boolean ignore) {
-    write(c, ignore, null);
-  } public void write(C c) {
-    write(c, false);
+  public synchronized <H extends Handler> Wrapper write(C c, boolean i, H h) {
+    while (level > 0 && sent.size() >= level)
+      waitFor();
+
+    if (c != null)
+      handleWrite(c);
+
+    Wrapper w = i ? new Wrapper() : addReplyProxy();
+
+    sent.add(new PipedCommand(c, h, w));
+    notifyAll();
+    return w;
+  } public <H extends Handler> Wrapper write(C c, H h) {
+    return write(c, false, h);
+  } public Wrapper write(C c, boolean ignore) {
+    return write(c, ignore, null);
+  } public Wrapper write(C c) {
+    return write(c, false);
   }
 
   // Pop a reply from the done queue. If it was an exception, throw.
   public synchronized R read() {
-    while (done.isEmpty()) waitFor();
-    Wrapper r = done.pop();
-    notifyAll();
-    if (r.e != null) throw r.e;
-    return r.r;
+    Wrapper r;
+    synchronized (this) {
+      while (done.isEmpty()) waitFor();
+      r = done.pop();
+      notifyAll();
+    } return r.get();
   }
 
-  // Flush the whole pipe, then execute command.
-  public synchronized R exchange(C c) {
-    flush(true);
-    write(c);
-    return read();
+  // Execute a command synchronously.
+  public R exchange(C c) {
+    return write(c).get();
   }
 
   // Wait until every command is done.
-  public synchronized void flush(boolean done_too) {
-    while (!sent.isEmpty()) waitFor();
-    if (done_too) while (!done.isEmpty()) read();  // Might throw.
-  } public synchronized void flush() {
+  public void flush(boolean all) {
+    write(null, true).get();
+  } public void flush() {
     flush(false);
   }
 
@@ -157,7 +193,7 @@ public abstract class Pipeline<C,R> extends Thread {
     throw PIPELINE_ABORTED;
   }
 
-  // wait() without the stupid exception handling boilerplate.
+  // wait() without the exception handling boilerplate.
   private void waitFor() {
     try {
       wait();

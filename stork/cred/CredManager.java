@@ -21,11 +21,7 @@ public class CredManager extends LinkedHashMap<UUID, StorkCred<?>> {
   }
 
   public StorkCred<?> get(UUID u) {
-    System.out.println("Getting: "+u);
     StorkCred<?> c = super.get(u);
-    if (c == null)
-      System.out.println(u+" wasn't found!");
-    System.out.println(keySet());
     return c;
   }
 

@@ -119,12 +119,15 @@ public class GridFTPSession extends StorkSession {
 
         total++;
 
-        cp.pipePassive();
-        cp.rc.write("LIST ./"+p, true, cp.rc.new XferHandler(null) {
+        final ControlChannel.Wrapper w = cp.pipePassive();
+        cp.rc.write("LIST ./"+p, cp.rc.new XferHandler(null) {
           public Reply handleReply() {
             ListAdSink sink = new ListAdSink(ad, false);
             cp.oc.facade.store(sink);
-            Reply r = super.handleReply();
+
+            Reply r = w.get();  // This will throw if there was a problem.
+
+            r = super.handleReply();
             D("Got reply: "+r);
             D("Waiting for: ."+p);
             sink.waitFor();

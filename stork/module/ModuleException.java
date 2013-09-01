@@ -44,20 +44,20 @@ public class ModuleException extends RuntimeException {
   // It's recommended that these be imported by client classes and used to
   // throw these exceptions, instead of constructing and throwing them.
   public static ModuleException abort() {
-    throw new ModuleException(true);
+    return new ModuleException(true);
   } public static ModuleException abort(Throwable cause) {
-    throw new ModuleException(true, cause);
+    return new ModuleException(true, cause);
   } public static ModuleException abort(String message) {
-    throw new ModuleException(true, message);
+    return new ModuleException(true, message);
   } public static ModuleException abort(String message, Throwable cause) {
-    throw new ModuleException(true, message, cause);
+    return new ModuleException(true, message, cause);
   } public static ModuleException abort(boolean fatal) {
-    throw new ModuleException(fatal);
+    return new ModuleException(fatal);
   } public static ModuleException abort(boolean fatal, Throwable cause) {
-    throw new ModuleException(fatal, cause);
+    return new ModuleException(fatal, cause);
   } public static ModuleException abort(boolean fatal, String message) {
-    throw new ModuleException(fatal, message);
+    return new ModuleException(fatal, message);
   } public static ModuleException abort(boolean f, String m, Throwable c) {
-    throw new ModuleException(f, m, c);
+    return new ModuleException(f, m, c);
   }
 }

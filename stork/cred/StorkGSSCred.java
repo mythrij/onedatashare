@@ -68,11 +68,6 @@ public class StorkGSSCred extends StorkCred<GSSCredential> {
       return credential = initCred();
     } catch (Exception e) {
       throw new RuntimeException(type+": "+e.getMessage());
-    } finally {
-      if (credential == null) {
-        System.out.println("the credential was null, mayday mayday");
-        System.exit(1);
-      }
     }
   } private GSSCredential initCred() throws Exception {
     if (proxy_life < 3600) {

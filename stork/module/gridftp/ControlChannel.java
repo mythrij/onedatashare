@@ -56,6 +56,37 @@ public class ControlChannel extends Pipeline<String, Reply> {
       super(sp, f, cc, s);
       dataChannelFactory = new HackedChannelFactory();
     }
+    public void activeConnect(HostPort hp, int connections) {
+      SocketAddress sa = new InetSocketAddress(hp.getHost(), hp.getPort());
+      Socket s = new Socket();
+      SocketBox box = new ManagedSocketBox();
+      socketPool.add(box);
+      try {
+        // Three seconds seems good, right?
+        s.connect(sa, 3000);
+        s.setSoTimeout(3000);
+        s.setTcpNoDelay(true);
+
+        // Do some gross authentication thing.
+        org.globus.ftp.GridFTPSession ss = gSession;
+        if (ss.dataChannelAuthentication != DataChannelAuthentication.NONE) {
+          s = GridFTPServerFacade.authenticate(s, true, ss.credential,
+            ss.dataChannelProtection, ss.dataChannelAuthentication);
+        }
+
+        synchronized (box) {
+          box.setSocket(s);
+        }
+      } catch (SocketTimeoutException e) {
+        String m = "data channel connection timed out";
+        localControlChannel.write(new LocalReply(421, m));
+        throw abort(m);
+      } catch (Exception e) {
+        String m = "could not establish data channel connection";
+        localControlChannel.write(new LocalReply(421, m));
+        throw abort(m, e);
+      }
+    }
   } static class HackedChannelFactory extends GridFTPDataChannelFactory {
     public DataChannel getDataChannel(Session s, SocketBox b) {
       return new HackedDataChannel(s, b);
@@ -132,10 +163,12 @@ public class ControlChannel extends Pipeline<String, Reply> {
           throw abort("bad username: "+r);
         }
       }
+    } catch (UnknownHostException e) {
+      throw abort("could not resolve host: "+u.host);
     } catch (Exception e) {
       if (e instanceof RuntimeException)
         throw (RuntimeException) e;
-      throw abort("couldn't establish channel", e);
+      throw abort("could not establish control channel", e);
     }
   }
 
@@ -266,17 +299,20 @@ public class ControlChannel extends Pipeline<String, Reply> {
 
       if (!Reply.isPositivePreliminary(r)) {
         throw abort("transfer failed to start: "+r);
-      } while (true) switch ((r = readChannel()).getCode()) {
-        case 111:  // Restart marker
-          break;   // Just ignore for now...
-        case 112:  // Progress marker
-          if (sess != null) sess.reportProgress(pl.parseMarker(r));
-          break;
-        case 226:  // Transfer complete!
-          if (sess != null) sess.reportProgress(new Ad("files_done", 1));
-          return r;
-        default:
-          throw abort("unexpected reply: "+r.getCode());
+      } while (true) {
+        r = readChannel();
+        switch (r.getCode()) {
+          case 111:  // Restart marker
+            break;   // Just ignore for now...
+          case 112:  // Progress marker
+            if (sess != null) sess.reportProgress(pl.parseMarker(r));
+            break;
+          case 226:  // Transfer complete!
+            if (sess != null) sess.reportProgress(new Ad("files_done", 1));
+            return r;
+          default:
+            throw abort("unexpected reply: "+r.getCode());
+        }
       }
     }
   }
