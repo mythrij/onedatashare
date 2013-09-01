@@ -70,7 +70,7 @@ public class EndPoint {
   public void cred(String c) {
     cred = c;
   } public StorkCred<?> cred() {
-    return (cred != null) ? sched.creds.get(cred) : null;
+    return (cred != null) ? sched.creds.getCred(cred) : null;
   }
 
   // Get or set the transfer module.
