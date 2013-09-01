@@ -26,9 +26,12 @@ public class EndPoint {
   } public EndPoint(URI u) {
     uri(u);
   } public EndPoint(Ad ad) {
+    this(null, ad);
+  } public EndPoint(StorkScheduler sched, Ad ad) {
     uri(ad.get("uri"));
     cred(ad.get("cred"));
     module(ad.get("module"));
+    scheduler(sched);
   }
 
   // Unmarshal strings as end-points with a URI.

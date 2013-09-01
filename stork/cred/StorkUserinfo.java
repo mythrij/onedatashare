@@ -7,22 +7,25 @@ import java.net.*;
 // A username and password credential.
 
 public class StorkUserinfo extends StorkCred<String[]> {
-  public StorkUserinfo(String stork_user, String user, String pass) {
-    super(stork_user, new String[] { user, pass });
-  } public StorkUserinfo(String stork_user, String userinfo) {
-    super(stork_user, split(userinfo));
-  } public StorkUserinfo(Ad ad) {
-    this(ad.get("user_id"), ad.get("user"), ad.get("pass"));
+  public String[] userpass;
+
+  public StorkUserinfo(Ad ad) {
+    this(ad.get("user"), ad.get("pass"));
+  } public StorkUserinfo(String user, String pass) {
+    this(new String[] { user, pass });
+  } public StorkUserinfo(String userinfo) {
+    this(split(userinfo));
+  } private StorkUserinfo(String[] ui) {
+    super("userinfo");
+    userpass = ui;
   }
 
   public String type() {
     return "userinfo";
   }
 
-  public StorkUserinfo credential(String user, String pass) {
-    credential()[0] = user;
-    credential()[1] = pass;
-    return this;
+  public String[] credential() {
+    return userpass;
   }
 
   // Return a user/pass pair from a colon-separated string.
@@ -38,10 +41,10 @@ public class StorkUserinfo extends StorkCred<String[]> {
   }
 
   public String getUser() {
-    return credential()[0];
+    return userpass[0];
   }
 
   public String getPass() {
-    return credential()[1];
+    return userpass[1];
   }
 }

@@ -6,16 +6,16 @@ import stork.ad.*;
 // An interface for credentials.
 
 public abstract class StorkCred<O> {
-  protected String type;
-  private String owner;
-  private O cred_obj;
-  private final Watch timer;
+  public final String type;
+  public String user_id = null;
+  public Watch time = new Watch();
 
-  // Create a new instance of this wrapping a credential.
-  public StorkCred(String owner, O cred) {
-    this.owner = owner;
-    cred_obj = cred;
-    timer = new Watch(true);
+  public StorkCred(String type) {
+    this.type = type;
+  }
+
+  public static StorkCred<?> unmarshal(Ad ad) {
+    return create(ad);
   }
 
   // Create a credential from an ad.
@@ -24,45 +24,38 @@ public abstract class StorkCred<O> {
     String type = ad.get("type", "").toLowerCase();
     if (type.isEmpty()) {
       throw new RuntimeException("no credential type provided");
-    } if (type.equals("gss_cert")) {
-      return new StorkGSSCred(ad);
+    } if (type.equals("gss-cert")) {
+      return new StorkGSSCred(ad).owner(ad.get("user_id"));
     } if (type.equals("userinfo")) {
-      return new StorkUserinfo(ad);
+      return new StorkUserinfo(ad).owner(ad.get("user_id"));
     } throw new RuntimeException("invalid credential type: "+type);
-  }
-
-  // Get the string representation of the credential type.
-  public String type() {
-    return type;
   }
 
   // Get/set the id of the user this credential is for.
   public StorkCred<?> owner(String o) {
-    owner = o;
+    user_id = o;
     return this;
   } public String owner() {
-    return owner;
+    return user_id;
   }
 
-  // Get/set the object held by this credential wrapper.
-  public StorkCred<?> credential(O c) {
-    if (c != null)
-      cred_obj = c;
-    return this;
-  } public O credential() {
-    return cred_obj;
+  public String type() {
+    return type;
   }
+
+  // Get the raw credential object.
+  public abstract O credential();
 
   // Get the duration of the credential in milliseconds.
   public long duration() {
-    return timer.elapsed();
+    return time.elapsed();
   }
 
   // Get an ad suitable for showing to users. It should not include
   // sensitive information.
   public Ad getAd() {
     return new Ad("type", type)
-             .put("owner", owner)
-             .put("timer", timer);
+             .put("user_id", user_id)
+             .put("timer", time);
   }
 }

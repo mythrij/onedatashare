@@ -20,23 +20,19 @@ public class StorkGSSCred extends StorkCred<GSSCredential> {
   private String myproxy_pass = null;
   private String myproxy_host = null;
   private int    myproxy_port = -1;
+  private transient GSSCredential credential = null;
 
-  public String type() {
-    return "gss-cert";
-  }
-
-  // No need to call initialize. This instance will not be serializable.
-  public StorkGSSCred(String user, GSSCredential cred) {
-    super(user, cred);
+  StorkGSSCred() {
+    super("gss-cred");
   }
 
   // Create a credential from MyProxy.
-  public StorkGSSCred(String su, URI u) {
-    this(su, u.getHost(), u.getPort(), StorkUserinfo.split(u));
-  } public StorkGSSCred(String su, String h, int i, String[] ui) {
-    this(su, h, i, ui[0], ui[1]);
-  } public StorkGSSCred(String su, String h, int i, String u, String p) {
-    super(su, null);
+  public StorkGSSCred(URI u) {
+    this(u.getHost(), u.getPort(), StorkUserinfo.split(u));
+  } public StorkGSSCred(String h, int i, String[] ui) {
+    this(h, i, ui[0], ui[1]);
+  } public StorkGSSCred(String h, int i, String u, String p) {
+    this();
     myproxy_user = u;
     myproxy_pass = p;
     myproxy_host = h;
@@ -47,30 +43,39 @@ public class StorkGSSCred extends StorkCred<GSSCredential> {
   // Create a credential from that horrible ill-defined certificate export
   // format specified in draft-ggf-gss-extensions-07 that Globus people like
   // to use for everything.
-  public StorkGSSCred(String su, String worthless_cred_junk) {
-    super(su, null);
+  public StorkGSSCred(String worthless_cred_junk) {
+    this();
     proxy_string = worthless_cred_junk;
     initialize();
   }
 
   // Create a credential from either bytes or MyProxy.
   public StorkGSSCred(Ad ad) {
-    super(ad.get("user_id"), null);
+    this();
     ad.unmarshal(this);
     initialize();
   }
 
-  // Call this after unmarshalling to instantiate credential from
-  private void initialize() {
-    if (credential() == null) try {
-      credential(initCred());
+  // Lazily instantiate this credential.
+  public GSSCredential credential() {
+    return (credential != null) ? credential : initialize();
+  }
+
+  // Call this after unmarshalling to instantiate credential from stored
+  // information. Can be called again to refresh the credential as well.
+  private GSSCredential initialize() {
+    try {
+      return credential = initCred();
     } catch (Exception e) {
       throw new RuntimeException(type+": "+e.getMessage());
+    } finally {
+      if (credential == null) {
+        System.out.println("the credential was null, mayday mayday");
+        System.exit(1);
+      }
     }
   } private GSSCredential initCred() throws Exception {
-    if (credential() != null) {
-      return credential();
-    } if (proxy_life < 3600) {
+    if (proxy_life < 3600) {
       throw new Exception("cred lifetime must be at least one hour");
     } if (myproxy_user != null) {
       if (myproxy_port <= 0 || myproxy_port > 0xFFFF)
@@ -95,13 +100,13 @@ public class StorkGSSCred extends StorkCred<GSSCredential> {
   public static StorkGSSCred fromFile(String cred_file) {
     return fromFile(new File(cred_file));
   } public static StorkGSSCred fromFile(File cred_file) {
-    return new StorkGSSCred(null, StorkUtil.readFile(cred_file));
+    return new StorkGSSCred(StorkUtil.readFile(cred_file));
   }
 
   // Create a new credential using MyProxy.
   public static StorkGSSCred fromMyProxy(String uri) {
     return fromMyProxy(StorkUtil.makeURI(uri));
   } public static StorkGSSCred fromMyProxy(URI uri) {
-    return new StorkGSSCred(null, uri);
+    return new StorkGSSCred(uri);
   }
 }

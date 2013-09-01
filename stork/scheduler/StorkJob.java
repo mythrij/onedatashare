@@ -38,10 +38,12 @@ public class StorkJob {
   private transient Thread thread = null;
   private transient StorkScheduler sched = null;
 
-  // Create and enqueue a new job from a user input ad.
+  // Create and enqueue a new job from a user input ad. Don't give this
+  // thing unsanitized user input, because it doesn't filter the user_id.
+  // That should be filtered by the caller.
   // TODO: Strict filtering and checking.
   public static StorkJob create(Ad ad) {
-    ad.remove("status", "job_id", "attempts", "user_id");
+    ad.remove("status", "job_id", "attempts");
     ad.rename("src_url",  "src.url");
     ad.rename("dest_url", "dest.url");
 

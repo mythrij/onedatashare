@@ -116,16 +116,19 @@ public class StorkScheduler {
           if (env.getBoolean("registration")) {
             if (handler.requiresLogin()) try {
               req.user = users.login(req.ad);
+              req.ad.remove("pass_hash");
             } catch (Exception e) {
               throw new RuntimeException(
                 "action requires login: "+e.getMessage());
             }
           }
 
-          req.ad.remove("pass_hash");
-
           // Let the magic happen.
           ad = handler.handle(req);
+
+          // Save state if we affected it.
+          if (handler.affectsState(req))
+            dumpState();
         } catch (Exception e) {
           e.printStackTrace();
           String m = e.getMessage();
@@ -149,6 +152,13 @@ public class StorkScheduler {
     public boolean requiresLogin() {
       return true;
     }
+
+    // Override this is the action affects server state.
+    public boolean affectsState(RequestContext req) {
+      return affectsState();
+    } public boolean affectsState() {
+      return false;
+    }
   }
 
   class StorkQHandler extends CommandHandler {
@@ -165,11 +175,11 @@ public class StorkScheduler {
     }
   }
 
-  class StorkListHandler extends CommandHandler {
+  class StorkLsHandler extends CommandHandler {
     public Ad handle(RequestContext req) {
       StorkSession sess = null;
       try {
-        EndPoint ep = new EndPoint(req.ad);
+        EndPoint ep = new EndPoint(StorkScheduler.this, req.ad);
         sess = ep.session();
         return sess.list(ep.path(), req.ad);
       } finally {
@@ -188,13 +198,16 @@ public class StorkScheduler {
       if ("register".equals(req.ad.get("action"))) {
         StorkUser su = users.register(req.ad);
         Log.info("Registering user: "+su.user_id);
-        dumpState();
         return Ad.marshal(su);
       } return Ad.marshal(users.login(req.ad));
     }
 
     public boolean requiresLogin() {
       return false;
+    }
+
+    public boolean affectsState(RequestContext req) {
+      return "register".equals(req.ad.get("action"));
     }
   }
 
@@ -204,9 +217,12 @@ public class StorkScheduler {
       job.scheduler(StorkScheduler.this);  // This will validate the job.
 
       schedule(job);
-      dumpState();
 
       return job.getAd();
+    }
+
+    public boolean affectsState() {
+      return true;
     }
   }
 
@@ -234,6 +250,10 @@ public class StorkScheduler {
         ad.put("not_removed", cdr.toString());
       return ad;
     }
+
+    public boolean affectsState() {
+      return true;
+    }
   }
 
   class StorkInfoHandler extends CommandHandler {
@@ -245,7 +265,10 @@ public class StorkScheduler {
     // Send server information. But for now, don't send anything until we
     // know what sort of information is good to send.
     Ad sendServerInfo(RequestContext req) {
-      return new Ad("error", "server info is not implemented");
+      Ad ad = new Ad();
+      ad.put("version", Stork.version());
+      ad.put("commands", new Ad(cmd_handlers.keySet()));
+      return ad;
     }
 
     // Send information about a credential or about all credentials.
@@ -280,9 +303,19 @@ public class StorkScheduler {
   // Handles creating credentials.
   class StorkCredHandler extends CommandHandler {
     public Ad handle(RequestContext req) {
-      StorkCred<?> cred = StorkCred.create(req.ad);
-      String uuid = creds.add(cred);
-      return cred.getAd().put("uuid", uuid);
+      String action = req.ad.get("action");
+
+      if (action == null) {
+        throw new RuntimeException("no action specified");
+      } if (action.equals("create")) {
+        StorkCred<?> cred = StorkCred.create(req.ad);
+        String uuid = creds.add(cred);
+        return cred.getAd().put("uuid", uuid);
+      } throw new RuntimeException("invalid action");
+    }
+
+    public boolean affectsState() {
+      return true;
     }
   }
 
@@ -475,7 +508,7 @@ public class StorkScheduler {
     // Initialize command handlers
     cmd_handlers = new HashMap<String, CommandHandler>();
     cmd_handlers.put("q", new StorkQHandler());
-    cmd_handlers.put("ls", new StorkListHandler());
+    cmd_handlers.put("ls", new StorkLsHandler());
     cmd_handlers.put("status", new StorkQHandler());
     cmd_handlers.put("submit", new StorkSubmitHandler());
     cmd_handlers.put("rm", new StorkRmHandler());

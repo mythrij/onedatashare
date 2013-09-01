@@ -20,6 +20,19 @@ public class CredManager extends LinkedHashMap<UUID, StorkCred<?>> {
     return (token == null) ? null : get(token);
   }
 
+  // TODO: Remove me when ads support this.
+  public static CredManager unmarshal(Ad ad) {
+    CredManager cm = new CredManager();
+
+    for (String uuid : ad.keySet())
+      cm.putFromAd(uuid, ad.getAd(uuid));
+    return cm;
+  }
+
+  private void putFromAd(String uuid, Ad ad) {
+    put(UUID.fromString(uuid), StorkCred.create(ad));
+  }
+
   // Get all the credentials as ads, optionally for a given user.
   public Ad getCredInfos() {
     return getCredInfos(null);

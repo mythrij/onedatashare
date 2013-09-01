@@ -96,9 +96,9 @@ public class ControlChannel extends Pipeline<String, Reply> {
         fc.open();
 
         if (u.cred != null) try {
-          fc.authenticate(u.cred.credential(), null);
+          fc.authenticate(u.cred.credential(), u.user);
         } catch (Exception e) {
-          throw abort("could not authenticate (certificate issue?) "+e);
+          throw abort("could not authenticate", e);
         } else {
           String user = (u.user == null) ? "anonymous" : u.user;
           String pass = (u.pass == null) ? "" : u.pass;
@@ -106,9 +106,9 @@ public class ControlChannel extends Pipeline<String, Reply> {
           if (Reply.isPositiveIntermediate(r)) try {
             execute(("PASS "+pass).trim());
           } catch (Exception e) {
-            throw abort("bad password");
+            throw abort("bad password", e);
           } else if (!Reply.isPositiveCompletion(r)) {
-            throw abort("bad username");
+            throw abort("bad username: "+r);
           }
         }
 
@@ -124,9 +124,9 @@ public class ControlChannel extends Pipeline<String, Reply> {
         if (Reply.isPositiveIntermediate(r)) try {
           execute("PASS "+pass);
         } catch (Exception e) {
-          throw abort("bad password");
+          throw abort("bad password", e);
         } else if (!Reply.isPositiveCompletion(r)) {
-          throw abort("bad username");
+          throw abort("bad username: "+r);
         }
       }
     } catch (Exception e) {
