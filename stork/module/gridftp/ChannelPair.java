@@ -182,11 +182,8 @@ public class ChannelPair {
 
   // Flush both channels so they are synchronized.
   void sync() {
-    System.out.println("Syncing sc...");
     sc.flush(true);
-    System.out.println("Syncing dc...");
     dc.flush(true);
-    System.out.println("Done syncing.");
   }
 
   // Make a directory on the destination.
