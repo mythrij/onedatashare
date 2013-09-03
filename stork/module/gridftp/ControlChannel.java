@@ -331,9 +331,8 @@ public class ControlChannel extends Pipeline<String, Reply> {
       if (local)
         facade.close();
       else
-        exchange("QUIT");
-      flush();
-      kill();
+        write("QUIT");
+      super.kill();
     } catch (Exception e) {
       // Who cares.
     }

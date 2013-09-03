@@ -113,6 +113,10 @@ public class GridFTPSession extends StorkSession {
     // XXX This is uglier than it should be, I know.
     int total = 0;
     while ((depth < 0 || cur_depth++ <= depth) && !work.isEmpty()) {
+      // These all need to be waited on.
+      final List<ControlChannel.Wrapper> ws =
+        new LinkedList<ControlChannel.Wrapper>();
+
       for (int i = work.size(); i > 0; i--) {
         final String p = work.pop();
         final Ad ad = work_ads.pop();
@@ -120,13 +124,13 @@ public class GridFTPSession extends StorkSession {
         total++;
 
         final ControlChannel.Wrapper w = cp.pipePassive();
-        cp.rc.write("LIST ./"+p, cp.rc.new XferHandler(null) {
+        ws.add(cp.rc.write("LIST ./"+p, cp.rc.new XferHandler(null) {
           public Reply handleReply() {
+            Reply r = w.get();  // This will throw if there was a problem.
+            D("Got reply: "+r);
+
             ListAdSink sink = new ListAdSink(ad, false);
             cp.oc.facade.store(sink);
-
-            Reply r = w.get();  // This will throw if there was a problem.
-
             r = super.handleReply();
             D("Got reply: "+r);
             D("Waiting for: ."+p);
@@ -140,9 +144,9 @@ public class GridFTPSession extends StorkSession {
               }
             } return r;
           }
-        });
-      } try {
-        cp.sync();
+        }));
+      } for (ControlChannel.Wrapper w : ws) try {
+        w.get();
       } catch (Exception e) {
         if (total < 2) {
           cp.oc.close();
