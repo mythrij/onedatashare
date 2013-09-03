@@ -54,7 +54,7 @@ classes: $(TO_BUILD) | build
 $(PROJECT)_cmds: $(patsubst %,bin/$(PROJECT)_%,$(CMDS))
 
 bin/$(PROJECT)_%: bin/$(PROJECT)
-	$(LN) -s $(PROJECT) $@
+	@[ -e $@ ] || $(LN) -s $(PROJECT) $@
 
 release: $(PROJECT).tar.gz
 
