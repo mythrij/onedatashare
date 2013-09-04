@@ -30,9 +30,9 @@ public class StorkScheduler {
   public StorkUser.UserMap users = new StorkUser.UserMap();
   public CredManager creds = new CredManager();
 
-  private transient Thread[] thread_pool;
-  private transient Thread[] worker_pool;
-  private transient Thread   dump_state_thread;
+  private transient StorkQueueThread[]  thread_pool;
+  private transient StorkWorkerThread[] worker_pool;
+  private transient Thread dump_state_thread;
 
   private transient Map<String, CommandHandler> cmd_handlers;
   public transient TransferModuleTable xfer_modules;
@@ -46,100 +46,120 @@ public class StorkScheduler {
     job_queue.schedule(job);
   }
 
+  // It's like a thread, but storkier.
+  private abstract class StorkThread<O> extends Thread {
+    // Set these at any time to control the thread.
+    public volatile boolean dead = false;
+    public volatile boolean idle = true;
+
+    public StorkThread(String name) {
+      super(name);
+      setDaemon(true);
+      start();
+    }
+
+    public final void run() {
+      while (!dead) try {
+        O j = getAJob();
+        idle = false;
+        execute(j);
+      } catch (Exception e) {
+        continue;
+      } finally {
+        idle = true;
+      }
+    }
+
+    public abstract O getAJob() throws Exception;
+    public abstract void execute(O work);
+  }
+
   // A thread which runs continuously and starts jobs as they're found.
-  private class StorkQueueThread extends Thread {
+  private class StorkQueueThread extends StorkThread<StorkJob> {
     StorkQueueThread() {
       super("stork queue thread");
-      setDaemon(true);
+    }
+
+    public StorkJob getAJob() throws Exception {
+      return job_queue.take();
     }
 
     // Continually remove jobs from the queue and start them.
-    public void run() {
-      while (true) try {
-        StorkJob job = job_queue.take();
-        Log.info("Pulled job from queue: "+job);
+    public void execute(StorkJob job) {
+      Log.info("Pulled job from queue: "+job);
 
-        // Make sure we didn't get interrupted while taking.
-        if (job == null)
-          continue;
+      // This will validate both deserialized and submitted jobs.
+      job.scheduler(StorkScheduler.this);
 
-        // This will validate both deserialized and submitted jobs.
-        job.scheduler(StorkScheduler.this);
-
-        // Run the job then check the return status.
-        switch (job.process()) {
-          // If a job is still processing, something weird happened.
-          case processing:
-            throw new Exception("job still processing after completion");
+      // Run the job then check the return status.
+      switch (job.process()) {
+        // If a job is still processing, something weird happened.
+        case processing:
+          throw new RuntimeException("job still processing after completion");
           // If job is scheduled, put it back in the schedule queue.
-          case scheduled:
-            Log.info("Job "+job.jobId()+" rescheduling...");
-            schedule(job); break;
+        case scheduled:
+          Log.info("Job "+job.jobId()+" rescheduling...");
+          schedule(job); break;
           // If the job was paused, put it in limbo until it's resumed.
-          case paused:  // This can't happen yet!
-            break;
+        case paused:  // This can't happen yet!
+          break;
           // Alert the user if it failed.
-          case failed:
-            Log.info("Job "+job.jobId()+" failed!");
-        } dumpState();
-      } catch (Exception e) {
-        continue;
-      }
+        case failed:
+          Log.info("Job "+job.jobId()+" failed!");
+      } dumpState();
     }
   }
 
   // A thread which handles client requests.
-  private class StorkWorkerThread extends Thread {
+  private class StorkWorkerThread extends StorkThread<RequestContext> {
     StorkWorkerThread() {
-      super("Stork worker thread");
-      setDaemon(true);
+      super("stork worker thread");
+    }
+
+    public RequestContext getAJob() throws Exception {
+      return req_queue.take();
     }
 
     // Continually remove jobs from the queue and start them.
-    public void run() {
-      while (true) try {
-        Ad ad = null;
-        RequestContext req = req_queue.take();
-        Log.fine("Worker pulled request from queue: ", req.cmd);
+    public void execute(RequestContext req) {
+      Log.fine("Worker pulled request from queue: ", req.cmd);
+      Ad ad = null;
 
-        // Try handling the command if it's not done already.
-        if (!req.isDone()) try {
-          if (req.cmd == null)
-            throw new RuntimeException("no command specified");
+      // Try handling the command if it's not done already.
+      if (!req.isDone()) try {
+        if (req.cmd == null)
+          throw new RuntimeException("no command specified");
 
-          CommandHandler handler = cmd_handlers.get(req.cmd);
+        CommandHandler handler = cmd_handlers.get(req.cmd);
 
-          if (handler == null)
-            throw new RuntimeException("invalid command: "+req.cmd);
+        if (handler == null)
+          throw new RuntimeException("invalid command: "+req.cmd);
 
-          // Check if the handler requires a logged in user.
-          if (env.getBoolean("registration")) {
-            if (handler.requiresLogin()) try {
-              req.user = users.login(req.ad);
-              req.ad.remove("pass_hash");
-            } catch (Exception e) {
-              throw new RuntimeException(
-                "action requires login: "+e.getMessage());
-            }
+        // Check if the handler requires a logged in user.
+        if (env.getBoolean("registration")) {
+          if (handler.requiresLogin()) try {
+            req.user = users.login(req.ad);
+            req.ad.remove("pass_hash");
+          } catch (Exception e) {
+            throw new RuntimeException(
+              "action requires login: "+e.getMessage());
           }
-
-          // Let the magic happen.
-          ad = handler.handle(req);
-
-          // Save state if we affected it.
-          if (handler.affectsState(req))
-            dumpState();
-        } catch (Exception e) {
-          e.printStackTrace();
-          String m = e.getMessage();
-          ad = new Ad("error", m == null ? e.toString() : m);
-        } finally {
-          assert(ad != null);
-          req.reply(ad);
-          Log.fine("Worker done with request: ", req.cmd, ad);
         }
+
+        // Let the magic happen.
+        ad = handler.handle(req);
+
+        // Save state if we affected it.
+        if (handler.affectsState(req))
+          dumpState();
       } catch (Exception e) {
-        // Probably we got interrupted. Just continue.
+        e.printStackTrace();
+        String m = e.getMessage();
+        ad = new Ad("error", m == null ? e.toString() : m);
+      } finally {
+        assert(ad != null);
+        req.reply(ad);
+        Log.fine("Worker done with request: ", req.cmd, ad);
       }
     }
   }
@@ -349,18 +369,43 @@ public class StorkScheduler {
                   "defaulting to "+wn);
     }
 
-    thread_pool = new Thread[jn];
-    worker_pool = new Thread[wn];
+    thread_pool = new StorkQueueThread[jn];
+    worker_pool = new StorkWorkerThread[wn];
     
     Log.info("Starting "+jn+" job threads, and "+wn+" worker threads...");
 
     for (int i = 0; i < thread_pool.length; i++) {
       thread_pool[i] = new StorkQueueThread();
-      thread_pool[i].start();
     } for (int i = 0; i < worker_pool.length; i++) {
       worker_pool[i] = new StorkWorkerThread();
-      worker_pool[i].start();
     }
+
+    // Let's go ahead and start one of these things. This is a quick hack
+    // to make sure worker threads don't get stuck on long calls.
+    new Thread("stork sentinel") {
+      public void run() {
+        while (true) try {
+          // Sleep for a bit and make sure there's a free thread.
+          sleep(100);
+          check(worker_pool, StorkWorkerThread.class);
+          check(thread_pool, StorkQueueThread.class);
+        } catch (Exception e) {
+          // I doubt this will happen.
+        }
+      } public <C extends StorkThread<?>> void check(C[] pool, Class<C> c) {
+        for (C t : pool) if (t.idle) return;
+        int i = (int) (Math.random() * pool.length);
+        C z;
+        if (c == StorkWorkerThread.class)
+          z = c.cast(new StorkWorkerThread());
+        else if (c == StorkQueueThread.class)
+          z = c.cast(new StorkQueueThread());
+        else
+          return;
+        pool[i].dead = true;
+        pool[i] = z;
+      }
+    }.start();
   }
 
   // Put a command in the server's request queue with an optional reply
