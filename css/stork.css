@@ -1,0 +1,271 @@
+html {
+  overflow-y: scroll;
+}
+
+html, body {
+  height: 100%;
+}
+
+* {
+  border: 0 solid #888;
+}
+
+i {
+  font: inherit;
+}
+
+table {
+  border-collapse: collapse;
+  border-spacing: 0;
+  table-layout: fixed;
+}
+
+textarea, input, button, select {
+  background: #FFF;
+  color: #333;
+} textarea:focus, input:focus, select {
+  background: #EFF;
+  color: #000;
+}
+
+p {
+  margin: 1em 0;
+}
+
+h1 {
+  font-size: 120%;
+  font-weight: bold;
+  text-align: left;
+}
+
+.bullet-list li {
+  list-style-type: disc;
+  margin-left: 2em;
+}
+
+.circle-button {
+  padding: 0.2em;
+}
+
+.clearfix {
+  display: block;
+} .clearfix:after {
+  height: 0;
+  display: block;
+  visibility: hidden;
+  clear: both;
+  content: "?";
+}
+
+/* General style classes */
+.center { margin: auto; }
+
+.aleft  { text-align: left; }
+.aright { text-align: right; }
+.acenter { text-align: center; }
+
+.fleft  { float: left; }
+.fright { float: right; }
+
+.fl  { float: left; }
+.fr { float: right; }
+
+.fixed {
+  position: fixed;
+  z-index: 2;
+}
+
+.small { font-size: 80%; }
+.large { font-size: 120%; }
+
+.hfill, .bb {
+  display: block;
+  box-sizing: border-box;
+  -moz-box-sizing: border-box;
+  -ms-box-sizing: border-box;
+  -webkit-box-sizing: border-box;
+  -khtml-box-sizing: border-box;
+} .hfill {
+  width: 100%;
+}
+
+.clipped {
+  overflow: hidden;
+}
+
+.progress {
+  position: relative;
+  background: #333;
+  height: 2em;
+  line-height: 2em;
+  margin: 0;
+}
+
+.progress-bar {
+  z-index: 1;
+  position: absolute;
+}
+
+.progress span {
+  position: absolute;
+  top: 0;
+  z-index: 2;
+  color: #FFF;
+  text-shadow: 0 1px 2px #000;
+  text-align: center;
+  width: 100%;
+}
+
+.progressbar {
+  height: 1.5em;
+  line-height: 1.5em;
+  background: #000;
+  position: relative;
+  overflow: hidden;
+} .progressbar > span {
+  display: block;
+  position: absolute;
+  top: 0; bottom: 0; left: 0; right: 0;
+  z-index: 100;
+} .progressbar > div {
+  position: absolute;
+  top: 0; bottom: 0; left: 0;
+  width: 100%;
+}
+
+.resize-vertical {
+  text-align: center;
+  cursor: s-resize;
+} .resize-vertical:before {
+  content: "\f141";
+  font-family: FontAwesome;
+}
+  
+#noscript {
+  display: block;
+  font-size: 1.2em;
+  font-weight: bold;
+  background: #E30;
+  color: #FFF;
+  text-shadow: 0 1px 2px #000;
+  border-bottom: 1px solid #222;
+} #noscript > div {
+  padding: 0.5em;
+} #noscript b {
+  color: #BDF;
+}
+
+tr.min-cell {
+  height: 1px;
+}
+
+#wrapper {
+  height: auto !important;
+  min-height: 100%;
+  margin: 0 auto -7em;
+  padding: 70px 0 8em;
+}
+
+#footer {
+  color: #777;
+  background: #444;
+  height: 7em;
+} #footer > div {
+  font-size: 80%;
+  padding: 1em;
+} #footer a {
+  color: inherit;
+}
+
+.login-panel {
+  margin: 70px auto;
+}
+
+.welcome {
+  text-align: left;
+} .welcome h1 {
+  font-size: 50px;
+}
+
+#stork-queue td[rel="endpoints"] > div {
+  overflow-x: auto;
+  overflow-y: hidden;
+  line-height: 1.2em;
+  clear: both;
+} #stork-queue td[rel="endpoints"] > div > span {
+  white-space: nowrap;
+  display: block;
+  text-align: left;
+  float: left;
+  clear: both;
+}
+
+.transfer-wrapper {
+  margin: auto;
+  width: 90%;
+} .transfer-wrapper #left {
+  width: 45%;
+  float: left;
+} .transfer-wrapper #right {
+  width: 45%;
+  float: right;
+}
+
+/* Icons for URI control button */
+.uri a, .uri input {
+  line-height: 1 !important;
+  height: 2.5em !important;
+}
+
+.tree {
+  height: 100%;
+} .tree > div {
+  height: 20em;
+  margin: 0.4em;
+  text-align: left;
+  overflow-y: scroll;
+  overflow-x: auto;
+}
+
+#stork-ls .transfer-controls {
+  padding: 10px;
+} #stork-ls .transfer-controls .btn {
+  height: 3em;
+  margin: 10px 0;
+} #stork-ls .transfer-toolbar {
+  padding: 5px;
+} #stork-ls .transfer-toolbar > div {
+  padding: 0;
+} #stork-ls .transfer-toolbar .btn,
+  #stork-ls .transfer-toolbar select {
+  height: 2.5em;
+}
+
+/* Collapsible blocks */
+.panel-collapse-header {
+  cursor: pointer;
+} .panel-collapse-header:before {
+  float: left;
+  padding-right: 0.5em;
+  font-family: FontAwesome;
+  -webkit-font-smoothing: antialiased;
+  font-size: 1.2em;
+  content: "\f13a";
+} .panel-collapsed .collapse {
+  display: none;
+} .panel-collapsed .panel-collapse-header:before {
+  content: "\f138";
+}
+
+/* Special UI stuff for logged in users */
+body.logged-out .logged-in {
+  display: none;
+} body.logged-in .logged-out {
+  display: none;
+} 
+
+/* For hiding uncompiled AngularJS elements */
+[ng\:cloak], [ng-cloak], [data-ng-cloak], [x-ng-cloak],
+.ng-cloak, .x-ng-cloak {
+  display: none !important;
+}

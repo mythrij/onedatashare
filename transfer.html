@@ -1,0 +1,182 @@
+<title>Transfer</title>
+
+<div id="add-credential-modal" class="modal fade">
+  <div class="modal-dialog" role="dialog">
+    <form id="myproxy-form" class="ajax-form modal-content" method="post" action="/api/stork_cred?action=create">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">
+          &times;
+        </button>
+        <h4 class="modal-title">
+          Add a New Credential
+        </h4>
+        <div class="small text-muted">
+          Currently only MyProxy credentials are supported.
+        </div>
+      </div>
+      <div class="modal-body container">
+        <input type="hidden" name="type" value="gss-cert">
+        <div class="form-group col-md-12">
+          <label>MyProxy server</label>
+          <input type="text" class="form-control" name="myproxy_host" placeholder="e.g., myproxy.teragrid.org" required>
+        </div>
+
+        <div class="form-group col-md-6">
+          <label>MyProxy username</label>
+          <input type="text" class="form-control" name="myproxy_user" required>
+        </div>
+
+        <div class="form-group col-md-6">
+          <label>MyProxy password</label>
+          <input type="password" class="form-control" name="myproxy_pass" required>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-default" type="button" data-dismiss="modal">
+          Cancel
+        </button>
+        <button class="pull-right btn btn-primary" type="submit">
+          Add credential
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="container panel">
+  <div class="panel-heading">
+    <h4 class="panel-title panel-collapse-header">
+      Browse and Transfer Files
+    </h4>
+  </div>
+  <script>
+    function filelistRefresh(t) {
+      t.closest('.file-list').trigger('reload')
+    }
+    function filelistToggleHidden(t) {
+      t.closest('.file-list').find('.dot').animate({'height':'toggle','opacity':'toggle'})
+      t.toggleClass('active')
+    }
+    function selectCred(t) {
+      var val = t.find(':selected').attr('value')
+      if (val === 'new-myproxy') {
+        $('#add-credential-modal').modal()
+        t.val('')
+      }
+    }
+  </script>
+  <div id="stork-ls" class="panel-body container collapse in text-center">
+    <div class="col-sm-5-5 form-inline">
+      <div id="left" class="file-list panel" rel="right" ng-include="'/parts/browse.html'">
+      </div>
+    </div>
+    <div class="col-sm-1 input-group-lg container text-center panel panel-heading transfer-controls">
+      <div class="col-xs-1 visible-xs"><!-- Why is there no col-xs-offset-n?--></div>
+      <button class="btn btn-lg btn-default col-sm-12 col-xs-2 tips" title="Transfer contents">
+        <i class="icon-share hidden-xs"></i>
+        <i class="icon-share visible-xs icon-rotate-90"></i>
+      </button>
+      <button class="btn btn-lg btn-default col-sm-12 col-xs-2 tips" title="Transfer">
+        <i class="icon-share-alt hidden-xs"></i>
+        <i class="icon-share-alt visible-xs icon-rotate-90"></i>
+      </button>
+      <button class="btn btn-lg btn-default col-sm-12 col-xs-2 tips" title="Synchronize">
+        <i class="icon-refresh hidden-xs"></i>
+        <i class="icon-refresh visible-xs icon-rotate-90"></i>
+      </button>
+      <button class="btn btn-lg btn-default col-sm-12 col-xs-2 tips" title="Transfer">
+        <i class="icon-share-alt hidden-xs icon-rotate-180"></i>
+        <i class="icon-share-alt visible-xs icon-rotate-270"></i>
+      </button>
+      <button class="btn btn-lg btn-default col-sm-12 col-xs-2 tips" title="Transfer contents">
+        <i class="icon-share hidden-xs icon-rotate-180"></i>
+        <i class="icon-share visible-xs icon-rotate-270"></i>
+      </button>
+    </div>
+    <div class="col-sm-5-5 form-inline">
+      <div id="right" class="file-list panel" rel="left" ng-include="'/parts/browse.html'">
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="container panel panel-collapsed">
+  <div class="panel-heading">
+    <h4 class="panel-title panel-collapse-header">
+      Transfer Options
+    </h4>
+  </div>
+  <div id="transfer-options" class="panel-body collapse">
+    <form role="form" method="post" action="/api/stork_user">
+      <div class="form-group container">
+        <!-- Overwrite existing files -->
+        <div class="form-group col-md-4 col-sm-6">
+          <h4>Overwrite existing files</h4>
+          <div class="btn-group" data-toggle="buttons">
+            <label class="btn btn-default btn-large active">
+              <input name="overwrite" type="radio" value="true"> Yes
+            </label>
+            <label class="btn btn-default btn-large">
+              <input name="overwrite" type="radio" value="false"> No
+            </label>
+          </div>
+          <div class="help-block">
+            By default, destination files with conflicting file names will be
+            overwritten. Disabling this will cause the transfer to fail if there are
+            any conflicting files.
+          </div>
+        </div>
+        <!-- Verify file integrity -->
+        <div class="form-group col-md-4 col-sm-6">
+          <h4>Verify file integrity with checksum</h4>
+          <div class="btn-group" data-toggle="buttons">
+            <label class="btn btn-default btn-large">
+              <input name="checksum" type="radio" value="true"> Yes
+            </label>
+            <label class="btn btn-default btn-large active">
+              <input name="checksum" type="radio" value="false"> No
+            </label>
+          </div>
+          <div class="help-block">
+            Enable this if you want additional data integrity verification of transferred files.
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="container panel">
+  <div class="panel-heading">
+    <h4 class="panel-title panel-collapse-header">
+      Transfer Progress and Queue
+    </h4>
+  </div>
+  <div id="stork-queue" class="collapse in">
+    <table class="table table-hover">
+      <thead><tr>
+        <th width="8%"  rel="info"></th>
+        <th width="6%"  rel="job_id">ID</th>
+        <th width="20%" rel="progress">Progress</th>
+        <th width="15%" rel="speed">Speed</th>
+        <th width="50%" rel="endpoints">Source/Destination</th>
+      </tr></thead>
+      <tbody>
+        <tr><td colspan=5>
+          <div class="progress progress-striped active">
+            <div style="width: 100%" role="progressbar" class="progress-bar">
+              <big>Loading...</big>
+            </div>
+          </div>
+        </td></tr>
+      </tbody>
+      <tfoot>
+        <tr><td colspan="5">
+          <input type="button" class="btn btn-default" value="Refresh">
+          <label for="auto-refresh-checkbox">Auto-refresh table?</label>
+          <input type="checkbox" id="auto-refresh-checkbox" checked="checked">
+        </td></tr>
+      </tfoot>
+    </table>
+  </div>
+</div>

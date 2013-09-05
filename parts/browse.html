@@ -1,0 +1,36 @@
+<div class="input-group input-group-lg uri panel-heading">
+  <input type="url" class="form-control" placeholder="Enter a URL">
+  <a class="input-group-addon btn btn-default tips" title="Go">
+    <i class="icon-play"></i>
+  </a>
+</div>
+<div class="panel-heading container form-inline transfer-toolbar">
+  <div class="input-group col-md-6" style="white-space:nowrap">
+    <div class="btn-group">
+      <button class="icon-refresh btn btn-default tips" title="Refresh" onclick="filelistRefresh($(this))">
+      </button>
+      <button class="icon-lightbulb btn btn-default tips" title="Toggle hidden" onclick="filelistToggleHidden($(this))">
+      </button>
+    </div>
+    <div class="btn-group">
+      <button class="icon-folder-open-alt btn btn-default tips ph" title="New folder">
+        <i class="icon-plus-sign"></i>
+      </button>
+      <button class="icon-trash btn btn-default tips ph" title="Delete"></button>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <select class="form-control dropdown-toggle credential" title="Select credential" onclick="selectCred($(this))">
+      <option value="">Select credential...</option>
+      <optgroup class="saved-credentials" label="Saved credentials">
+        <option disabled>(none)</option>
+      </optgroup>
+      <optgroup class="new-credential" label="Add credential" onclick>
+        <option value="new-myproxy">MyProxy</option>
+      </optgroup>
+    </select>
+  </div>
+</div>
+<div class="tree">
+  <div></div>
+</div>

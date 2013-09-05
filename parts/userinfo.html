@@ -1,0 +1,7 @@
+@(user:stork.scheduler.StorkUser)
+
+@if(user != null) {
+  <h1>Welcome, @user.name(). <a href="#/logout">Log out</a></h1>
+} else {
+  <h1>You are not logged in.</h1>
+}

@@ -1,0 +1,101 @@
+<div class="container">
+  <div class="welcome col-md-7">
+    <h1>
+      Welcome to StorkCloud&nbsp;<sup><abbr class="tips" title="Beta">&beta;</abbr></sup>
+    </h1>
+    <p>StorkCloud is a reliable and fast data movement service in the Cloud.</p>
+    <p>We aim to deliver:
+      <ul class="bullet-list">
+        <li>Robust multi-protocol data transfer as a service</li>
+        <li>Remote file browsing in your web browser</li>
+        <li>Advanced transfer optimization algorithms</li>
+      </ul>
+    </p>
+    <p>Sign up today or keep reading to learn more.</p>
+  </div>
+
+  <div class="col-md-5">
+    <div class="panel panel-default">
+      <div class="panel-heading text-center">
+        <h4 class="panel-title">Want to try StorkCloud?</h4>
+      </div>
+      <div class="panel-body" ng-include="'/parts/signup.html'">
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+  <div class="col-md-12">
+    <h3>About StorkCloud</h3>
+    <p>
+      TODO
+    </p>
+  </div>
+
+  <div class="col-md-12">
+    <h3>Beta, you say?</h3>
+    <p>
+      Yes, StorkCloud is developed by a small group of graduate students at the
+      <a href="http://buffalo.edu">University at Buffalo</a> who lack the human
+      resources to establish and maintain a dedicated quality assurance team.
+      Instead, we're trying something a little unusual &mdash; starting a public
+      beta testing phase without thorough internal testing.
+    </p>
+    <p>
+      This means StorkCloud is not only experimental, it is <em>very</em> experimental.
+      The system is liable to fail, crash, stall, leave transfers partially complete,
+      forget about jobs, be taken down for intermittent periods while we fix problems,
+      not support certain remote servers, or otherwise not work properly.
+    </p>
+    <p>
+      The user inferface is also very unpolished and will likely do some strange
+      or surprising things.
+      Many actions do not currently give any visual indicators that they are
+      in progess or have completed, and some interface elements are nonfunctional
+      placeholders or are buggy.
+    </p>
+    <p>
+      For the next few months until StorkCloud has reached an acceptable level of
+      stability, it should not be used for any mission-critical operations or be
+      trusted with any sensitive information.
+      We will, however, greatly appreciate any bug reports or other feedback from
+      testers.
+      Bug reports can be submitted
+      <a href="https://github.com/didclab/stork/issues">here</a>.
+    </p>
+    <p>
+      Furthermore, as an academic endeavour, StorkCloud will be used as a testing 
+      platform for various experimental scheduling and optimization algorithms and
+      transfer protocols.
+      Such features should be used with caution.
+      New features introduced in the future will be marked in a conspicuous way
+      to indicate their experimental status.
+    </p>
+    <p>
+      That said, StorkCloud will be undergoing many changes during this testing period.
+      New features will be introduced and problems will be fixed as we get to them.
+    </p>
+    <p>
+      The scheduler component underlying the system is open source. We invite
+      developers to contribute patches and new features through pull requests to our
+      our GitHub repository:
+      <a href="https://github.com/didclab">https://github.com/didclab/stork</a>
+    </p>
+  </div>
+
+  <div class="col-md-12">
+    <h3>User Accounts</h3>
+    <p>
+      Until StorkCloud is announced stable, we reserve the right to reset or
+      rollback the server state at any time for testing or debugging purposes.
+      As a result, user accounts may vanish without warning, and with them all
+      transfer history and stored credentials.
+    </p>
+    <p>
+      We will also be removing user accounts at the end of beta testing, so anything
+      that happens during beta testing will not be carried over to the final release.
+    </p>
+  </div>
+</div>
+
