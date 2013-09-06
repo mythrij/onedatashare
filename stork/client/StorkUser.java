@@ -23,8 +23,8 @@ public class StorkUser extends StorkClient {
       "This command is not completely implemented, and will only verify "+
       "that a user ID and password is correct."
     };
-    add ('r', "register", "register as a new user");
-    add ('t', "time", "length of time to remain logged in (NOT IMPLEMENTED)");
+    add('r', "register", "register as a new user");
+    add('t', "time", "length of time to remain logged in (NOT IMPLEMENTED)");
   }
 
   public void parseArgs(String[] args) {

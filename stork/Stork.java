@@ -87,6 +87,7 @@ public class Stork extends Command {
     add("raw", "send commands for debugging", StorkRaw.class);
     add("submit", "submit a job to the server", StorkSubmit.class);
     add("user", "log in or register", stork.client.StorkUser.class);
+    add("cred", "register a credential", stork.client.StorkCred.class);
 
     foot = new String[] {
       "Stork is still undergoing testing and development. "+

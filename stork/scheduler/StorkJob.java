@@ -25,7 +25,6 @@ public class StorkJob {
   private int job_id = 0;
   private JobStatus status = null;
   private EndPoint src = null, dest = null;
-  private String x509_proxy = null;
   private String user_id = null;
   private TransferProgress progress = new TransferProgress();
 
@@ -64,7 +63,7 @@ public class StorkJob {
   // Gets the job info as an ad, merged with progress ad.
   // TODO: More proper filtering.
   public synchronized Ad getAd() {
-    return Ad.marshal(this).remove("x509_proxy");
+    return Ad.marshal(this);
   }
 
   // Get the user_id of the user who owns this job.

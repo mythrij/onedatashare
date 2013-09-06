@@ -196,9 +196,9 @@ public class Ad implements Serializable {
     AdObject o = getObject(s);
     return (o != null) ? o.asArray(c) : null;
   }
-    
+
   // Look up an object by its key. Handles recursive ad lookups.
-  synchronized AdObject getObject(Object okey) {
+  public synchronized AdObject getObject(Object okey) {
     int i;
     Ad ad = this;
 

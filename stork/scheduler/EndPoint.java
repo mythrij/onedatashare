@@ -14,7 +14,7 @@ import java.net.URI;
 
 public class EndPoint {
   private URI uri;
-  private String cred;
+  private AdObject cred;
   private String module;
   private transient StorkScheduler sched = null;
 
@@ -29,7 +29,7 @@ public class EndPoint {
     this(null, ad);
   } public EndPoint(StorkScheduler sched, Ad ad) {
     uri(ad.get("uri"));
-    cred(ad.get("cred"));
+    cred(ad.getObject("cred"));
     module(ad.get("module"));
     scheduler(sched);
   }
@@ -66,11 +66,18 @@ public class EndPoint {
     return uri;
   }
 
-  // Get or set the cred token.
+  // Get or set the cred token. This AdObject hack lets us accept anonymous
+  // credentials until a better solution is found.
   public void cred(String c) {
+    cred(AdObject.wrap(c));
+  } public void cred(Ad ad) {
+    cred(AdObject.wrap(ad));
+  } public void cred(AdObject c) {
     cred = c;
   } public StorkCred<?> cred() {
-    return (cred != null) ? sched.creds.getCred(cred) : null;
+    return (cred == null) ? null :
+           (cred.isString()) ? sched.creds.getCred(cred.asString()) :
+           (cred.isAd()) ? StorkCred.create(cred.asAd()) : null;
   }
 
   // Get or set the transfer module.
