@@ -8,6 +8,8 @@ import java.io.*;
 // Handler for sending a raw command ad to the server.
 
 public class StorkRaw extends StorkClient {
+  String file;
+
   public StorkRaw() {
     super("raw");
 
@@ -18,14 +20,22 @@ public class StorkRaw extends StorkClient {
     };
   }
 
+  public void parseArgs(String[] args) {
+    assertArgsLength(args, 0, 1);
+    if (args.length > 0)
+      file = args[0];
+  }
+
   public Ad fillCommand(Ad ad) {
-    if (args.length > 0) try {
-      return Ad.parse(new FileInputStream(args[0]));
+    if (file != null) try {
+      return Ad.parse(new File(file));
     } catch (Exception e) {
       throw new RuntimeException("couldn't read ad from file");
     } else try {
-      System.out.print("Type a command ad:\n\n");
-      return Ad.parse(System.in);
+      if (System.console() != null) {
+        System.out.print("Type a command ad (ctrl-C to cancel):\n\n");
+        return Ad.parse(System.console().reader());
+      } return Ad.parse(System.in);
     } catch (Exception e) {
       throw new RuntimeException("couldn't read ad from stream");
     }

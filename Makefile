@@ -6,7 +6,7 @@ VERSION = 0.0.5
 
 # =============
 PROJECT = stork
-CMDS = info ls q raw rm server status submit user
+CMDS = info ls q raw rm server status submit user cred
 JARFILE = lib/$(PROJECT)-$(VERSION).jar
 
 CLASSPATH = 'lib/*:build'

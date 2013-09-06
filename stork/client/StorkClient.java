@@ -17,7 +17,7 @@ public abstract class StorkClient extends Command {
 
   public StorkClient(String prog) {
     super(prog);
-    add('R', "raw", "display raw messages from server");
+    add('R', "raw", "display raw server responses");
   }
 
   // Execute a command on the connected Stork server.
@@ -49,7 +49,7 @@ public abstract class StorkClient extends Command {
 
       // Write command ad to the server.
       do {
-        ad = fillCommand(new Ad()).put("command", prog);
+        ad = fillCommand(new Ad().put("command", prog));
 
         // Write command to server.
         os.write((ad+"\n").getBytes("UTF-8"));

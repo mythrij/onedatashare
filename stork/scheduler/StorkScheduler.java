@@ -395,6 +395,7 @@ public class StorkScheduler {
       } public <C extends StorkThread<?>> void check(C[] pool, Class<C> c) {
         for (C t : pool) if (t.idle) return;
         int i = (int) (Math.random() * pool.length);
+        Log.info("Retiring ", c, " #", i);
         C z;
         if (c == StorkWorkerThread.class)
           z = c.cast(new StorkWorkerThread());
@@ -404,6 +405,7 @@ public class StorkScheduler {
           return;
         pool[i].dead = true;
         pool[i] = z;
+        Log.info("Created new ", c);
       }
     }.start();
   }
@@ -415,6 +417,7 @@ public class StorkScheduler {
   } public RequestContext putRequest(Ad ad, Bell<Ad> bell) {
     RequestContext rc = new RequestContext(ad, bell);
     try {
+      System.out.println("Enqueuing request: "+rc.ad);
       req_queue.add(rc);
     } catch (Exception e) {
       // This can happen if the queue is full. Which right now it never
