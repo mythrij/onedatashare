@@ -58,13 +58,17 @@ public class StorkLs extends StorkClient {
 
   // Print a single directory listing ad.
   private void printListing(Ad ad) {
-    Ad[] files = ad.getAds("files");
-    if (files == null || files.length == 0)
-      return;
-    if (count > 1)
-      System.out.println(ad.get("name")+":");
-    for (Ad a : files)
-      printEntry(a);
+    if (ad.getBoolean("dir")) {
+      Ad[] files = ad.getAds("files");
+      if (files == null || files.length == 0)
+        return;
+      if (count > 1)
+        System.out.println(ad.get("name")+":");
+      for (Ad a : files)
+        printEntry(a);
+    } else {
+      printEntry(ad);
+    }
   }
 
   // Helper methods for printing long listing information.
