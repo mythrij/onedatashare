@@ -43,17 +43,6 @@ public abstract class TransferModule {
     return TransferModuleTable.instance().byProtocol(s);
   }
 
-  // Start a session and perform a listing.
-  public Ad list(URI uri) {
-    return list(new EndPoint(uri));
-  } public Ad list(EndPoint ep) {
-    try {
-      return session(ep).list(ep.path(), null);
-    } catch (Exception e) {
-      throw abort(true, "couldn't list", e);
-    }
-  }
-
   // Create a new session capable of interacting with a URI.
   public StorkSession session(String uri) {
     return session(new EndPoint(uri));

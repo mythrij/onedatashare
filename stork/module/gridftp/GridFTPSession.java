@@ -21,38 +21,34 @@ import org.gridforum.jgss.*;
 
 // A custom GridFTP client that implements some undocumented
 // operations and provides some more responsive transfer methods.
-// TODO: Document supported options.
 
 public class GridFTPSession extends StorkSession {
-  private StorkCred<?> cred = null;
-  private Optimizer optimizer = null;
-  private ControlChannel cc;
-
-  // The default options for a GridFTP session.
-  private static Ad DEFAULT_CONFIG = new Ad()
-    .put("parallelism", 4)
-    .put("concurrency", 1)
-    .put("pipelining", 20);
+  private transient StorkCred<?> cred = null;
+  private transient Optimizer optimizer = null;
+  private transient ControlChannel cc;
   
-  private FTPServerFacade local;
+  private transient FTPServerFacade local;
 
-  private int parallelism = 1;
   private int concurrency = 1;
+  private int parallelism = 4;
+  private int pipelining = 20;
 
-  volatile boolean aborted = false;
+  private transient volatile boolean aborted = false;
+  private transient boolean dcau = true;
+
+  // Add a command to this if we find we cannot use it for listing. E.g.,
+  // STAT does not list on some Globus GridFTP servers.
+  private transient Set<String> does_not_list = new HashSet<String>();
 
   // Create a new session connected to an end-point specified by a URL.
   // opts may be null.
   public GridFTPSession(EndPoint e) {
     super(e);
     cc = new ControlChannel(e);
-  }
+    cc.setPipelining(pipelining);
 
-  // StorkSession interface implementations
-  // --------------------------------------
-  // We can only pair with other GridFTPSessions for now.
-  public boolean pairCheck(StorkSession other) {
-    return other instanceof GridFTPSession;
+    // Add a few things we already know can't be used for listing.
+    does_not_list.add("MLST");
   }
 
   // Close control channel.
@@ -60,257 +56,501 @@ public class GridFTPSession extends StorkSession {
     cc.close();
   }
 
-  // Convert an ad listing to an XferList.
-  // FIXME: Temporary hack.
-  XferList mlsr(String sp, String dp) {
-    Ad ad = listImpl(sp, new Ad("depth", -1));
-    return new XferList(sp, dp, ad);
-  }
-
-  // Recusively list directories and return as an ad.
-  // TODO: If depth is zero, only return information about one file.
-  protected Ad listImpl(String path, Ad opts) {
-    int depth = 0;
-    int cur_depth = 0;
-    final Ad list = new Ad("name", path);
-    final LinkedList<String> work = new LinkedList<String>();
-    final LinkedList<Ad> work_ads = new LinkedList<Ad>();
-    final String cmd;
-    final boolean is_mlsd, use_cc;
-
-    // Get options from passed ad.
-    if (opts != null) {
-      depth = opts.getInt("depth", depth);
-    }
-
-    // Check if we need to do a local listing.
-    if (cc.local)
-      return null;
-      //return StorkUtil.list(path);
-
+  // Recursively list directories and return as a file tree relative to the
+  // passed path.
+  protected ListBell listImpl(String path, Ad opts) {
     // Use channel pair until we have a time to do things better.
-    final ChannelPair cp = new ChannelPair(cc);
+    ChannelPair pair = new ChannelPair(cc);
 
     // Turn off DCAU.
-    if (cp.rc.supports("DCAU")) {
-      GridFTPServerFacade f = cp.oc.facade;
-      f.setDataChannelAuthentication(DataChannelAuthentication.NONE);
-      cp.rc.write("DCAU N", true);
+    disableDCAU();
+    final GridFTPServerFacade f = pair.oc.facade;
+    f.setDataChannelAuthentication(DataChannelAuthentication.NONE);
+
+    // We don't want all the information the MLSx commands return.
+    if (cc.supports("MLSC") || cc.supports("MLSD"))
+      cc.pipe("OPTS MLST Type*;Size*;Modify*;UNIX.mode*");
+
+    // This bell will be rung when the listing has finished, and will
+    // contain the root file tree.
+    ListBell bell = new ListBell(path, new FileTree(StorkUtil.basename(path)));
+    bell.opts  = opts;
+    bell.cp    = pair;
+
+    if (opts.has("depth")) {
+      bell.depth = opts.getInt("depth", 1);
+    } else if (opts.getBoolean("recursive")) {
+      bell.depth = -1;
+    } else {
+      bell.depth = 1;
     }
 
-    // Make sure we can access the directory first.
-    try {
-      cc.execute("CWD "+path+"/");
-    } catch (Exception e) {
-      cp.oc.close();
-      throw abort(false, e);
-    }
+    // This will handle choosing a listing command and ringing the bell
+    // with the list when it's done.
+    pipeListing(bell);
+    return bell;
+  }
 
-    work.add("");
-    work_ads.add(list);
+  // Ring this when the listing and all sublistings are complete.
+  private class ListBell extends Bell<FileTree> {
+    String name;
+    ListBell parent;  // This will be null if we're root.
+    FileTree tree;    // This will be set for all sublists.
+    int depth;
+    int sublists = 0;
+    Ad opts;
+    ChannelPair cp;
 
-    // Keep listing and building subdirectory lists.
-    // XXX This is uglier than it should be, I know.
-    int total = 0;
-    while ((depth < 0 || cur_depth++ <= depth) && !work.isEmpty()) {
-      // These all need to be waited on.
-      final List<ControlChannel.Wrapper> ws =
-        new LinkedList<ControlChannel.Wrapper>();
-
-      for (int i = work.size(); i > 0; i--) {
-        final String p = work.pop();
-        final Ad ad = work_ads.pop();
-
-        total++;
-
-        final ControlChannel.Wrapper w = cp.pipePassive();
-        ws.add(cp.rc.write("LIST ./"+p, cp.rc.new XferHandler(null) {
-          public Reply handleReply() {
-            Reply r = w.get();  // This will throw if there was a problem.
-            D("Got reply: "+r);
-
-            ListAdSink sink = new ListAdSink(ad, false);
-            cp.oc.facade.store(sink);
-            r = super.handleReply();
-            D("Got reply: "+r);
-            D("Waiting for: ."+p);
-            sink.waitFor();
-
-            // Add dirs to the working set.
-            if (ad.has("files")) for (Ad a : ad.getAds("files")) {
-              if (a.getBoolean("dir")) {
-                work.add(p+a.get("name")+"/");
-                work_ads.add(a);
-              }
-            } return r;
-          }
-        }));
-      } for (ControlChannel.Wrapper w : ws) try {
-        w.get();
-      } catch (Exception e) {
-        if (total < 2) {
-          cp.oc.close();
-          throw abort(false, e);
-        }
+    public ListBell(String name, FileTree tree) {
+      this(name, tree, null);
+    } public ListBell(String name, FileTree tree, ListBell p) {
+      this.name = Intern.string(name);
+      this.tree = tree;
+      if ((parent = p) != null) {
+        depth = (p.depth > 0) ? p.depth-1 : p.depth;
+        opts = p.opts;
+        cp = p.cp;
       }
     }
 
-    cp.oc.close();
+    private String path() {
+      return (parent == null) ? name : parent.path()+"/"+name;
+    }
 
-    return list;
+    // Filter rings until we've been rung for every sublist.
+    public boolean filter(FileTree ft, Throwable t) {
+      return --sublists <= 0;
+    }
+
+    // Return whether or not we can use a command to list this.
+    boolean canListWith(String s) {
+      return cc.supports(s) &&
+             (depth == 0 || !does_not_list.contains(s));
+    }
+
+    // Pipe a listing command for everything in the list then ring the
+    // list bell when it's done. This should only be called if this bell
+    // hasn't been rung and if the passed file tree has been listed.
+    void doSublisting(FileTree ft) {
+      assert !isRung();
+
+      int fc = 0;
+      tree = ft;
+
+      // First count the number of files
+      if (ft.files != null && ft.files.length > 0)
+        for (FileTree sft : ft.files) if (sft.dir) fc++;
+
+      // Then see if we have anything to actually do.
+      if (fc == 0) {
+        ring(ft);
+      } else {
+        sublists = fc;
+        for (FileTree sft : ft.files)
+          if (sft.dir) pipeListing(new ListBell(sft.name, sft, this));
+      }
+    }
+
+    // Once we've rung, close the channel pair.
+    protected void done(FileTree f) {
+      if (depth == 0)
+        f.setFiles((FileTree[]) null);
+    } protected void always(FileTree f, Throwable t) {
+      if (parent != null)
+        parent.ring(parent.tree, null);
+    }
+  }
+
+  // Pipe the appropriate listing command that will ring the list bell
+  // when it's done.
+  //private static String[] cc_list_cmds = {};
+  private static String[] cc_list_cmds = { "MLST", "MLSC", "STAT" };
+  private static String[] dc_list_cmds = { "MLSD", "LIST" };
+  private Bell<Reply> pipeListing(ListBell lb) {
+    String p = lb.path();
+
+    // Try all of the command channel-based alternatives.
+    for (String c : cc_list_cmds) if (lb.canListWith(c))
+      return cc.pipe(c+" "+p, new CCListBell(lb, c));
+
+    // Other alternatives require a data channel to list, so let's
+    // pipe a passive command.
+    for (String c : dc_list_cmds) if (cc.supports(c)) {
+      DCListBell dlb = new DCListBell(lb, c);
+      pipePassive(dlb.sink());
+      return cc.pipe(c+" "+p, dlb);
+    }
+
+    throw abort("server does not support listing");
+  }
+
+  // A handler for reading lists over the control channel.
+  private class CCListBell extends Bell<Reply> {
+    ListBell lb;  // Ring me when we're done.
+    int type;
+    String cmd;
+    FTPListParser p;
+
+    CCListBell(ListBell lb, String cmd) {
+      this.lb = lb;
+      this.cmd = cmd;
+      type = cmd.startsWith("M") ? 'M' : 0;
+      p = new FTPListParser(null, (char)type);
+    }
+
+    public boolean filter(Reply r, Throwable t) {
+      if (r.getCode() < 200) {
+        p.write(r.getMessage().getBytes());
+        return false;
+      } else return true;
+    }
+
+    protected void done(Reply r) {
+      // Parse the list from the reply.
+      FileTree ft = p.parseAll(r.getMessage().getBytes());
+
+      if (ft.name == null) {
+        System.out.println("Got an ugly one...");
+        System.out.println(Ad.marshal(ft));
+        // This can happen if we're either listing a file or the command is
+        // wrongly implemented. First (only) child should be the real entry.
+        if (lb.tree != null)
+          ft = lb.tree.copy(ft.files[0]);
+        else
+          ft.copy(ft.files[0]);
+        if (ft.dir)  // Seems this command just stats, not lists.
+          does_not_list.add(cmd);
+        if (lb.depth == 0 || !ft.dir)
+          lb.ring(ft);
+        else {
+          System.out.println("Got an ugly one...");
+          System.out.println(Ad.marshal(ft));
+          pipeListing(lb);  // Pipe again using different command.
+        }
+      } else {
+        // If listing worked, this satisfies depth 0 and 1. If depth is
+        // anything else, we need to pipe more listing commands.
+        if (lb.depth == 0)
+          ft.files = null;
+
+        if (lb.tree != null) {
+          if (ft.files != null)
+            lb.tree.setFiles(ft.files);
+          ft = lb.tree.copy(ft);
+        }
+
+        if (!ft.dir || lb.depth == 0 || lb.depth == 1)
+          lb.ring(ft);
+        else
+          lb.doSublisting(ft);
+      }
+    } protected void fail(Reply r, Throwable t) {
+      // Either we got a bad reply or a parse error.
+      lb.ring(null, t);
+    }
+  }
+
+  // A handler for reading lists over a data channel.
+  private class DCListBell extends TransferBell {
+    ListBell lb;  // Ring me when we're done.
+    Bell<FileTree> sb;
+    int type;
+
+    DCListBell(ListBell lb, String cmd) {
+      this.lb = lb;
+      sb = new Bell<FileTree>();
+      type = cmd.startsWith("M") ? 'M' : 0;
+    }
+
+    // Get a list sink for this thing.
+    public TreeSink sink() {
+      return new TreeSink(sb, lb.tree, type);
+    }
+
+    public void done(Reply r) {
+      // Assumably, if we're here, passive mode worked. Now get the list.
+      FileTree ft = sb.waitFor();
+
+      // See if we need to do sublisting.
+      if (lb.depth == 0 || lb.depth == 1) {
+        if (lb.depth == 0) ft.files = null;
+        lb.ring(ft);
+      } else {
+        lb.doSublisting(ft);
+      }
+    } public void fail(Reply r, Throwable t) {
+      // Either we got a bad reply or a parse error.
+      lb.ring(null, t);
+    }
   }
 
   // Get the size of a file.
-  protected long sizeImpl(String path) {
-    try {
-      if (cc.local)
-        return StorkUtil.size(path);
-      Reply r = cc.exchange("SIZE "+path);
-      if (!Reply.isPositiveCompletion(r))
-        throw abort("file does not exist: "+path);
-      return Long.parseLong(r.getMessage());
-    } catch (Exception e) {
-      throw abort(e);
-    }
+  protected Bell<Long> sizeImpl(final String path) {
+    return cc.pipe("SIZE "+path).new Link<Long>() {
+      public Long transform(Reply r) {
+        return Long.parseLong(r.getMessage());
+      }
+    };
   }
 
-  // Transfer a file with the given options.
-  // TODO: Check opts.
-  protected void transferImpl(String src, String dest, Ad opts) {
-    XferList xl;
-
-    // Some quick sanity checking.
-    if (src == null || src.isEmpty())
-      throw abort("src path is empty");
-    if (dest == null || dest.isEmpty())
-      throw abort("dest path is empty");
-
-    D("Transferring: ", src, " -> ", dest);
-
-    // See if we're doing a directory transfer and need to build
-    // a directory list.
-    // FIXME: Something is bad here.
-    if (src.endsWith("/")) {
-      if (dest.endsWith("/"))  // Transfer the directory to dest.
-        xl = mlsr(src, dest+StorkUtil.basename(src.replaceAll("/+$", ""))+'/');
-      else  // Transfer the directory CONTENTS to dest.
-        xl = mlsr(src, dest);
-    } else {  // Otherwise it's just one file.
-      xl = new XferList(src, dest, sizeImpl(src));
-    }
-
-    // Pass the list off to the transfer() which handles lists.
-    try {
-      transfer(xl);
-    } catch (Exception e) {
-      throw abort(e.getMessage(), e);
-    }
+  // Make a directory.
+  protected Bell<Reply> mkdirImpl(String path) {
+    return cc.pipe("MKD "+path);
   }
 
-  // Transfer files from XferList.
-  void transfer(XferList xl) throws Exception {
-    // For now, use channel pair class.
-    ControlChannel pcc = ((GridFTPSession) pair()).cc;
-    ChannelPair cc = new ChannelPair(this.cc, pcc);
-
-    D("Setting mode and type...");
-    //if (cc.dc.local || !cc.gridftp)
-    if (cc.dc.local)
-      cc.setTypeAndMode('I', 'S');
+  // Remove a file or directory.
+  protected Bell<Reply> rmImpl(String path) {
+    if (path.endsWith("/"))
+      return cc.pipe("RMD "+path);
     else
-      cc.setTypeAndMode('I', 'E'); 
+      return cc.pipe("DELE "+path);
+  }
 
-    // Initialize optimizer.
-    D("Initializing optimizer...");
-    if (optimizer == null) {
-      optimizer = new Optimizer();
-    } else if (xl.size() >= 1E7 || xl.size() <= 0) {
-      optimizer.initialize(xl.size(), new Range(1,64));  // FIXME
-    } else {
-      D("File size < 1M, not optimizing...");
-      optimizer = new Optimizer();
-    } pipe.put(new Ad("optimizer", optimizer.name()));
+  public GridFTPChannel openImpl(String base, FileTree ft) {
+    return new GridFTPChannel(base, ft);
+  }
 
-    // Connect source and destination server.
-    D("Setting passive mode...");
-    cc.pipePassive();
+  // Bell for doing file transfers.
+  class TransferBell extends Bell<Reply> {
+    long size = -1;
+    ProgressListener pl = new ProgressListener();
+    GridFTPSession sess;
+    private TransferBell other;
+    RuntimeException failed = null;
 
-    // Make sure we were able to set passive mode.
-    cc.rc.read();
+    // Hack until we get something better.
+    public TransferBell() {
+      this(null, -1);
+    } public TransferBell(GridFTPSession sess) {
+      this(sess, -1);
+    } public TransferBell(GridFTPSession sess, long size) {
+      this.sess = sess;
+      this.size = size;
+    }
 
-    // mkdir dest directory.
-    D("Piping root transfer...");
-    cc.pipeXfer(xl.root, this);
+    // Filter markers from ringing the bell.
+    public boolean filter(Reply r, Throwable t) {
+      if (t != null || r == null) return true;
+      int c = r.getCode();
+      switch (c) {
+        case 111:  // Restart marker
+          return false;  // Just ignore for now...
+        case 112:  // Progress marker
+          if (sess != null) reportProgress(pl.parseMarker(r));
+      } return c >= 200;
+    }
 
-    // Report transfer information to upper level.
-    reportProgress(new Ad("bytes_total", xl.size()).
-                      put("files_total", xl.count()));
-    
-    // Begin transferring according to optimizer.
-    while (!xl.isEmpty()) {
-      Ad b = optimizer.sample(), update;
-      Throughput prog = new Throughput();
-      int s = b.getInt("pipelining");
-      int p = b.getInt("parallelism");
-      int c = b.getInt("concurrency");
-      long len = b.getLong("size");
-      XferList xs;
-
-      D("Sample ad: "+b);
-      D("Sample size: "+len);
-
-      update = b.filter("pipelining", "parallelism", "concurrency");
-
-      if (s > 0) cc.setPipelining(s);
-      else update.remove("pipelining");
-
-      // FIXME: Parallelism and concurrency don't work well together.
-      /*
-      if (p > 0) {
-        D("Got parallelism: "+p);
-        if (p != parallelism) {
-          cc.parallelism = p;
-          cc.close();
-          cc = cc.duplicate();
-        } else setParallelism(p);
+    public TransferBell pairWith(TransferBell tb) {
+      if (tb == this || tb == null) {
+        other = null;
       } else {
-        update.put("parallelism", parallelism);
+        other = tb;
+        tb.other = this;
+      } return this;
+    }
+
+    public void done(Reply r) {
+      int c = r.getCode();
+
+      if (failed != null) {
+        throw failed;
+      } if (c == 226) {
+        if (sess != null)
+          sess.reportProgress(pl.done(size));
+      } else {
+        throw abort("unexpected reply: "+c);
+      }
+    }
+
+    // Abort the other transfer if this fails.
+    public void fail(Reply r, Throwable t) {
+      if (other != null)
+        other.failed = (RuntimeException) t;
+    }
+  }
+
+  // Channel implementation.
+  public class GridFTPChannel extends StorkChannel {
+    GridFTPSession gs = GridFTPSession.this;
+    ControlChannel cc = GridFTPSession.this.cc;
+
+    // The URI to the channel resource.
+    public GridFTPChannel(String base, FileTree ft) {
+      super(base, ft);
+    }
+
+    // Return the path to the file represented by this channel.
+    private String path() {
+      return URI.create(base+"/").resolve(file.path()).normalize().getPath();
+    }
+
+    // Quick hack to open relativized channels.
+    private GridFTPChannel openSub(FileTree f) {
+      return new GridFTPChannel(base, f);
+    }
+
+    // Send data to another channel. The two channels should coordinate to
+    // produce a bell that will be rung when the exchange is complete. A
+    // matching recvFrom should be called on the other channel. Sending
+    // with a length of -1 will cause data to be sent until the source is
+    // out of data.
+    // FIXME: This is a pretty hacky thing.
+    public Bell<?> sendTo(StorkChannel c, long off, long len) {
+      if (!(c instanceof GridFTPChannel))
+        throw abort("can only send to other FTP channels");
+      final GridFTPChannel gc = (GridFTPChannel) c;
+      final ControlChannel dc = gc.cc;
+
+      disableDCAU();
+      gc.gs.disableDCAU();
+
+      reportProgress(new Ad("bytes_total", file.size())
+                       .put("files_total", file.count()));
+
+      return sendTo(c, null);
+    } private Bell<Reply> sendTo(StorkChannel c, final Bell<Reply> meta) {
+      if (!(c instanceof GridFTPChannel))
+        throw abort("can only send to other FTP channels");
+      final GridFTPChannel gc = (GridFTPChannel) c;
+      final ControlChannel dc = gc.cc;
+
+      Log.info("Transferring from ", path(), " to ", gc.path());
+      Log.info("Transfer type is ", file.dir ? "dir" : "file",
+               " to ", gc.file.dir ? "dir" : "file");
+
+      // For directories, pipe all contained files.
+      if (file.dir) {
+        final Bell<Reply> b = new Bell<Reply>() {
+          public int count = 1;
+          public boolean first = true;
+          public boolean filter(Reply r, Throwable t) {
+            if (first) {
+              // Pipe all the subfiles.
+              if (file.files != null) for (FileTree f : file.files) {
+                count++;
+                openSub(f).sendTo(gc.openSub(f), this);
+              } first = false;
+            }
+
+            System.out.println(path()+": waiting for "+count);
+            return --count <= 0;
+          } public void always(Reply r, Throwable t) {
+            System.out.println(path()+": finally done!");
+            if (meta != null)
+              meta.ring();
+          }
+        };
+        dc.pipe("MKD "+gc.path(), new Bell<Reply>() {
+          public void always(Reply r, Throwable t) {
+            b.ring();
+          }
+        });
+        return b;
       }
 
-      if (c > 0) setConcurrency(c);
-      else update.remove("concurrency");
-      */
+      // Create a bell for each transfer, where one will fail the other
+      // if a problem happens in either.
+      final TransferBell sb = new TransferBell(GridFTPSession.this, file.size) {
+        public void always(Reply r, Throwable t) {
+          if (meta != null)
+            meta.ring();
+        }
+      };
+      final TransferBell db = new TransferBell().pairWith(sb);
 
-      if (pipe != null && update.size() > 0)
-        pipe.put(update);
+      // TODO: More robust third-party transfer checking.
+      dc.pipe("PASV", gc.gs.new PassiveBell(
+        new ActiveBell(new Bell<Reply>() {
+          public void done(Reply r) {
+            System.out.println("Active bell reply: "+r);
+            cc.pipe("RETR "+path(), db);
+          }
+        })
+      ));
+      dc.pipe("STOR "+gc.path(), sb);
 
-      if (len >= 0)
-        xs = xl.split(len);
-      else
-        xs = xl.split(-1);
-
-      prog.reset(xs.size());
-      transferList(cc, xs);
-      prog.finish(true);
-
-      b.put("throughput", prog.avg/1E6);
-      optimizer.report(b);
+      return sb;
     }
 
-    // Now let it know we've ended.
-    reportProgress(new Ad("complete", true));
+    // Close the channel, finalizing any resources held by the channel,
+    // and ending any ongoing transfers.
+    public void close() { }
   }
 
-  // Split the list over all control channels and call
-  // transferList(cc, xl).
-  // FIXME: This will wait on the slowest thread.
-  void transferList(ChannelPair cc, XferList xl) throws Exception {
-    D("Transferring list! size: "+xl.size());
+  // Disable data channel authentication if it's not already done.
+  // FIXME: Don't pipe mode E here, this is just for hacky purposes.
+  private void disableDCAU() {
+    if (dcau && cc.supports("DCAU")) {
+      cc.pipe("DCAU N");
+      cc.pipe("MODE E");
+    } dcau = false;
+  }
 
-    while (!xl.isEmpty()) {
-      //if (!extended mode) cc.pipePassive();
-      cc.pipeXfer(xl.pop(), this);
-    } cc.sync();
-    return;
+  // Put this channel into passive mode and put the other channel into
+  // active mode, or attach a local sink.
+  private Bell<Reply> pipePassive(GridFTPSession other) {
+    Bell<Reply> reply = new Bell<Reply>();
+    cc.pipe("PASV", new PassiveBell(other.new ActiveBell(reply)));
+    return reply;
+  } private Bell<Reply> pipePassive(DataSink sink) {
+    return cc.pipe("PASV", new PassiveBell(sink));
+  }
+
+  // Ringing this will a PASV reply will parse the reply and ring the
+  // associated bell with the HostPort.
+  private class PassiveBell extends Bell<Reply> {
+    Bell<HostPort> next;
+    DataSink sink;
+    public PassiveBell(DataSink sink) {
+      this.sink = sink;
+    } public PassiveBell(Bell<HostPort> next) {
+      this.next = next;
+    } public void done(Reply r) {
+      System.out.println("Got passive reply! "+r);
+      String s = r.getMessage().split("[()]")[1];
+      BetterHostPort hp = new BetterHostPort(s);
+
+      hp.subnetHack(cc.getIP().getAddress());
+
+      if (sink != null) try {
+        cc.facade.setActive(hp);
+        cc.facade.store(sink);
+        //next.ring();
+      } catch (Exception e) {
+        throw abort(e);
+      } else if (next != null) {
+        System.out.println("Ringing next active bell...");
+        next.ring(hp);
+      }
+    } public void fail(Reply r, Throwable t) {
+      if (next != null)
+        next.ring(t);
+    }
+  }
+
+  // Ringing this bell with a HostPort will put the channel into
+  // active mode.
+  private class ActiveBell extends Bell<HostPort> {
+    Bell<Reply> next;
+    public ActiveBell(Bell<Reply> next) {
+      this.next = next;
+    } public void done(HostPort p) {
+      Log.fine("Making active connection to: ", p.getHost());
+      cc.pipe("PORT "+p.toFtpCmdArgument(), next);
+    } public void fail(HostPort p, Throwable t) {
+      if (next != null)
+        next.ring(t);
+    }
+  }
+
+  // Testing method.
+  public static void main(String[] args) {
+    URI uri = URI.create(args[0]);
+    Ad opts = new Ad("depth", -1);
+    if (args.length > 1)
+      opts.put("depth", args[1]);
+    StorkSession sess = new GridFTPSession(new EndPoint(uri));
+    FileTree ft = sess.list(uri.getPath(), opts).waitFor();
+    System.out.println(Ad.marshal(ft));
   }
 }

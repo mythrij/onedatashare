@@ -91,7 +91,7 @@ public class StorkJob {
       case complete:
         queue_timer.stop();
         run_timer.stop();
-        progress.transferEnded(false);
+        progress.transferEnded(true);
     } return this;
   }
 
@@ -155,9 +155,8 @@ public class StorkJob {
   }
 
   // Run the job and watch it to completion.
-  // FIXME: Race condition?
   public void run() {
-    StorkSession session = null;
+    StorkSession ss = null, ds = null;
 
     try {
       synchronized (this) {
@@ -169,15 +168,17 @@ public class StorkJob {
       }
 
       // Establish connections to end-points.
-      session = src.pairWith(dest);
+      ss = src.session();
+      ds = dest.session();
 
       // Create a pipe to process progress ads from the module.
       Pipe<Ad> pipe = new Pipe<Ad>();
       pipe.new End(false) {
         public void store(Ad ad) {
+          System.out.println("Progress: "+ad);
           if (ad.has("bytes_total") || ad.has("files_total"))
             progress.transferStarted(ad.getLong("bytes_total"),
-                               ad.getInt("files_total"));
+                                     ad.getInt("files_total"));
           if (ad.has("bytes_done") || ad.has("files_done"))
             progress.done(ad.getLong("bytes_done"), ad.getInt("files_done"));
           if (ad.getBoolean("complete"))
@@ -186,11 +187,29 @@ public class StorkJob {
       };
 
       // Set the pipe.
-      pipe.new End().put(new Ad());
-      session.setPipe(pipe.new End());
+      ss.setPipe(pipe.new End());
+
+      // Get the file trees. FIXME: hax
+      Bell<FileTree> dfb = ds.list(dest.path());
+      FileTree sft = ss.list(src.path(), new Ad("recursive", true)).waitFor();
+      FileTree dft;
+
+      try {
+        dft = dfb.waitFor();
+      } catch (Exception e) {
+        // Assume it's a new whatever the source is.
+        dft = new FileTree(sft.name);
+        dft.copy(sft);
+      }
+
+      if (sft.dir && dft.file)
+        throw new RuntimeException("cannot transfer from directory to file");
 
       // Now let the transfer module do the rest.
-      session.transfer(src.path(), dest.path());
+      StorkChannel sc = ss.open(StorkUtil.dirname(src.path()),  sft);
+      StorkChannel dc = (dft.dir) ? ds.open(dest.path(), sft)
+                                  : ds.open(StorkUtil.dirname(dest.path()), dft);
+      sc.sendTo(dc).waitFor();
 
       // No exceptions happened. We did it!
       status(complete);
@@ -209,8 +228,8 @@ public class StorkJob {
     } finally {
       // Any time we're not running, the sessions should be closed.
       thread = null;
-      if (session != null)
-        session.closeBoth();
+      if (ss != null) ss.close();
+      if (ds != null) ds.close();
     }
   }
 }

@@ -6,46 +6,40 @@ import stork.scheduler.*;
 import static stork.module.ModuleException.*;
 import java.net.URI;
 
-// Represents a connection to a remote end-point. A session should
+// Represents a connection to a remote end point. A session should
 // provide methods for starting a transfer, listing directories, and
-// performing other operations on the end-point.
+// performing other operations on the end point.
 
 public abstract class StorkSession {
-  public EndPoint ep = null;
+  public transient EndPoint ep = null;
 
-  protected Pipe<Ad>.End pipe = null;
-  protected StorkSession pair = null;
-  protected boolean closed = false;
+  protected transient Pipe<Ad>.End pipe = null;
+  protected transient boolean closed = false;
 
   ////////////////////////////////////////////////////////////////
   // The following methods should be implemented by subclasses: //
   ////////////////////////////////////////////////////////////////
 
   // Get a directory listing of a path from the session.
-  protected abstract Ad listImpl(String path, Ad opts);
+  protected abstract Bell<FileTree> listImpl(String path, Ad opts);
 
   // Get the size of a file given by a path.
-  protected abstract long sizeImpl(String path);
+  protected abstract Bell<Long> sizeImpl(String path);
 
   // Create a directory at the end-point, as well as any parent directories.
-  // Returns whether or not the command succeeded.
-  //protected abstract boolean mkdirImpl(String path);
+  protected abstract Bell<?> mkdirImpl(String path);
 
-  // Transfer from this session to a paired session.
-  protected abstract void transferImpl(String src, String dest, Ad opts);
+  // Remove a file or directory.
+  protected abstract Bell<?> rmImpl(String path);
 
   // Close the session and free any resources.
   protected abstract void closeImpl();
 
-  // Create an identical session with the same settings. Can optionally
-  // duplicate its pair as well and pair the duplicates.
-  //public abstract StorkSession duplicate(boolean both);
+  // Create an identical session with the same settings.
+  //public abstract StorkSession duplicate();
 
-  // Check if this session can be paired with another session. Override
-  // this in subclasses.
-  public boolean pairCheck(StorkSession other) {
-    return true;
-  }
+  // Get a channel to a session resource.
+  protected abstract StorkChannel openImpl(String base, FileTree ft);
 
   ////////////////////////////////////////////////////////////////////
   // Everything below this point should be more or less left alone. //
@@ -62,21 +56,22 @@ public abstract class StorkSession {
 
   // Set an ad sink to write update ads into.
   // TODO: This is a temporary hack, remove me.
-  public void setPipe(Pipe<Ad>.End pipe) {
+  public final void setPipe(Pipe<Ad>.End pipe) {
     this.pipe = pipe;
   }
 
   // This should only be used by transfer modules themselves to report
-  // progress. TODO: Make protected once we get gridftp settled.
-  //protected void reportProgress(Ad... ad) {
-  public void reportProgress(Ad... ad) {
+  // progress.
+  public final void reportProgress(Ad... ad) {
+    System.out.println("Reporting progress: "+pipe);
+    System.out.println("Reporting progress: "+ad[0]);
     if (pipe != null) pipe.put(ad);
   }
 
   // Public interfaces to abstract methods.
-  public Ad list(String path) {
+  public final Bell<FileTree> list(String path) {
     return list(path, null);
-  } public Ad list(String path, Ad opts) {
+  } public final Bell<FileTree> list(String path, Ad opts) {
     checkConnected();
     path = StorkUtil.normalizePath(path);
     if (opts == null)
@@ -84,92 +79,57 @@ public abstract class StorkSession {
     return listImpl(path, opts);
   }
 
-  public long size(String path) {
+  public final long size(String path) {
     checkConnected();
-    return sizeImpl(path);
+    path = StorkUtil.normalizePath(path);
+    return sizeImpl(path).waitFor();
   }
 
-  public void transfer(String src, String dest, Ad opts) {
+  public final void mkdir(String path) {
     checkConnected();
-    if (pair == null)
-      throw abort("session is not paired");
-    if (opts == null)
-      opts = new Ad();
-    src = StorkUtil.normalizePath(src);
-    dest = StorkUtil.normalizePath(dest);
-    transferImpl(src, dest, opts);
+    path = StorkUtil.normalizePath(path);
+    mkdirImpl(path).waitFor();
+  }
+
+  public final void rm(String path) {
+    checkConnected();
+    path = StorkUtil.normalizePath(path);
+    rmImpl(path).waitFor();
   }
 
   // Check if the session hasn't been closed. Throws exception if so.
-  private void checkConnected() {
+  private final void checkConnected() {
     if (!isConnected())
       throw abort("session has been closed");
   }
 
+  public final StorkChannel open(String path) {
+    String d = StorkUtil.dirname(path), b = StorkUtil.basename(path);
+    return open(d, new FileTree(b));
+  } public final StorkChannel open(String base, FileTree ft) {
+    return openImpl(base, ft);
+  }
+
   // Check if the session is connected or if it's closed.
-  public synchronized boolean isConnected() {
+  public final synchronized boolean isConnected() {
     return !closed;
-  } public synchronized boolean isClosed() {
+  } public final synchronized boolean isClosed() {
     return closed;
   }
 
   // Close the session, cancel and transfers, free any resources.
-  public synchronized void close() {
-    unpair();
+  public final synchronized void close() {
     closeImpl();
     closed = true;
   }
 
-  // Close both this session and its pair.
-  public synchronized void closeBoth() {
-    if (pair != null)
-      pair.close();
-    close();
-  }
-
-  // Pair this session with another session. Calls pairCheck() first
-  // to see if the sessions are compatible. Returns paired session.
-  public synchronized StorkSession pair(StorkSession other) {
-    if (other != null && pair == other)
-      throw abort("these sessions are already paired");
-    if (other == this)
-      throw abort("cannot pair a session with itself");
-    if (other != null && (!pairCheck(other) || !other.pairCheck(this)))
-      throw abort("other session is not compatible with this session");
-    if (other != null && other.pair != null)
-      throw abort("other session is already paired");
-    if (other == null)
-      return null;
-    if (pair != null)
-      pair.pair(null);
-    if (other != null)
-      other.pair = this;
-    return pair = other;
-  }
-
-  // Unpair the session. Equivalent to calling pair(null).
-  public synchronized void unpair() {
-    pair(null);
-  }
-
-  // Get the paired session.
-  public synchronized StorkSession pair() {
-    return pair;
-  }
-
-  // Transfer a file from this session to a paired session. Throws an
-  // error if the session has not been paired. opts may be null.
-  public void transfer(String src, String dest) {
-    transfer(src, dest, null);
-  }
-
   // Get the protocol used by the session.
-  public String protocol() {
+  public final String protocol() {
     return ep.proto();
   }
 
   // Get the authority for the session.
-  public String authority() {
+  public final String authority() {
     return ep.uri().getAuthority();
   }
 }

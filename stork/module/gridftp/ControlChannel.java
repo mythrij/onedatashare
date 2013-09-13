@@ -10,11 +10,13 @@ import stork.scheduler.*;
 
 import java.util.*;
 import java.net.*;
+import java.io.*;
 
 import org.globus.ftp.*;
 import org.globus.ftp.vanilla.*;
 import org.globus.ftp.extended.*;
 import org.globus.ftp.dc.*;
+import org.globus.ftp.exception.*;
 
 // Wrapper for the JGlobus control channel classes which abstracts away
 // differences between local and remote transfers.
@@ -28,7 +30,6 @@ public class ControlChannel extends Pipeline<String, Reply> {
   public final HackedControlChannel fc;
   public final BasicClientControlChannel cc;
   private Set<String> features = null;
-  private boolean cmd_done = false;
 
   // Quick hack to handle getting peer IP from control channel.
   static class HackedControlChannel extends GridFTPControlChannel {
@@ -42,7 +43,7 @@ public class ControlChannel extends Pipeline<String, Reply> {
     }
   }
 
-  // Quick hack to handle JGlobus race condition during recursive listing.
+  // Scary hack to handle JGlobus race condition during recursive listing.
   static class HackedFTPServerFacade extends GridFTPServerFacade {
     public HackedFTPServerFacade(GridFTPControlChannel cc) {
       super(cc);
@@ -101,10 +102,8 @@ public class ControlChannel extends Pipeline<String, Reply> {
           try {
             super.run();
           } catch (Exception e) {
-            // Who cares.
-          } finally {
             try { sink.close(); }
-            catch (Exception e) { }
+            catch (Exception e2) { }
           }
         }
       }; transferThread.run();
@@ -135,10 +134,10 @@ public class ControlChannel extends Pipeline<String, Reply> {
           throw abort("could not authenticate", e);
         } else {
           String user = (u.user == null) ? "anonymous" : u.user;
-          String pass = (u.pass == null) ? "" : u.pass;
-          Reply r = exchange("USER "+user);
+          String pass = (u.pass == null) ? "none" : u.pass;
+          Reply r = pipe("USER "+user).waitFor();
           if (Reply.isPositiveIntermediate(r)) try {
-            execute(("PASS "+pass).trim());
+            pipe(("PASS "+pass).trim()).waitFor();
           } catch (Exception e) {
             throw abort("bad password", e);
           } else if (!Reply.isPositiveCompletion(r)) {
@@ -146,17 +145,17 @@ public class ControlChannel extends Pipeline<String, Reply> {
           }
         }
 
-        exchange("SITE CLIENTINFO appname="+GridFTPModule.name+";appver="+
-                 GridFTPModule.version+";schema=gsiftp;");
+        pipe("SITE CLIENTINFO appname="+GridFTPModule.name+";appver="+
+             GridFTPModule.version+";schema=gsiftp;");
       } else {
         String user = (u.user == null) ? "anonymous" : u.user;
-        String pass = (u.pass == null) ? "" : u.pass;
+        String pass = (u.pass == null) ? "none" : u.pass;
         cc = fc = new HackedControlChannel(u.host, u.port);
         fc.open();
 
-        Reply r = exchange("USER "+user);
+        Reply r = pipe("USER "+user).waitFor();
         if (Reply.isPositiveIntermediate(r)) try {
-          execute("PASS "+pass);
+          pipe(("PASS "+pass).trim()).waitFor();
         } catch (Exception e) {
           throw abort("bad password", e);
         } else if (!Reply.isPositiveCompletion(r)) {
@@ -214,16 +213,41 @@ public class ControlChannel extends Pipeline<String, Reply> {
     
     // If we haven't cached the features, do so.
     if (features == null) {
-      String r = execute("FEAT").getMessage();
+      Bell<Reply> hb = pipe("HELP");
+      Bell<Reply> fb = pipe("FEAT");
       features = new HashSet<String>();
-      boolean first = true;
 
-      // Read lines from responses
-      for (String s : r.split("[\r\n]+")) if (!first) {
-        s = s.trim().split(" ")[0];
-        if (s.startsWith("211")) break;
-        if (!s.isEmpty()) features.add(s);
-      } else first = false;
+      // Read the HELP response.
+      try {
+        System.out.println(hb.waitFor().getMessage());
+        String r = hb.waitFor().getMessage();
+        boolean first = true;
+
+        for (String s : r.split("[\r\n]+")) if (!first) {
+          if (s.startsWith("2")) break;
+          String[] cmds = s.trim().split(" ");
+          features.addAll(Arrays.asList(cmds));
+        } else first = false;
+      } catch (Exception e) {
+        // This should never happen, but if it does, oh well.
+      }
+
+      // Read the FEAT response.
+      try {
+        String r = fb.waitFor().getMessage();
+        boolean first = true;
+
+        for (String s : r.split("[\r\n]+")) if (!first) {
+          if (s.startsWith("2")) break;
+          s = s.trim().split(" ")[0];
+          features.add(s);
+        } else first = false;
+      } catch (Exception e) {
+        // This should never happen either, but...
+      }
+
+      // Just a little clean-up...
+      features.remove("");
     }
 
     // Check if all features are supported.
@@ -233,113 +257,88 @@ public class ControlChannel extends Pipeline<String, Reply> {
   }
 
   // Write a command to the control channel.
-  public void handleWrite(String cmd) {
-    if (local) return;
-    Log.fine("Write (", port, "): ", cmd);
+  // TODO: Make this non-blocking.
+  public boolean handleWrite(String cmd) {
+    Log.fine("Write: ", cmd);
+    //new Exception().printStackTrace();
     try {
       fc.write(new Command(cmd));
     } catch (Exception e) {
-      throw abort("read error: "+e.getMessage(), e);
-    }
-  }
-
-  // Read from the underlying control channel.
-  public Reply readChannel() {
-    try {
-      return cc.read();
-    } catch (Exception e) {
-      throw abort("read error: "+e.getMessage(), e);
-    }
+      kill();
+      throw abort("write error", e);
+    } return true;
   }
 
   // Read replies from the control channel.
-  public Reply handleReply() {
-    while (true) {
-      Reply r = readChannel();
-      Log.fine("Reply: ", r);
-      if (r.getCode() < 200) addReply(r);
-      else return r;
-    }
-  }
-
-  // A handler for reading lists over the control channel.
-  class StatHandler extends Handler {
-    private Ad ad;
-
-    public StatHandler(Ad ad) {
-      this.ad = ad;
-    }
-
-    public Reply handleReply() {
-      Reply r = readChannel();
-      ListAdSink sink = new ListAdSink(ad, false);
-
-      if (!Reply.isPositiveCompletion(r))
-        throw abort("couldn't list: "+r);
-      sink.write(r.getMessage().getBytes());
-      try {
-        sink.close();
-      } catch (Exception e) { }
+  public Reply handleReply(String cmd) {
+    try {
+      Reply r = cc.read();
+      Log.fine("Reply: ", r); 
+      if (r.getCode() >= 500)
+        throw abort(true, r.getMessage());
+      if (r.getCode() >= 400)
+        throw abort(false, r.getMessage());
       return r;
+    } catch (IOException e) {
+      throw abort("read error", e);
+    } catch (ServerException e) {
+      throw abort("server", e);
+    } catch (FTPReplyParseException e) {
+      throw abort("server", e);
     }
   }
 
   // Special handler for doing file transfers.
-  class XferHandler extends Handler {
+  class TransferBell extends Bell<Reply> {
     ProgressListener pl = new ProgressListener();
     GridFTPSession sess;
 
     // Hack until we get something better.
-    public XferHandler(GridFTPSession sess) {
+    public TransferBell() {
+      this(null);
+    } public TransferBell(GridFTPSession sess) {
       this.sess = sess;
     }
 
-    public synchronized Reply handleReply() {
-      Reply r = readChannel();
+    // Filter markers from ringing the bell.
+    public boolean filter(Reply r, Throwable t) {
+      if (t != null || r == null) return true;
+      int c = r.getCode();
+      switch (c) {
+        case 111:  // Restart marker
+          return false;  // Just ignore for now...
+        case 112:  // Progress marker
+          if (sess != null) sess.reportProgress(pl.parseMarker(r));
+      } return c >= 200;
+    }
 
-      if (!Reply.isPositivePreliminary(r)) {
-        throw abort("transfer failed to start: "+r);
-      } while (true) {
-        r = readChannel();
-        switch (r.getCode()) {
-          case 111:  // Restart marker
-            break;   // Just ignore for now...
-          case 112:  // Progress marker
-            if (sess != null) sess.reportProgress(pl.parseMarker(r));
-            break;
-          case 226:  // Transfer complete!
-            if (sess != null) sess.reportProgress(new Ad("files_done", 1));
-            return r;
-          default:
-            throw abort("unexpected reply: "+r.getCode());
-        }
+    public void done(Reply r) {
+      int c = r.getCode();
+      if (c >= 200 && c < 300) {
+        if (sess != null)
+          sess.reportProgress(new Ad("files_done", 1));
+      } else {
+        throw abort("unexpected reply: "+c);
       }
     }
   }
 
-  // Execute command, but DO throw on negative reply.
-  public Reply execute(String cmd) {
-    Reply r = exchange(cmd);
-    if (!Reply.isPositiveCompletion(r))
-      throw abort("bad reply: "+r);
-    return r;
-  }
-
   // Close the control channel.
-  public void close() {
-    try {
-      if (local)
-        facade.close();
-      else
-        write("QUIT");
-      super.kill();
+  public Bell<Reply> close() {
+    Bell<Reply> rb;
+    if (local) try {
+      facade.close();
     } catch (Exception e) {
-      // Who cares.
-    }
+      // Just ignore it.
+    } finally {
+      rb = new Bell<Reply>(null);
+    } else {
+      rb = pipe("QUIT");
+    } return rb;
   }
 
   // Cancel transfers and abort the control channel as soon as possible.
-  public synchronized void kill() {
+  public synchronized void abortTransfers() {
     try {
       if (local)
         facade.abort();
@@ -348,24 +347,30 @@ public class ControlChannel extends Pipeline<String, Reply> {
     } catch (Exception e) {
       // Who cares.
     } finally {
-      super.kill();
+      kill();
     } throw abort();
   }
 
   // Change the mode of this channel.
   // TODO: Detect unsupported modes.
-  public void mode(char m) {
-    if (local)
+  public Bell<Reply> mode(char m) {
+    if (local) {
       facade.setTransferMode(modeIntValue(m));
-    else write("MODE "+m, true);
+      return new Bell<Reply>(null);
+    } else {
+      return pipe("MODE "+m);
+    }
   }
 
   // Change the data type of this channel.
   // TODO: Detect unsupported types.
-  public void type(char t) {
-    if (local)
+  public Bell<Reply> type(char t) {
+    if (local) {
       facade.setTransferType(typeIntValue(t));
-    else write("TYPE "+t, true);
+      return new Bell<Reply>(null);
+    } else {
+      return pipe("TYPE "+t);
+    }
   }
 
   // Get the IP from the remote server as a string.

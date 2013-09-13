@@ -55,8 +55,12 @@ public class SFTPSession extends StorkSession {
     }
   }
 
+  protected StorkChannel openImpl(String base, FileTree ft) {
+    return null;
+  }
+
   // Get a directory listing of a path from the session.
-  protected Ad listImpl(String path, Ad opts) {
+  protected Bell<FileTree> listImpl(String path, Ad opts) {
     Ad ad = new Ad("name", path);
     AdSorter sorter = new AdSorter("dir", "name");
 
@@ -87,12 +91,20 @@ public class SFTPSession extends StorkSession {
       throw abort(e);
     }
 
-    return ad.put("files", sorter.getAds());
+    return null;//ad.put("files", sorter.getAds());
   }
 
   // Get the size of a file given by a path.
-  protected long sizeImpl(String path) {
-    return -1;
+  protected Bell<Long> sizeImpl(String path) {
+    return new Bell<Long>(-1l);
+  }
+
+  protected Bell<?> mkdirImpl(String path) {
+    return null;
+  }
+
+  protected Bell<?> rmImpl(String path) {
+    return null;
   }
 
   // Create a directory at the end-point, as well as any parent directories.

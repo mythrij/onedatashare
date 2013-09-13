@@ -41,8 +41,10 @@ public class Ad implements Serializable {
   private static Map<String, SoftReference<String>> internMap =
     new WeakHashMap<String, SoftReference<String>>();
   public static String intern(String k) {
+    if (k == null)
+      return null;
     SoftReference<String> s = internMap.get(k);
-    if (s == null)
+    if (s == null || s.get() == null)
       internMap.put(k, s = new SoftReference<String>(k));
     return s.get();
   }
@@ -540,8 +542,7 @@ public class Ad implements Serializable {
         c.setAccessible(true);
         return unmarshal(c.newInstance(args));
       } catch (Exception e2) {
-        // Ugh, guess nothing worked.
-        throw new RuntimeException(e2);
+        throw new RuntimeException("unmarshalling "+clazz, e2);
       } finally {
         if (c != null)
           c.setAccessible(accessible);

@@ -128,18 +128,22 @@ public abstract class StorkUtil {
   public static String basename(String path) {
     if (path == null) return "";
 
+    path = path.replaceAll("/+$", "");
     int i = path.lastIndexOf('/');
 
-    return (i == -1) ? path : path.substring(i+1);
+    return (path.isEmpty()) ? "/"  :
+           (i == -1)        ? path : path.substring(i+1);
   }
 
   // Get the dirname from a path string, including trailing /.
   public static String dirname(String path) {
     if (path == null) return "";
 
+    path = path.replaceAll("/+$", "");
     int i = path.lastIndexOf('/');
 
-    return (i == -1) ? "" : path.substring(0, i);
+    return (path.isEmpty()) ? "/"  :
+           (i == -1)        ? path : path.substring(0, i);
   }
 
   // File system functions

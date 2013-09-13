@@ -30,13 +30,16 @@ public class ProgressListener {
   } public Ad parseMarker(Marker m) {
     if (m instanceof PerfMarker) try {
       PerfMarker pm = (PerfMarker) m;
-      long cur_bytes = pm.getStripeBytesTransferred();
-      long diff = cur_bytes-last_bytes;
-
-      last_bytes = cur_bytes;
-      return new Ad("bytes_done", diff);
+      return setBytes(pm.getStripeBytesTransferred());
     } catch (Exception e) {
       // Couldn't get bytes transferred...
     } return null;
+  } public Ad setBytes(long cur_bytes) {
+    long diff = cur_bytes-last_bytes;
+    last_bytes = cur_bytes;
+    return new Ad("bytes_done", diff);
+  } public Ad done(long bytes) {
+    Ad ad = (bytes > 0) ? setBytes(bytes) : new Ad();
+    return ad.put("files_done", 1);
   }
 }

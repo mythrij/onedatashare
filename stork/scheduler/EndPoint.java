@@ -31,12 +31,18 @@ public class EndPoint {
     uri(ad.get("uri"));
     cred(ad.getObject("cred"));
     module(ad.get("module"));
-    scheduler(sched);
+    if (sched != null)
+      scheduler(sched);
   }
 
   // Unmarshal strings as end-points with a URI.
   public static EndPoint unmarshal(String u) {
     return new EndPoint(u);
+  }
+
+  // Unmarshal ads end-points with constructor.
+  public static EndPoint unmarshal(Ad ad) {
+    return new EndPoint(ad);
   }
 
   // Quick hack so we can perform lookups in the context of a scheduler.
@@ -63,7 +69,7 @@ public class EndPoint {
       throw new RuntimeException("missing URI");
     if (uri.getScheme() == null)
       throw new RuntimeException("no scheme specified");
-    return uri;
+    return uri = uri.normalize();
   }
 
   // Get or set the cred token. This AdObject hack lets us accept anonymous
@@ -75,9 +81,9 @@ public class EndPoint {
   } public void cred(AdObject c) {
     cred = c;
   } public StorkCred<?> cred() {
-    return (cred == null) ? null :
+    return (cred == null)    ? null :
            (cred.isString()) ? sched.creds.getCred(cred.asString()) :
-           (cred.isAd()) ? StorkCred.create(cred.asAd()) : null;
+           (cred.isAd())     ? StorkCred.create(cred.asAd()) : null;
   }
 
   // Get or set the transfer module.
@@ -100,10 +106,5 @@ public class EndPoint {
   // Create a session for this endpoint.
   public StorkSession session() {
     return module().session(this);
-  }
-
-  // Create a session paired with another endpoint session.
-  public StorkSession pairWith(EndPoint e) {
-    return session().pair(e.session());
   }
 }

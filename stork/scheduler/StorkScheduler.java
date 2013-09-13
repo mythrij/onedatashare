@@ -201,7 +201,7 @@ public class StorkScheduler {
       try {
         EndPoint ep = new EndPoint(StorkScheduler.this, req.ad);
         sess = ep.session();
-        return sess.list(ep.path(), req.ad);
+        return Ad.marshal(sess.list(ep.path(), req.ad).waitFor());
       } finally {
         if (sess != null) sess.close();
       }
@@ -388,7 +388,7 @@ public class StorkScheduler {
           // Sleep for a bit and make sure there's a free thread.
           sleep(100);
           check(worker_pool, StorkWorkerThread.class);
-          check(thread_pool, StorkQueueThread.class);
+          //check(thread_pool, StorkQueueThread.class);
         } catch (Exception e) {
           // I doubt this will happen.
         }

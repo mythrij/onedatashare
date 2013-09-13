@@ -1,7 +1,7 @@
 package stork.module.gridftp;
 
-import stork.ad.*;
 import stork.util.*;
+import stork.module.*;
 
 import java.text.*;
 import java.util.*;
@@ -13,20 +13,27 @@ import java.io.*;
 // under the path:
 //
 //   netwerk/streamconv/converters/ParseFTPList.cpp
+//
+// This parser will return a tree root that has its name set if and only
+// if information about the listed directory was able to be retrieved from
+// the listing results.
 
 @SuppressWarnings("fallthrough")
 public class FTPListParser {
   String data = null;
-  char list_type;
+  int list_type;
   StringBuilder sb = new StringBuilder();
-  AdSorter sorter;
+  FileTree root = new FileTree();
+  List<FileTree> files = new LinkedList<FileTree>();
 
   // Create a parser with an optional known type suggestion.
   public FTPListParser() {
-    this((char)0);
-  } public FTPListParser(char type) {
+    this(null, 0);
+  } public FTPListParser(int type) {
+    this(null, type);
+  } public FTPListParser(FileTree r, int type) {
+    root = (r != null) ? r : new FileTree();
     list_type = type;
-    sorter = new AdSorter("-dir", "name");
   }
 
   // Check if a file should be ignored.
@@ -41,27 +48,40 @@ public class FTPListParser {
   private void parseData(CharSequence data) {
     Matcher m = line_pattern.matcher(data);
 
+    // Keep finding lines.
     while (m.find()) {
       String line = m.group(1);
-      Ad ad = parseEntry(line);
-      if (ad != null && !ignoreName(ad.get("name")))
-        sorter.add(ad);
+      FileTree ft = parseEntry(line);
+      if (ft == null || ft.name == null)
+        continue;
+      ft.name = Intern.string(ft.name);
+      ft.perm = Intern.string(ft.perm);
+      if (ft.name.equals("."))
+        root.copy(ft);
+      else if (!ignoreName(ft.name))
+        files.add(ft);
     }
+  }
+
+  // This allows the entire list to be read in one shot.
+  public FileTree parseAll(byte[] b) {
+    write(b);
+    return finish();
   }
 
   // Finalize the parser and get the sorted ads. Any more calls to this
   // thing will exhibit undefined behavior.
-  public List<Ad> getAds() {
+  public FileTree finish() {
+    // Parse any buffered data.
     if (sb.length() > 0) {
       parseData(sb);
       sb = null;
-    } return sorter.getAds();
+    } return root.setFiles(files);
   }
 
   // Write a byte buffer to the file, decode as string, scan for newlines,
   // and feed lines through parser. Assumably we're reading data where
   // newlines are one byte so just look for newline characters.
-  // XXX This might just be a temporary hack to increase performance a bit.
   public void write(byte[] b) {
     // Find last newline and chomp it, then buffer the rest.
     int o;
@@ -79,11 +99,9 @@ public class FTPListParser {
   }
 
   // Parse a line from the listing, return as an ad.
-  public Ad parseEntry2(String line) {
-    return parseEntry(line).put("type", list_type);
-  } public Ad parseEntry(String line) {
+  public FileTree parseEntry(String line) {
     String[] tokens;
-    Ad ad = new Ad();
+    FileTree ft = new FileTree();
 
     if (line.isEmpty())
       return null;
@@ -98,32 +116,32 @@ public class FTPListParser {
       case 'E':  // Check for an EPLF listing.
       if (tokens.length >= 2 && tokens[0].startsWith("+")) try {
         // We should tokenize on tab.
-        String[] t = line.substring(1).split("\t+", 2);
+        String[] t     = line.substring(1).split("\t+", 2);
         String[] facts = t[0].split(",+");
-        String name = t[1];
+        String name    = t[1];
 
         // Parse facts according to prefixes.
         for (String f : facts) if (!f.isEmpty()) {
           switch (f.charAt(0)) {
             case 'm':  // Modification time.
-              ad.put("time", Long.parseLong(f.substring(1))); break;
+              ft.time = Long.parseLong(f.substring(1)); break;
             case '/':  // It's a directory.
-              ad.put("dir", true); break;
+              ft.dir = true; break;
             case 'r':  // It's a file.
-              ad.put("file", true); break;
+              ft.file = true; break;
             case 's':  // Size.
-              ad.put("size", f.substring(1)); break;
+              ft.size = Long.parseLong(f.substring(1)); break;
             case 'u':  // Permissions.
               if (f.charAt(1) == 'p')
-                ad.put("perm", f.substring(2));
+                ft.perm = f.substring(2);
           }
         }
 
         // Everything else after the tab is the file name.
-        ad.put("name", name);
+        ft.name = name;
         list_type = 'E';
 
-        return ad;
+        return ft;
       } catch (Exception e) {
         // Bad formatting, skip.
         if (list_type != 0) break;
@@ -143,7 +161,7 @@ public class FTPListParser {
         for (String f : facts) {
           String s[] = f.split("=", 2);
           String perm = null;
-          boolean dir = false, unix = false;
+          boolean unix = false;
           s[0] = s[0].toLowerCase();
 
           if (s.length != 2)
@@ -152,45 +170,47 @@ public class FTPListParser {
           if (s[0].length() < 4) {
             continue;
           } if (s[0].equals("type")) {
-            if (s[1].isEmpty())
-              return null;
-            else if (s[1].equalsIgnoreCase("file"))
-              ad.put("file", true);
+            if (s[1].equalsIgnoreCase("file"))
+              ft.file = true;
             else if (s[1].equalsIgnoreCase("dir"))
-              ad.put("dir", dir = true);
+              ft.dir = true;
             else if (s[1].equalsIgnoreCase("cdir"))
-              return null;
+              ft.dir = true;
             else if (s[1].equalsIgnoreCase("pdir"))
-              return null;
+              ft.dir = true;
             else  // It's just something weird. Let's call it a file.
-              ad.put("file", true);
+              ft.file = true;
+          } else if (s[0].equals("modify")) {
+            DateFormat df = new SimpleDateFormat("yyyyMMDDHHmmss");
+            ft.time = df.parse(s[1]).getTime()/1000;
           } else if (s[0].equals("size")) {
-            ad.put("size", Long.parseLong(s[1]));
+            ft.size = Long.parseLong(s[1]);
           } else if (s[0].equals("unix.mode")) {
             int p = Integer.parseInt(s[1], 8);
+            unix = true;
             perm = new String(new char[] {
-              (0 != (p & 0400)) ? '-' : 'r',
-              (0 != (p & 0200)) ? '-' : 'w',
-              (0 != (p & 0100)) ? '-' : 'x',
-              (0 != (p & 0040)) ? '-' : 'r',
-              (0 != (p & 0020)) ? '-' : 'w',
-              (0 != (p & 0010)) ? '-' : 'x',
-              (0 != (p & 0004)) ? '-' : 'r',
-              (0 != (p & 0002)) ? '-' : 'w',
-              (0 != (p & 0001)) ? '-' : 'x' });
+              (0 == (p & 0400)) ? '-' : 'r',
+              (0 == (p & 0200)) ? '-' : 'w',
+              (0 == (p & 0100)) ? '-' : 'x',
+              (0 == (p & 0040)) ? '-' : 'r',
+              (0 == (p & 0020)) ? '-' : 'w',
+              (0 == (p & 0010)) ? '-' : 'x',
+              (0 == (p & 0004)) ? '-' : 'r',
+              (0 == (p & 0002)) ? '-' : 'w',
+              (0 == (p & 0001)) ? '-' : 'x' });
           } else if (s[0].equals("perm") && !unix) {
             perm = s[1];
           } if (perm != null) {
-            if (unix) perm = (dir?'d':'-')+perm;
-            ad.put("perm", perm);
+            if (unix) perm = (ft.dir?'d':'-')+perm;
+            ft.perm = perm;
           }
         }
 
         // Everything else after the tab is the file name.
-        ad.put("name", name);
+        ft.name = name;
 
         list_type = 'M';
-        return ad;
+        return ft;
       } catch (Exception e) {
         // Bad formatting, skip.
         if (list_type != 0) break;
@@ -201,7 +221,7 @@ public class FTPListParser {
       case 'W':  // TODO: Check for a Windows listing.
       case 'O':  // TODO: Check for an OS2 listing.
 
-      case 'U':  // Check for a Unix listing. TODO: Hellsoft support and symlinks.
+      case 'U':  // Check for a Unix listing.
       if (tokens.length >= 6) try {
         String perm = tokens[0], name;
         long time, size;
@@ -267,17 +287,17 @@ public class FTPListParser {
             name = tokens[tokens.length-1];
           }
 
-          // Generate the ad.
-          ad.put("name", name);
+          ft.name = name;
           if (time > 0)
-            ad.put("time", time);
+            ft.time = time;
           if (size > 0 && !dir)
-            ad.put("size", size);
-          ad.put(dir ? "dir" : "file", true);
-          ad.put("perm", perm);
+            ft.size = size;
+          ft.dir = dir;
+          ft.file = !dir;
+          ft.perm = perm;
 
           list_type = 'U';
-          return ad;
+          return ft;
         }
       } catch (Exception e) {
         // Bad formatting, skip.
