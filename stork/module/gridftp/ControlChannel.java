@@ -219,7 +219,6 @@ public class ControlChannel extends Pipeline<String, Reply> {
 
       // Read the HELP response.
       try {
-        System.out.println(hb.waitFor().getMessage());
         String r = hb.waitFor().getMessage();
         boolean first = true;
 

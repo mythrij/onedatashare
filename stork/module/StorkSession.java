@@ -63,8 +63,6 @@ public abstract class StorkSession {
   // This should only be used by transfer modules themselves to report
   // progress.
   public final void reportProgress(Ad... ad) {
-    System.out.println("Reporting progress: "+pipe);
-    System.out.println("Reporting progress: "+ad[0]);
     if (pipe != null) pipe.put(ad);
   }
 

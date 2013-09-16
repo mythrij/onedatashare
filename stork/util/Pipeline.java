@@ -148,10 +148,6 @@ public abstract class Pipeline<C,R> extends Thread {
 
   // Write a command to the queue to be piped.
   public synchronized Bell<R> pipe(C c, Bell<R> h) {
-    if (c.toString().startsWith("STAT")) {
-      new Error("OH NO").printStackTrace();
-      System.exit(1);
-    }
     h = (h == null) ? new Bell<R>() : h;
     return pipe(new PipeCommand(c, h));
   } public synchronized Bell<R> pipe(C c) {

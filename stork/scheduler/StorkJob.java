@@ -175,7 +175,7 @@ public class StorkJob {
       Pipe<Ad> pipe = new Pipe<Ad>();
       pipe.new End(false) {
         public void store(Ad ad) {
-          System.out.println("Progress: "+ad);
+          Log.finer("Progress: ", ad);
           if (ad.has("bytes_total") || ad.has("files_total"))
             progress.transferStarted(ad.getLong("bytes_total"),
                                      ad.getInt("files_total"));

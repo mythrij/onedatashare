@@ -372,7 +372,6 @@ public abstract class Command {
       } else if (end || !z.startsWith("-")) {
         cmd = z;
       } else {
-        System.out.println("Adding: "+z);
         sl.add(z);
       }
 

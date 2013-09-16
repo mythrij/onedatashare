@@ -417,7 +417,7 @@ public class StorkScheduler {
   } public RequestContext putRequest(Ad ad, Bell<Ad> bell) {
     RequestContext rc = new RequestContext(ad, bell);
     try {
-      System.out.println("Enqueuing request: "+rc.ad);
+      Log.fine("Enqueuing request: "+rc.ad);
       req_queue.add(rc);
     } catch (Exception e) {
       // This can happen if the queue is full. Which right now it never

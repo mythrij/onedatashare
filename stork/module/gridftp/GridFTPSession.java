@@ -210,8 +210,6 @@ public class GridFTPSession extends StorkSession {
       FileTree ft = p.parseAll(r.getMessage().getBytes());
 
       if (ft.name == null) {
-        System.out.println("Got an ugly one...");
-        System.out.println(Ad.marshal(ft));
         // This can happen if we're either listing a file or the command is
         // wrongly implemented. First (only) child should be the real entry.
         if (lb.tree != null)
@@ -222,11 +220,8 @@ public class GridFTPSession extends StorkSession {
           does_not_list.add(cmd);
         if (lb.depth == 0 || !ft.dir)
           lb.ring(ft);
-        else {
-          System.out.println("Got an ugly one...");
-          System.out.println(Ad.marshal(ft));
+        else
           pipeListing(lb);  // Pipe again using different command.
-        }
       } else {
         // If listing worked, this satisfies depth 0 and 1. If depth is
         // anything else, we need to pipe more listing commands.
@@ -431,11 +426,8 @@ public class GridFTPSession extends StorkSession {
                 openSub(f).sendTo(gc.openSub(f), this);
               } first = false;
             }
-
-            System.out.println(path()+": waiting for "+count);
             return --count <= 0;
           } public void always(Reply r, Throwable t) {
-            System.out.println(path()+": finally done!");
             if (meta != null)
               meta.ring();
           }
@@ -462,7 +454,6 @@ public class GridFTPSession extends StorkSession {
       dc.pipe("PASV", gc.gs.new PassiveBell(
         new ActiveBell(new Bell<Reply>() {
           public void done(Reply r) {
-            System.out.println("Active bell reply: "+r);
             cc.pipe("RETR "+path(), db);
           }
         })
@@ -506,7 +497,7 @@ public class GridFTPSession extends StorkSession {
     } public PassiveBell(Bell<HostPort> next) {
       this.next = next;
     } public void done(Reply r) {
-      System.out.println("Got passive reply! "+r);
+      Log.finer("Got passive reply: ", r);
       String s = r.getMessage().split("[()]")[1];
       BetterHostPort hp = new BetterHostPort(s);
 
@@ -519,7 +510,6 @@ public class GridFTPSession extends StorkSession {
       } catch (Exception e) {
         throw abort(e);
       } else if (next != null) {
-        System.out.println("Ringing next active bell...");
         next.ring(hp);
       }
     } public void fail(Reply r, Throwable t) {
@@ -541,16 +531,5 @@ public class GridFTPSession extends StorkSession {
       if (next != null)
         next.ring(t);
     }
-  }
-
-  // Testing method.
-  public static void main(String[] args) {
-    URI uri = URI.create(args[0]);
-    Ad opts = new Ad("depth", -1);
-    if (args.length > 1)
-      opts.put("depth", args[1]);
-    StorkSession sess = new GridFTPSession(new EndPoint(uri));
-    FileTree ft = sess.list(uri.getPath(), opts).waitFor();
-    System.out.println(Ad.marshal(ft));
   }
 }
