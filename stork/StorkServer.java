@@ -1,8 +1,9 @@
 package stork;
 
-import stork.scheduler.*;
 import stork.ad.*;
+import stork.net.*;
 import stork.util.*;
+import stork.scheduler.*;
 import java.net.URI;
 
 // This is basically a standalone wrapper around StorkScheduler that lets
@@ -41,7 +42,11 @@ public class StorkServer extends Command {
       listen = new URI[] { Stork.settings.connect };
 
     for (URI u : listen) try {
-      NettyStuff.createInterface(s, u);
+      // Fix shorthand URIs.
+      if (u.getScheme() == null)
+        u = new URI(u.getSchemeSpecificPart(), "-1", u.getFragment());
+      u = u.normalize();
+      StorkInterface.create(s, u).start();
     } catch (Exception e) {
       e.printStackTrace();
       Log.warning("could not create interface: "+e.getMessage());

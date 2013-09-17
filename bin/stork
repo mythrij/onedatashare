@@ -43,7 +43,7 @@ cd "$STORK_HOME" || {
 }
 
 # Set default variables if unset.
-[ -z "$JAVA_HOME" ] && JAVA_HOME=$(dirname $(which java))
+[ -z "$JAVA_HOME" ] && JAVA_HOME=$(dirname $(dirname $(which java)))
 
 [ -z "$STORK_CONFIG" ] && STORK_CONFIG=$STORK_HOME/stork.conf
 [ -d "$STORK_CONFIG" ] && STORK_CONFIG=$STORK_CONFIG/stork.conf

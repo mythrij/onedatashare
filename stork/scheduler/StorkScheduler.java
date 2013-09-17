@@ -37,8 +37,8 @@ public class StorkScheduler {
   private transient Map<String, CommandHandler> cmd_handlers;
   public transient TransferModuleTable xfer_modules;
 
-  private transient LinkedBlockingQueue<RequestContext> req_queue =
-    new LinkedBlockingQueue<RequestContext>();
+  private transient LinkedBlockingQueue<RequestBell> req_queue =
+    new LinkedBlockingQueue<RequestBell>();
 
   // Put a job into the scheduling queue.
   public void schedule(StorkJob job) {
@@ -111,33 +111,28 @@ public class StorkScheduler {
   }
 
   // A thread which handles client requests.
-  private class StorkWorkerThread extends StorkThread<RequestContext> {
+  private class StorkWorkerThread extends StorkThread<RequestBell> {
     StorkWorkerThread() {
       super("stork worker thread");
     }
 
-    public RequestContext getAJob() throws Exception {
+    public RequestBell getAJob() throws Exception {
       return req_queue.take();
     }
 
     // Continually remove jobs from the queue and start them.
-    public void execute(RequestContext req) {
+    public void execute(RequestBell req) {
       Log.fine("Worker pulled request from queue: ", req.cmd);
       Ad ad = null;
 
       // Try handling the command if it's not done already.
-      if (!req.isDone()) try {
+      if (!req.isRung()) try {
         if (req.cmd == null)
           throw new RuntimeException("no command specified");
 
-        CommandHandler handler = cmd_handlers.get(req.cmd);
-
-        if (handler == null)
-          throw new RuntimeException("invalid command: "+req.cmd);
-
         // Check if the handler requires a logged in user.
         if (env.getBoolean("registration")) {
-          if (handler.requiresLogin()) try {
+          if (req.handler.requiresLogin()) try {
             req.user = users.login(req.ad);
             req.ad.remove("pass_hash");
           } catch (Exception e) {
@@ -147,26 +142,23 @@ public class StorkScheduler {
         }
 
         // Let the magic happen.
-        ad = handler.handle(req);
+        ad = req.handler.handle(req);
 
         // Save state if we affected it.
-        if (handler.affectsState(req))
+        if (req.handler.affectsState(req))
           dumpState();
+
+        req.ring(ad);
       } catch (Exception e) {
         e.printStackTrace();
-        String m = e.getMessage();
-        ad = new Ad("error", m == null ? e.toString() : m);
-      } finally {
-        assert(ad != null);
-        req.reply(ad);
-        Log.fine("Worker done with request: ", req.cmd, ad);
-      }
+        req.ring(e);
+      } Log.fine("Worker done with request: ", req.cmd, ad);
     }
   }
 
   // Stork command handlers should implement this interface.
-  static abstract class CommandHandler {
-    public abstract Ad handle(RequestContext req);
+  public static abstract class CommandHandler {
+    public abstract Ad handle(RequestBell req);
 
     // Override this for commands that don't require logon.
     public boolean requiresLogin() {
@@ -174,7 +166,7 @@ public class StorkScheduler {
     }
 
     // Override this is the action affects server state.
-    public boolean affectsState(RequestContext req) {
+    public boolean affectsState(RequestBell req) {
       return affectsState();
     } public boolean affectsState() {
       return false;
@@ -182,7 +174,7 @@ public class StorkScheduler {
   }
 
   class StorkQHandler extends CommandHandler {
-    public Ad handle(RequestContext req) {
+    public Ad handle(RequestBell req) {
       AdSorter sorter = new AdSorter("job_id");
       boolean count = req.ad.getBoolean("count");
 
@@ -196,7 +188,7 @@ public class StorkScheduler {
   }
 
   class StorkLsHandler extends CommandHandler {
-    public Ad handle(RequestContext req) {
+    public Ad handle(RequestBell req) {
       StorkSession sess = null;
       try {
         EndPoint ep = new EndPoint(StorkScheduler.this, req.ad);
@@ -214,7 +206,7 @@ public class StorkScheduler {
 
   // Handle user registration.
   class StorkUserHandler extends CommandHandler {
-    public Ad handle(RequestContext req) {
+    public Ad handle(RequestBell req) {
       if ("register".equals(req.ad.get("action"))) {
         StorkUser su = users.register(req.ad);
         Log.info("Registering user: "+su.user_id);
@@ -226,13 +218,15 @@ public class StorkScheduler {
       return false;
     }
 
-    public boolean affectsState(RequestContext req) {
+    public boolean affectsState(RequestBell req) {
       return "register".equals(req.ad.get("action"));
+    } public boolean affectsState() {
+      return true;
     }
   }
 
   class StorkSubmitHandler extends CommandHandler {
-    public Ad handle(RequestContext req) {
+    public Ad handle(RequestBell req) {
       StorkJob job = StorkJob.create(req.ad);
       job.scheduler(StorkScheduler.this);  // This will validate the job.
 
@@ -247,7 +241,7 @@ public class StorkScheduler {
   }
 
   class StorkRmHandler extends CommandHandler {
-    public Ad handle(RequestContext req) {
+    public Ad handle(RequestBell req) {
       Range r = new Range(req.ad.get("range"));
       Range sdr = new Range(), cdr = new Range();
 
@@ -278,13 +272,13 @@ public class StorkScheduler {
 
   class StorkInfoHandler extends CommandHandler {
     // Send transfer module information.
-    Ad sendModuleInfo(RequestContext req) {
+    Ad sendModuleInfo(RequestBell req) {
       return Ad.marshal(xfer_modules.infoAds());
     }
 
     // Send server information. But for now, don't send anything until we
     // know what sort of information is good to send.
-    Ad sendServerInfo(RequestContext req) {
+    Ad sendServerInfo(RequestBell req) {
       Ad ad = new Ad();
       ad.put("version", Stork.version());
       ad.put("commands", new Ad(cmd_handlers.keySet()));
@@ -292,7 +286,7 @@ public class StorkScheduler {
     }
 
     // Send information about a credential or about all credentials.
-    Ad sendCredInfo(RequestContext req) {
+    Ad sendCredInfo(RequestBell req) {
       String uuid = req.ad.get("cred");
       if (uuid != null) try {
         return creds.getCred(uuid).getAd();
@@ -303,7 +297,7 @@ public class StorkScheduler {
       }
     }
 
-    public Ad handle(RequestContext req) {
+    public Ad handle(RequestBell req) {
       String type = req.ad.get("type", "module");
 
       if (type.equals("module"))
@@ -322,7 +316,7 @@ public class StorkScheduler {
 
   // Handles creating credentials.
   class StorkCredHandler extends CommandHandler {
-    public Ad handle(RequestContext req) {
+    public Ad handle(RequestBell req) {
       String action = req.ad.get("action");
 
       if (action == null) {
@@ -412,19 +406,27 @@ public class StorkScheduler {
 
   // Put a command in the server's request queue with an optional reply
   // bell and end bell.
-  public RequestContext putRequest(Ad ad) {
-    return putRequest(ad, null);
-  } public RequestContext putRequest(Ad ad, Bell<Ad> bell) {
-    RequestContext rc = new RequestContext(ad, bell);
-    try {
-      Log.fine("Enqueuing request: "+rc.ad);
-      req_queue.add(rc);
+  public RequestBell putRequest(Ad ad) {
+    return putRequest(new RequestBell(ad));
+  } public RequestBell putRequest(RequestBell rb) {
+    assert rb.ad != null;
+    rb.handler = handler(rb.cmd);
+    if (rb.handler == null) {
+      rb.ring(new Exception("invalid command: "+rb.cmd));
+    } else try {
+      Log.fine("Enqueuing request: "+rb.ad);
+      req_queue.add(rb);
     } catch (Exception e) {
       // This can happen if the queue is full. Which right now it never
       // should be, but who knows.
-      Log.warning("Rejecting request: ", ad);
-      rc.cancel("rejected request");
-    } return rc;
+      Log.warning("Rejecting request: ", rb.ad);
+      rb.ring(new Exception("rejected request"));
+    } return rb;
+  }
+
+  // Get the handler for a command.
+  public CommandHandler handler(String cmd) {
+    return cmd_handlers.get(cmd);
   }
 
   // Force the state dumping thread to dump the state.
@@ -472,8 +474,6 @@ public class StorkScheduler {
           if (!state_file.canWrite())
             throw new RuntimeException("cannot write to state file");
         }
-
-        Log.info("Dumping server state...");
 
         temp_file = File.createTempFile(
           ".stork_state", "tmp", state_file.getParentFile());
