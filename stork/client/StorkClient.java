@@ -39,14 +39,6 @@ public abstract class StorkClient extends Command {
       if (is == null || os == null)
         throw new Exception("problem with socket");
 
-      // Get server info message.
-      try {
-        Ad info = Ad.parse(is);
-        //System.out.println("Connected to "+info.get("host")+"...\n");
-      } catch (Exception e) {
-        throw new RuntimeException("remote system was not a Stork server");
-      }
-
       // Write command ad to the server.
       do {
         ad = fillCommand(new Ad().put("command", prog));
