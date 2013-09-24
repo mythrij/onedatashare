@@ -1,6 +1,6 @@
 <title>Transfer</title>
 
-<div id="add-credential-modal" class="modal fade">
+<div id="add-credential-modal" class="modal">
   <div class="modal-dialog" role="dialog">
     <form id="myproxy-form" class="ajax-form modal-content" method="post" action="/api/stork_cred?action=create">
       <div class="modal-header">
@@ -65,13 +65,10 @@
       }
     }
   </script>
-  <div id="stork-ls" class="panel-body container collapse in text-center">
-    <div class="col-sm-5-5 form-inline">
-      <div id="left" class="file-list panel" rel="right" ng-include="'/parts/browse.html'">
-      </div>
-    </div>
+  <div id="stork-ls" class="panel-body container collapse in text-center" ng-controller="TransferCtrl">
+    <div class="col-sm-5-5 form-inline" id="left" rel="right" ng-include="'/parts/browse.html'"></div>
     <div class="col-sm-1 input-group-lg container text-center panel panel-heading transfer-controls">
-      <div class="col-xs-1 visible-xs"><!-- Why is there no col-xs-offset-n?--></div>
+      <div class="col-xs-1 visible-xs"></div>
       <button class="btn btn-lg btn-default col-sm-12 col-xs-2 tips" title="Transfer contents">
         <i class="icon-share hidden-xs"></i>
         <i class="icon-share visible-xs icon-rotate-90"></i>
@@ -93,52 +90,84 @@
         <i class="icon-share visible-xs icon-rotate-270"></i>
       </button>
     </div>
-    <div class="col-sm-5-5 form-inline">
-      <div id="right" class="file-list panel" rel="left" ng-include="'/parts/browse.html'">
-      </div>
-    </div>
+    <div class="col-sm-5-5 form-inline" id="right" rel="left" ng-include="'/parts/browse.html'"></div>
   </div>
 </div>
 
-<div class="container panel panel-collapsed">
+<script>
+  function TransferOptionsCtrl($scope) {
+    $scope.values = {
+      'optimizer': 'false',
+      'overwrite': 'true',
+      'verify'   : 'false',
+      'encrypt'  : 'false',
+      'compress' : 'false'
+    }
+    $scope.options = [{
+        'title': 'Use transfer optimization',
+        'param': 'optimizer',
+        'description':
+          'Automatically adjust transfer options using the given optimization algorithm.',
+        'choices': { 'None': 'false', '2nd Order': '2nd_order', 'PCP': 'pcp' }
+      },{
+        'title': 'Overwrite existing files',
+        'param': 'overwrite',
+        'description':
+          'By default, destination files with conflicting file names will be overwritten. '+
+          'Saying no here will cause the transfer to fail if there are any conflicting files.',
+        'choices': { 'Yes': 'true', 'No': 'false' }
+      },{
+        'title': 'Verify file integrity with checksum',
+        'param': 'verify',
+        'description':
+          'Enable this if you want additional data integrity verification of transferred files.',
+        'choices': { 'Yes': 'true', 'No': 'false' }
+      },{
+        'title': 'Encrypt data channel',
+        'param': 'encrypt',
+        'description':
+          'Enables data transfer encryption, if supported. This provides additional data security '+
+          'at the cost of transfer speed.',
+        'choices': { 'Yes': 'true', 'No': 'false' }
+      },{
+        'title': 'Use data channel compression',
+        'param': 'compress',
+        'description':
+          'Compresses data before sending, if the source supports it. This may improve transfer '+
+          'speed if the data is fairly regular (e.g., text-based or structured). '+
+          'However, this may slightly reduce speed if the data is highly random.',
+        'choices': { 'Yes': 'true', 'No': 'false' }
+      }
+    ]
+    $scope.set = function (p, v) {
+      this.values[p] = v
+    }
+  }
+</script>
+
+<div class="container panel panel-collapsed" ng-controller="TransferOptionsCtrl">
   <div class="panel-heading">
     <h4 class="panel-title panel-collapse-header">
       Transfer Options
     </h4>
   </div>
+
   <div id="transfer-options" class="panel-body collapse">
-    <form role="form" method="post" action="/api/stork_user">
+    <span class="text-muted">
+      Note: All of these options are non-functional placeholders for now.
+    </span>
+    <form role="form">
       <div class="form-group container">
-        <!-- Overwrite existing files -->
-        <div class="form-group col-md-4 col-sm-6">
-          <h4>Overwrite existing files</h4>
-          <div class="btn-group" data-toggle="buttons">
-            <label class="btn btn-default btn-large active">
-              <input name="overwrite" type="radio" value="true"> Yes
-            </label>
-            <label class="btn btn-default btn-large">
-              <input name="overwrite" type="radio" value="false"> No
+        <div style="height: 13em" class="form-group col-lg-3 col-md-4 col-sm-6" ng-repeat="o in options">
+          <h4>{{o.title}}</h4>
+          <div class="btn-group">
+            <label class="btn btn-default btn-large" ng-repeat="(n,v) in o.choices" ng-class="{active: values[o.param]==v}">
+              <input type="radio" name="{{o.param}}" ng-model="values[o.param]" value="{{v}}" class="hide">
+              {{n}}
             </label>
           </div>
           <div class="help-block">
-            By default, destination files with conflicting file names will be
-            overwritten. Disabling this will cause the transfer to fail if there are
-            any conflicting files.
-          </div>
-        </div>
-        <!-- Verify file integrity -->
-        <div class="form-group col-md-4 col-sm-6">
-          <h4>Verify file integrity with checksum</h4>
-          <div class="btn-group" data-toggle="buttons">
-            <label class="btn btn-default btn-large">
-              <input name="checksum" type="radio" value="true"> Yes
-            </label>
-            <label class="btn btn-default btn-large active">
-              <input name="checksum" type="radio" value="false"> No
-            </label>
-          </div>
-          <div class="help-block">
-            Enable this if you want additional data integrity verification of transferred files.
+            {{o.description}}
           </div>
         </div>
       </div>

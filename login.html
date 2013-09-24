@@ -1,27 +1,31 @@
 <title>Login</title>
 
+<div style="margin-top: 70px" class="hidden-xs"></div>
+
 <div class="container" style="margin: auto">
-  <div class="col-md-6 col-md-offset-3">
-    <div class="login-panel panel">
-      <div class="panel-heading">
+  <div class="col-md-6 col-md-offset-3 col-sm-8 col-sm-offset-2">
+    <div class="panel">
+      <div class="panel-heading hidden-xs">
         <h4 class="panel-title">
           Log in
         </h4>
       </div>
-      <div class="panel-body">
-        <form class="ajax-form login-form" method="post" action="/api/stork_user">
+      <div class="panel-body" ng-controller="UserCtrl">
+        <form class="login-form" ng-submit="login()">
           <div class="form-group">
             <label for="login-user-id">User ID</label>
-            <input id="login-user-id" class="form-control" name="user_id" type="text">
+            <input id="login-user-id" class="form-control" ng-model="info.user_id" type="text">
           </div>
           <div class="form-group">
-            <label for="login-user-id">Password</label>
-            <input id="login-password" class="form-control" name="password" type="password">
+            <label for="login-password">Password</label>
+            <input id="login-password" class="form-control" ng-model="info.password" type="password">
           </div>
           <button class="btn btn-default" type="submit">Log in</button>
-          <div class="ajax-msg" class="acenter"></div>
         </form>
       </div>
+      <script>
+        $('#login-user-id').focus()
+      </script>
     </div>
   </div>
 </div>

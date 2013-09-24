@@ -10,7 +10,7 @@ $stork.list = function (e, o) {
   // Sanitize options.
   if (!o)       o = {}
   if (!o.root)  o.root  = { }
-  if (!o.url)   o.url   = '/api/stork_ls'
+  if (!o.url)   o.url   = '/api/stork/ls'
   if (!o.cache) o.cache = { }
 
   function ce(t, c) {

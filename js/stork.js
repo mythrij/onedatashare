@@ -1,58 +1,147 @@
-angular.module('stork', []).config(['$routeProvider',
-  function($routeProvider) {
+angular.module('stork', ['$strap.directives'],
+  function ($provide, $routeProvider, $locationProvider) {
     $routeProvider.
-      when('/', {templateUrl: 'home.html'}).
+      when('/',         {templateUrl: 'home.html'}).
       when('/transfer', {templateUrl: 'transfer.html'}).
-      when('/terms', {templateUrl: 'terms.html'}).
-      when('/privacy', {templateUrl: 'privacy.html'}).
-      otherwise({redirectTo: '/'});
+      when('/login',    {templateUrl: 'login.html'}).
+      when('/terms',    {templateUrl: 'terms.html'}).
+      when('/privacy',  {templateUrl: 'privacy.html'}).
+      otherwise({redirectTo: '/'})
+
+    $provide.factory('$stork', $stork)
   }
-]);
+)
 
-var dls_uri = '/api/stork_ls' 
-var queueTimer = null
-var tableLoaded = false
-
-// The last data object received by the AJAX form handler.
-var really_ugh_ajax_form_hack = null
-
-// Event handler for all AJAX forms.
-$(document).on('submit', 'form.ajax-form', function (e) {
-  var form = $(e.target)
-
-  form.ajaxSubmit({
-    success: function (m) {
-      form.clearForm()
-      $('input', form).blur()
-      really_ugh_ajax_form_hack = m
-      form.trigger('ajax-done', m)
-    }, error: function (m) {
-      $('.alert', form).alert('close')
-      form.prepend(msg.box($('<span>').text(m.responseText), 'danger'))
-      really_ugh_ajax_form_hack = m.responseText
-      form.trigger('ajax-fail', m)
-    }, always: function (m) {
-      form.trigger('ajax-always', m)
+// A service for maintaining user session state.
+$stork = function ($http) {
+  var user = {
+    user_id:   Cookies.get('user_id'),
+    pass_hash: Cookies.get('pass_hash')
+  }
+  var stork = {
+    api: function (r) {
+      return '/api/stork/'+r
+    },
+    user: function () {
+      return user
+    },
+    logged_in: function () {
+      return user.user_id && user.pass_hash
+    },
+    logged_out: function () {
+      return !this.logged_in()
+    },
+    logout: function () {
+      user.user_id   = null
+      user.pass_hash = null
+      Cookies.expire('user_id')
+      Cookies.expire('pass_hash')
+    },
+    execute: function (info, action) {
+      var url = api('user')
+      if (action) url += '?action='+action
+      return $http.post(url, info).success(
+        function (data) {
+          user.user_id   = data.user_id
+          user.pass_hash = data.pass_hash
+          var exp = { expires: 3153600 }
+          Cookies.set('user_id',   data.user_id,   exp)
+          Cookies.set('pass_hash', data.pass_hash, exp)
+        }
+      ).error(this.logout)
+    },
+    login: function (info) {
+      if (!info) info = user
+      return this.execute(info, 'login')
+    },
+    register: function (info) {
+      return this.execute(info, 'register')
     }
-  })
-  e.preventDefault()
-})
+  }
 
-function saveLoginCookies(d) {
-  $.cookie('user_id', d.user_id, { expires: 30 })
-  $.cookie('pass_hash', d.pass_hash, { expires: 30 })
+  // If login cookies are present, check them.
+  if (stork.logged_in())
+    stork.login(user)
+  else
+    stork.logout()
+
+  return stork
 }
 
+function UserCtrl($scope, $location, $stork) {
+  var info = { }
+  $scope.info = info
+  $scope.user = $stork.user()
+  $scope.logout = function () {
+    $stork.logout()
+    $location.path('/login')
+    return false
+  }
+  $scope.login_state = function () {
+    return $stork.logged_in() ? 'logged-in' : 'logged-out'
+  }
+  $scope.login = function () {
+    $stork.login($scope.info).success(function () {
+      $location.path('/')
+    }).error(function (data) {
+      msg.show(data, 'danger')
+    })
+  }
+  $scope.register= function () {
+    $stork.register($scope.info).success(function () {
+      $location.path('/')
+    }).error(function (data) {
+      msg.show(data, 'danger')
+    })
+  }
+  $scope.logged_in = function () {
+    return $stork.logged_in()
+  }
+  $scope.logged_out = function () {
+    return $stork.logged_out()
+  }
+}
+
+function TransferCtrl($scope) {
+
+}
+
+function BrowseCtrl($scope, $stork) {
+  $scope.uri = ''
+  $scope.selected = null
+  $scope.root = {
+    name: '/',
+    dir: true,
+    files: [
+      { name: 'sub1' }
+    ]
+  }
+
+  $scope.refresh = function () {
+    $stork.ls(uri, 1).success(function () {
+      
+    })
+  }
+}
+
+function BrowseListCtrl($scope) {
+}
+
+function CredCtrl($scope) {
+  $scope.creds = [ ]
+}
+
+var dls_uri = '/api/stork/ls' 
+var queueTimer = null
+var tableLoaded = false
 // Event handlers for various forms.
 $(document).on('ajax-done', '.login-form', function (e) {
   //saveLoginCookies(d.data)
-  saveLoginCookies(really_ugh_ajax_form_hack)
   checkLoginCookies('home')
   msg.show('Login successful. Welcome!', 'success')
 })
 
 $(document).on('ajax-done', '.signup-form', function (e) {
-  saveLoginCookies(really_ugh_ajax_form_hack)
   checkLoginCookies()
   msg.show('Registration successful. Welcome!', 'success')
 })
@@ -97,92 +186,6 @@ $(document).on('click', '.panel-collapse-header', function (e) {
 $(document).on('click', '.ph', function () {
   alert('Sorry! This is a placeholder.')
 })
-
-// Navigation
-// ----------
-// AJAX load a page into the content frame and change the subnavbar and title.
-function navLoadPage(page) {
-  $('.navbar .active').removeClass('active')
-
-  if (!page)
-    page = window.location.hash.replace("#", "")
-  if (!page)
-    page = "home"
-  page = page.replace("#", "").replace("/", "")
-
-  $('.navbar li[rel="'+page+'"]').addClass('active')
-
-  if (g_loading_ajax_page)
-    g_loading_ajax_page.abort()
-
-  // Check if we've already fetched and cached the page.
-  if (g_ajax_pages[page]) {
-    setAjaxPageContent(g_ajax_pages[page])
-  } else {
-    g_loading_ajax_page = $.get("/ajax/"+page).success(function (d) {
-      setAjaxPageContent(g_ajax_pages[page] = d)
-    }).error(function (r) {
-      $('#ajax-page-content').html(r['resonseText'])
-    }).always(function () {
-      g_loading_ajax_page = null
-    })
-  }
-}
-
-// Login stuff
-// -----------
-// Check for login cookies and update UI accordingly.
-function checkLoginCookies() {
-  var user_id = $.cookie('user_id')
-  if (user_id) {
-    $('#user-button span').text(user_id)
-    $('body').removeClass('logged-out').addClass('logged-in')
-  } else {
-    $('body').removeClass('logged-in').addClass('logged-out')
-  }
-}
-
-// Check the stored username and password. Update user info box.
-function checkLogin(req) {
-  if (!$.cookie('user_id'))
-    return
-
-  $.post("/api/stork_user").done(function (data) {
-    // Make sure response is right.
-    if (!data['user_id'] || !data['pass_hash'])
-      return
-
-    saveLoginCookies(data)
-    checkLoginCookies()
-  })
-}
-
-// Delete the login cookies.
-function logout() {
-  $.removeCookie('user_id')
-  $.removeCookie('pass_hash')
-  $.removeCookie('password')
-  checkLoginCookies()
-}
-
-// AJAX pages stuff
-// ----------------
-// Set the page content frame to some HTML. Take out subnavbar, too.
-function setAjaxPageContent(html) {
-  document.title = 'StorkCloud - '+title
-
-  var div = $('<div>').html(html)
-  var title = $('title', div).remove().html()
-
-  if (title)
-    document.title = 'StorkCloud - '+title
-  else
-    document.title = 'StorkCloud'
-
-  $('#ajax-page-content').html(div.html())
-  onAjaxReload()
-  checkLoginCookies()
-}
 
 // Directory browsing
 // ------------------
@@ -274,7 +277,7 @@ function onAjaxReload() {
 
 // Update the credentials list.
 function updateCredList() {
-  $.get('/api/stork_info?type=cred').done(function (d) {
+  $.get('/api/stork/info?type=cred').done(function (d) {
     var c = $('.saved-credentials').empty()
     if ($.isEmptyObject(d)) {
       c.append($('<option disabled>').text('(none)'))
@@ -324,7 +327,7 @@ function submitAd(ad) {
   if (typeof ad == 'string')
     ad = JSON.parse(ad)
   $.ajax({
-    url:"/api/stork_submit",
+    url:"/api/stork/submit",
     type:"POST",
     data: $.param(ad),
     contentType: "application/x-www-form-urlencoded",
@@ -345,7 +348,7 @@ function removeJob(id) {
     if (yes) {
       var ad = { 'range': id }
       $.ajax({
-        url:"/api/stork_rm",
+        url:"/api/stork/rm",
         type:"POST",
         data: $.param(ad),
         contentType: "application/x-www-form-urlencoded",

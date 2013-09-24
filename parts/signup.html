@@ -1,15 +1,17 @@
-<form role="form" class="signup-form ajax-form" method="post" action="/api/stork_user?action=register">
+<form role="form" class="signup-form ajax-form" ng-submit="register()" ng-controller="UserCtrl">
+  <input type="hidden" ng-model="info.action" value="register">
   <div class="form-group">
     <label for="signup-user-id" class="sr-only">User ID</label>
-    <input id="signup-user-id" name="user_id" type="text" class="form-control" placeholder="User ID">
+    <input id="signup-user-id" ng-model="info.user_id" type="text" class="form-control" placeholder="User ID" required>
   </div>
   <div class="form-group">
     <label for="signup-email" class="sr-only">Email</label>
-    <input id="signup-email" name="email" type="email" class="form-control" placeholder="Email">
+    <input id="signup-email" ng-model="info.email" type="email" class="form-control" placeholder="Email" required>
   </div>
   <div class="form-group">
     <label for="signup-password" class="sr-only">Password</label>
-    <input id="signup-password" name="password" type="password" class="form-control" placeholder="Password">
+    <input id="signup-password" ng-model="info.password" type="password"
+           class="form-control" minlength="6" placeholder="Password" required>
     <span class="small help-block">Password must be at least six characters.</span>
   </div>
 
@@ -17,7 +19,6 @@
     <input class="btn btn-warning" type="submit" value="Sign up">
   </div>
 
-  <div class="ajax-msg" class="acenter"></div>
   <span class="small help-block">
     By signing up, you agree to our <a href="#/terms">terms of service</a>
     and <a href="#/privacy">privacy policy</a>.

@@ -1,36 +1,53 @@
-<div class="input-group input-group-lg uri panel-heading">
-  <input type="url" class="form-control" placeholder="Enter a URL">
-  <a class="input-group-addon btn btn-default tips" title="Go">
-    <i class="icon-play"></i>
-  </a>
-</div>
-<div class="panel-heading container form-inline transfer-toolbar">
-  <div class="input-group col-md-6" style="white-space:nowrap">
-    <div class="btn-group">
-      <button class="icon-refresh btn btn-default tips" title="Refresh" onclick="filelistRefresh($(this))">
-      </button>
-      <button class="icon-lightbulb btn btn-default tips" title="Toggle hidden" onclick="filelistToggleHidden($(this))">
-      </button>
+<script type="text/html" id="browse-tree.html">
+  <ul class="stork-list">
+    <li ng-class="{dir:!!f.dir,file:!f.dir}" ng-repeat="f in files">
+      <i></i>
+      <div>{{name}}</div>
+      <ul ng-include="'/parts/browse-tree.html'"></ul>
+    </li>
+  </ul>
+</script>
+
+<div class="file-list panel" ng-controller="BrowseCtrl">
+  <form class="input-group input-group-lg uri panel-heading" ng-submit="refresh()">
+    <input class="form-control" ng-model="uri" placeholder="Enter a URL">
+    <a class="input-group-addon btn btn-default tips" title="Go" ng-click="refresh()">
+      <i class="icon-play"></i>
+    </a>
+  </form >
+  <div class="panel-heading container form-inline transfer-toolbar">
+    <div class="input-group col-md-6" style="white-space:nowrap">
+      <div class="btn-group">
+        <button class="icon-refresh btn btn-default tips" title="Refresh" ng-click="refresh()">
+        </button>
+        <button class="icon-lightbulb btn btn-default tips" title="Toggle hidden" ng-click="hidden()">
+        </button>
+      </div>
+      <div class="btn-group">
+        <button class="icon-folder-open-alt btn btn-default tips ph" title="New folder">
+          <i class="icon-plus-sign"></i>
+        </button>
+        <button class="icon-trash btn btn-default tips ph" title="Delete"></button>
+      </div>
     </div>
-    <div class="btn-group">
-      <button class="icon-folder-open-alt btn btn-default tips ph" title="New folder">
-        <i class="icon-plus-sign"></i>
-      </button>
-      <button class="icon-trash btn btn-default tips ph" title="Delete"></button>
+    <div class="col-md-6" ng-controller="CredCtrl">
+      <select class="form-control dropdown-toggle credential" title="Select credential">
+        <option value="">Select credential...</option>
+        <optgroup class="saved-credentials" label="Saved credentials">
+          <option disabled ng-if="creds.length == 0">(none)</option>
+          <option value="{{c.uuid}}" ng-repeat="c in creds">
+            {{c.name || 'Unnamed ('+c.type+')'}}
+          </option>
+        </optgroup>
+        <optgroup class="new-credential" label="New credential">
+          <option value="new-myproxy">MyProxy</option>
+        </optgroup>
+      </select>
     </div>
   </div>
-  <div class="col-md-6">
-    <select class="form-control dropdown-toggle credential" title="Select credential" onclick="selectCred($(this))">
-      <option value="">Select credential...</option>
-      <optgroup class="saved-credentials" label="Saved credentials">
-        <option disabled>(none)</option>
-      </optgroup>
-      <optgroup class="new-credential" label="Add credential" onclick>
-        <option value="new-myproxy">MyProxy</option>
-      </optgroup>
-    </select>
+  <div class="tree">
+    <div ng-include="'browse-tree.html'">
+    </div>
   </div>
-</div>
-<div class="tree">
-  <div></div>
+  {{root}}
 </div>

@@ -32,15 +32,15 @@ p {
   margin: 1em 0;
 }
 
-h1 {
-  font-size: 120%;
-  font-weight: bold;
-  text-align: left;
+* {
+  font-family: "Open Sans", sans-serif;
+} h1, h2, h3, h4, h5, h6 {
+  font-family: "Open Sans", sans-serif;
+  font-weight: 300;
 }
 
 .bullet-list li {
   list-style-type: disc;
-  margin-left: 2em;
 }
 
 .circle-button {
@@ -159,17 +159,23 @@ tr.min-cell {
   height: 1px;
 }
 
+#view.ng-enter, #view.ng-leave {
+  transition: opacity .25s ease-in-out;
+  -moz-transition: opacity .25s ease-in-out;
+  -webkit-transition: opacity .25s ease-in-out;
+}
+
 #wrapper {
   height: auto !important;
   min-height: 100%;
-  margin: 0 auto -7em;
+  margin: 0 auto -4em;
   padding: 70px 0 8em;
 }
 
 #footer {
   color: #777;
   background: #444;
-  height: 7em;
+  height: 4em;
 } #footer > div {
   font-size: 80%;
   padding: 1em;
@@ -184,7 +190,7 @@ tr.min-cell {
 .welcome {
   text-align: left;
 } .welcome h1 {
-  font-size: 50px;
+  font-size: 45px;
 }
 
 #stork-queue td[rel="endpoints"] > div {
