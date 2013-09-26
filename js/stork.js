@@ -38,7 +38,7 @@ $stork = function ($http) {
       Cookies.expire('pass_hash')
     },
     execute: function (info, action) {
-      var url = api('user')
+      var url = this.api('user')
       if (action) url += '?action='+action
       return $http.post(url, info).success(
         function (data) {
@@ -56,6 +56,20 @@ $stork = function ($http) {
     },
     register: function (info) {
       return this.execute(info, 'register')
+    },
+    ls: function (u, d) {
+      return $http.post(this.api('ls'), {
+        'uri': u,
+        'depth': d||0
+      })
+    },
+    q: function (s, range) {
+      return $http.post(this.api('q'), {
+        'status': s || 'all',
+        'range': range
+      }).then(function (r) {
+        return r.data
+      })
     }
   }
 
@@ -103,32 +117,233 @@ function UserCtrl($scope, $location, $stork) {
 }
 
 function TransferCtrl($scope) {
-
+  $scope.ends = { }
+  $scope.show_ends = function () {
+    return this.ends['left'].toString()+' -> '+
+           this.ends['right'].toString() 
+  }
 }
 
-function BrowseCtrl($scope, $stork) {
-  $scope.uri = ''
+function BrowseCtrl($scope, $stork, $q) {
+  $scope.temp_uri = ''
+  $scope.uri_state = { }
   $scope.selected = null
-  $scope.root = {
-    name: '/',
-    dir: true,
-    files: [
-      { name: 'sub1' }
-    ]
+  $scope.f = null  // The root of the tree.
+  $scope.show_dots = false
+  $scope.selected = null
+  $scope.error = ''
+
+  var munge_data = function (s, d) {
+    for (k in d.files) d.files[k].uri = function () {
+      return s.uri().clone().segment(this.name)
+    }
   }
 
-  $scope.refresh = function () {
-    $stork.ls(uri, 1).success(function () {
-      
-    })
+  // Determine which file browser this is.
+  var w = $scope.w = function () {
+    return $scope.right ? 'right' :
+           $scope.left  ? 'left'  : 'unknown'
   }
-}
+  // Get or set the endpoint URI.
+  $scope.uri = function (u) {
+    if (u === '') {
+      this.ends[w()] = undefined
+    } else if (!u) {
+      // Do nothing.
+    } else if (typeof u === 'string') {
+      var u = new URI(u).normalize()
+      this.ends[w()] = u
+      this.temp_uri = u.toString()
+      this.uri_state.changed = false
+    } else if (u) {
+      u = u.clone().normalize()
+      this.ends[w()] = u
+      this.temp_uri = u.toString()
+      this.uri_state.changed = false
+    } return this.ends[w()]
+  }
+  $scope.refresh = function (u) {
+    if (u === undefined)
+      u = this.temp_uri
+    u = this.uri(u)
 
-function BrowseListCtrl($scope) {
+    if (!u)
+      return this.f = null
+
+    var eq = $q.defer()
+    this.error = eq.promise
+    this.f = $stork.ls(u.toString(), 1).then(
+      function (o) {
+        if (o.data.dir) {
+          u.filename(u.filename()+'/').normalize()
+          $scope.uri(u)
+        }
+        o.data.uri = function () { return u }
+        o.data.name = u.toString()
+        munge_data(o.data, o.data)
+        o.data.open = o.data.dir
+        o.data.shown = o.data.files
+        eq.resolve(null)
+
+        return o.data
+      }, function (e) {
+        eq.resolve(e.data)
+      }
+    )
+  }
+  $scope.size = function (f) {
+    return prettySize(f.size, 1)
+  }
+  $scope.up_dir = function () {
+    var u = this.uri()
+    if (!u) return
+    u = u.clone().filename('..').normalize()
+    this.refresh(u)
+  }
+  $scope.tree_classes = function (d) {
+    return {
+      dir: d.dir,
+      file: !d.dir,
+      loading: d.loading,
+      inaccessible: !!d.error,
+      open: d.open,
+      dot: d.name[0] == '.',
+      selected: this.selected == d
+    }
+  }
+  $scope.toggle = function (d) {
+    if (!d.dir) {
+      return
+    } if (d.open = !d.open) {
+      // We're opening, fetch subdirs if we haven't.
+      if (!d.files) {
+        d.loading = true
+        d.files = $stork.ls(d.uri().toString(), 1).then(
+          function (o) {
+            munge_data(d, o.data)
+            d.loading = false
+            d.shown = d.files
+            return o.data.files
+          }
+        )
+      } else {
+        d.shown = d.files
+      }
+    } else {
+      // We're closing, go ahead and destroy the DOM.
+      //d.shown = []
+      d.shown = d.files
+    }
+  }
+  $scope.is_empty = function (d) {
+    return $.isEmptyObject(d)
+  }
+  $scope.select = function (s) {
+    this.selected = s
+  }
 }
 
 function CredCtrl($scope) {
   $scope.creds = [ ]
+}
+
+function QueueCtrl($scope, $stork) {
+  var job = function (id) {
+    return {
+      "user_id": "bwross",
+      "src": {
+        "uri": "ftp://storkcloud.org/doc1"
+      },
+      "job_id": id,
+      "dest": {
+        "uri": "ftp://storkcloud.org/doc2"
+      },
+      "queue_timer": {
+        "end": 1378292520101,
+        "start": 1378292519977
+      },
+      "attempts": 0,
+      "max_attempts": 10,
+      "run_timer": {
+        "end": 1378292520101,
+        "start": 1378292519979
+      },
+      "progress": {
+        "bytes": {
+          "inst": -1,
+          "avg": 87949,
+          "total": 500,
+          "done": 200
+        },
+        "files": {
+          "total": 1,
+          "done": 1
+        }
+      },
+      "status": "processing"
+    }
+  }
+
+  $scope.jobs = [ job(1), job(2), job(3) ]
+  $scope.auto = true
+  $scope.all = false
+
+  var filter = function () {
+    return $scope.all ? 'all' : 'pending'
+  }
+
+  $scope.refresh = function () {
+    //this.jobs = $stork.q(filter())
+    this.jobs[0].progress.bytes.done += 30
+  }
+  $scope.pretty_info = function (j) {
+    return angular.toJson(j, true)
+  }
+  $scope.pretty = function (s) {
+    return prettySize(s)
+  }
+  $scope.percent = function (p) {
+    var t = p.total || 0
+    var d = p.done  || 0
+    var n = (d > 0 && t > 0) ? (100*d/t) : 100
+    n = (n < 0) ? 0 : (n > 100) ? 100 : n
+    return n+'%'
+  }
+  $scope.pw = function (j) {
+    return { width: this.percent(j.progress.bytes) }
+  }
+  $scope.progress = function (p, s) {
+    s = s || ''
+    var t = prettySize(p.total)+s
+    var d = prettySize(p.done)+s
+    return d+'/'+t
+  }
+  $scope.status = function (j) {
+    var s = j.status
+    return s.charAt(0).toUpperCase() + s.slice(1)
+  }
+  $scope.color = function (j) {
+    return {
+      processing: 'progress-bar-success',
+      scheduled:  'progress-bar-warning',
+      complete:   '',
+      removed:    'progress-bar-danger',
+      failed:     'progress-bar-danger'
+    }[j.status]
+  }
+}
+
+// Prettify a size in bytes.
+function prettySize(b, p) {
+  p = (p === undefined) ? 2 : p
+  b = (b === undefined) ? 0 : b
+  var ss = ['', 'k', 'M', 'G', 'T']
+  var s = ''
+  for (var i = 1; i < ss.length && b >= 1000; i++) {
+    b /= 1000
+    s = ss[i]
+  }
+  return (s == '') ? b.toFixed(0) : b.toFixed(p)+s
 }
 
 var dls_uri = '/api/stork/ls' 

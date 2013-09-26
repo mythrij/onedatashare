@@ -30,6 +30,15 @@ textarea, input, button, select {
 
 p {
   margin: 1em 0;
+  text-align: justify;
+}
+
+.text-justify {
+  text-align: justify;
+}
+
+.collapsing {
+  overflow: hidden;
 }
 
 * {
@@ -193,17 +202,13 @@ tr.min-cell {
   font-size: 45px;
 }
 
-#stork-queue td[rel="endpoints"] > div {
+#stork-queue .endpoints {
   overflow-x: auto;
   overflow-y: hidden;
-  line-height: 1.2em;
-  clear: both;
-} #stork-queue td[rel="endpoints"] > div > span {
+} #stork-queue .endpoints span {
   white-space: nowrap;
-  display: block;
-  text-align: left;
-  float: left;
-  clear: both;
+} #stork-queue .endpoints i {
+  padding: 0 1em;
 }
 
 .transfer-wrapper {
@@ -217,10 +222,21 @@ tr.min-cell {
   float: right;
 }
 
-/* Icons for URI control button */
-.uri a, .uri input {
+.uri > div {
+  position: relative;
+} .uri button, .uri input {
   line-height: 1 !important;
   height: 2.5em !important;
+} .uri button {
+  display: none;
+  background: transparent;
+  position: absolute;
+  right: 0;
+  top: 0;
+} .uri .changed button {
+  display: inline-block;
+} .uri .changed input {
+  padding-right: 2.5em;
 }
 
 .tree {
@@ -229,7 +245,7 @@ tr.min-cell {
   height: 20em;
   margin: 0.4em;
   text-align: left;
-  overflow-y: scroll;
+  overflow-y: auto;
   overflow-x: auto;
 }
 

@@ -43,6 +43,8 @@
 
 .stork-list .dot {
   display: none;
+} .show-dots .stork-list .dot {
+  display: block;
 } .stork-list .dot div:before,
   .stork-list .dot {
   color: #888;
@@ -69,6 +71,8 @@
   content: "\f116";
 } .stork-list .open > i:before {
   content: "\f117";
+} .stork-list .file > i:before {
+  content: "\a0";
 } .stork-list .wait > div:before {
   content: "\f110";
   -moz-animation: spin 1.5s infinite steps(8, end);

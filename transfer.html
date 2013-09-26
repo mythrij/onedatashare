@@ -49,24 +49,8 @@
       Browse and Transfer Files
     </h4>
   </div>
-  <script>
-    function filelistRefresh(t) {
-      t.closest('.file-list').trigger('reload')
-    }
-    function filelistToggleHidden(t) {
-      t.closest('.file-list').find('.dot').animate({'height':'toggle','opacity':'toggle'})
-      t.toggleClass('active')
-    }
-    function selectCred(t) {
-      var val = t.find(':selected').attr('value')
-      if (val === 'new-myproxy') {
-        $('#add-credential-modal').modal()
-        t.val('')
-      }
-    }
-  </script>
   <div id="stork-ls" class="panel-body container collapse in text-center" ng-controller="TransferCtrl">
-    <div class="col-sm-5-5 form-inline" id="left" rel="right" ng-include="'/parts/browse.html'"></div>
+    <div class="col-sm-5-5 form-inline" ng-controller="BrowseCtrl as left" ng-include="'/parts/browse.html'"></div>
     <div class="col-sm-1 input-group-lg container text-center panel panel-heading transfer-controls">
       <div class="col-xs-1 visible-xs"></div>
       <button class="btn btn-lg btn-default col-sm-12 col-xs-2 tips" title="Transfer contents">
@@ -77,7 +61,7 @@
         <i class="icon-share-alt hidden-xs"></i>
         <i class="icon-share-alt visible-xs icon-rotate-90"></i>
       </button>
-      <button class="btn btn-lg btn-default col-sm-12 col-xs-2 tips" title="Synchronize">
+      <button class="btn btn-lg btn-default col-sm-12 col-xs-2 tips ph" title="Synchronize">
         <i class="icon-refresh hidden-xs"></i>
         <i class="icon-refresh visible-xs icon-rotate-90"></i>
       </button>
@@ -90,7 +74,7 @@
         <i class="icon-share visible-xs icon-rotate-270"></i>
       </button>
     </div>
-    <div class="col-sm-5-5 form-inline" id="right" rel="left" ng-include="'/parts/browse.html'"></div>
+    <div class="col-sm-5-5 form-inline" ng-controller="BrowseCtrl as right" ng-include="'/parts/browse.html'"></div>
   </div>
 </div>
 
@@ -166,9 +150,9 @@
               {{n}}
             </label>
           </div>
-          <div class="help-block">
+          <p class="help-block">
             {{o.description}}
-          </div>
+          </p>
         </div>
       </div>
     </form>
@@ -181,31 +165,5 @@
       Transfer Progress and Queue
     </h4>
   </div>
-  <div id="stork-queue" class="collapse in">
-    <table class="table table-hover">
-      <thead><tr>
-        <th width="8%"  rel="info"></th>
-        <th width="6%"  rel="job_id">ID</th>
-        <th width="20%" rel="progress">Progress</th>
-        <th width="15%" rel="speed">Speed</th>
-        <th width="50%" rel="endpoints">Source/Destination</th>
-      </tr></thead>
-      <tbody>
-        <tr><td colspan=5>
-          <div class="progress progress-striped active">
-            <div style="width: 100%" role="progressbar" class="progress-bar">
-              <big>Loading...</big>
-            </div>
-          </div>
-        </td></tr>
-      </tbody>
-      <tfoot>
-        <tr><td colspan="5">
-          <input type="button" class="btn btn-default" value="Refresh">
-          <label for="auto-refresh-checkbox">Auto-refresh table?</label>
-          <input type="checkbox" id="auto-refresh-checkbox" checked="checked">
-        </td></tr>
-      </tfoot>
-    </table>
-  </div>
+  <div class="collapse in" ng-include="'/parts/queue.html'"></div>
 </div>
