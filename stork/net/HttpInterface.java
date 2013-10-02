@@ -4,11 +4,12 @@ import stork.ad.*;
 import stork.scheduler.*;
 
 import io.netty.buffer.*;
+import io.netty.channel.*;
+import io.netty.channel.socket.*;
 import io.netty.handler.codec.*;
 import io.netty.handler.codec.http.*;
 import io.netty.handler.ssl.*;
-import io.netty.channel.*;
-import io.netty.channel.socket.*;
+import io.netty.util.*;
 
 import static io.netty.handler.codec.http.HttpHeaders.Names.*;
 import static io.netty.handler.codec.http.HttpHeaders.*;
@@ -85,20 +86,31 @@ public class HttpInterface extends StorkInterface {
   }
 
   // A codec for converting HTTP requests into ads.
-  private class HttpAdDecoder extends MessageToMessageDecoder<HttpRequest> {
-    public void decode(ChannelHandlerContext ctx, HttpRequest req, List<Object> out) {
+  private class HttpAdDecoder extends MessageToMessageDecoder<HttpObject> {
+    private HttpRequest head;  // Current request header.
+    private HttpContent body;  // Current content body.
+    private StorkScheduler.CommandHandler handler;
+    private String command;
+    private Ad ad = new Ad();
+    private long len = 0;
+    private boolean done = false;
+
+    // Extract information from the header and put it in the ad.
+    public void handleHead(HttpRequest head) {
       // Get the command from the request.
-      URI cmd = getRequestUri(req.getUri());
+      URI cmd = getRequestUri(head.getUri());
+
+      // Get the body length.
+      len = HttpHeaders.getContentLength(head, 0);
 
       // Make sure the command exists and supports the method.
-      StorkScheduler.CommandHandler handler = sched.handler(cmd.getPath());
+      handler = sched.handler(cmd.getPath());
       if (handler == null)
         throw new HttpException(NOT_FOUND);
-      if (!checkMethod(req.getMethod(), handler))
+      if (!checkMethod(head.getMethod(), handler))
         throw new HttpException(METHOD_NOT_ALLOWED);
 
-      String cookie = req.headers().get("Cookie");
-      Ad ad = new Ad();
+      String cookie = head.headers().get("Cookie");
 
       // Use cookies as a base.
       if (cookie != null)
@@ -108,14 +120,37 @@ public class HttpInterface extends StorkInterface {
       if (cmd.getQuery() != null)
         ad.addAll(queryToAd(cmd.getQuery()));
 
-      // Merge in request body parameters.
-      //if (u.get
+      command = cmd.getPath();
+      System.out.println("head: "+ad+", "+cmd+" "+done);
+    }
 
-      ad.put("command", cmd.getPath());
+    // Parse body chunks.
+    public void handleBody(HttpContent body) {
+      String type = head.headers().get("Content-Type");
+      String data = body.content().toString(CharsetUtil.UTF_8);
+      if (type == null)
+        ad.addAll(Ad.parse(data));
+      else if (type.startsWith("application/x-www-form-urlencoded"))
+        ad.addAll(queryToAd(data));
+      else if (type.startsWith("multipart"))
+        throw new RuntimeException("multipart messages are not supported");
+      else
+        ad.addAll(Ad.parse(data));
+      done = true;
+      System.out.println("body: "+ad);
+    }
 
-      System.out.println(ad);
-
-      out.add(ad);
+    public void decode(ChannelHandlerContext ctx, HttpObject obj, List<Object> out) {
+      if (obj instanceof HttpRequest) {
+        handleHead(head = (HttpRequest) obj);
+      } if (obj instanceof HttpContent) {
+        handleBody(body = (HttpContent) obj);
+      } if (done) {
+        out.add(ad.put("command", command));
+        System.out.println("Done: "+ad);
+        ad = new Ad();
+        done = false;
+      }
     }
 
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable t) {
@@ -131,10 +166,17 @@ public class HttpInterface extends StorkInterface {
   // A codec for converting ads to HTTP responses.
   private class HttpAdEncoder extends MessageToMessageEncoder<Ad> {
     public void encode(ChannelHandlerContext ctx, Ad ad, List<Object> out) {
-      ByteBuf b = Unpooled.copiedBuffer(ad.toJSON().getBytes());
-      FullHttpResponse r = new DefaultFullHttpResponse(HTTP_1_1, OK, b);
-      r.headers().set(CONTENT_TYPE, "application/json; charset=UTF-8");
-      out.add(r);
+      String error = ad.get("error");
+      FullHttpResponse r;
+      if (error == null) {
+        ByteBuf b = Unpooled.copiedBuffer(ad.toJSON().getBytes());
+        r = new DefaultFullHttpResponse(HTTP_1_1, OK, b);
+        r.headers().set(CONTENT_TYPE, "application/json; charset=UTF-8");
+      } else {
+        ByteBuf b = Unpooled.copiedBuffer(error.getBytes());
+        r = new DefaultFullHttpResponse(HTTP_1_1, INTERNAL_SERVER_ERROR, b);
+        r.headers().set(CONTENT_TYPE, "text/plain");
+      } out.add(r);
     }
   }
 

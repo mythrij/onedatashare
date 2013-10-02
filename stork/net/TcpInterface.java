@@ -20,9 +20,7 @@ public class TcpInterface extends StorkInterface {
   }
 
   public void init(Channel ch, ChannelPipeline pl) {
-    AdCodec codec = new AdCodec();
-    pl.addLast(codec.decoder);
-    pl.addLast(codec.encoder);
+    pl.addLast(new AdCodec());
   }
 
   public int defaultPort() {
