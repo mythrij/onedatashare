@@ -1,131 +1,99 @@
-<title>Transfer</title>
-
-<div id="add-credential-modal" class="modal">
-  <div class="modal-dialog" role="dialog">
-    <form id="myproxy-form" class="ajax-form modal-content" method="post" action="/api/stork_cred?action=create">
-      <div class="modal-header">
-        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">
-          &times;
-        </button>
-        <h4 class="modal-title">
-          Add a New Credential
-        </h4>
-        <div class="small text-muted">
-          Currently only MyProxy credentials are supported.
-        </div>
-      </div>
-      <div class="modal-body container">
-        <input type="hidden" name="type" value="gss-cert">
-        <div class="form-group col-md-12">
-          <label>MyProxy server</label>
-          <input type="text" class="form-control" name="myproxy_host" placeholder="e.g., myproxy.teragrid.org" required>
-        </div>
-
-        <div class="form-group col-md-6">
-          <label>MyProxy username</label>
-          <input type="text" class="form-control" name="myproxy_user" required>
-        </div>
-
-        <div class="form-group col-md-6">
-          <label>MyProxy password</label>
-          <input type="password" class="form-control" name="myproxy_pass" required>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-default" type="button" data-dismiss="modal">
-          Cancel
-        </button>
-        <button class="pull-right btn btn-primary" type="submit">
-          Add credential
-        </button>
-      </div>
-    </form>
-  </div>
-</div>
-
 <div class="container panel">
   <div class="panel-heading">
     <h4 class="panel-title panel-collapse-header">
       Browse and Transfer Files
     </h4>
   </div>
-  <div id="stork-ls" class="panel-body container collapse in text-center" ng-controller="TransferCtrl">
-    <div class="col-sm-5-5 form-inline" ng-controller="BrowseCtrl as left" ng-include="'/parts/browse.html'"></div>
+  <div id="stork-ls" class="panel-body container collapse in text-center">
+    <div class="col-sm-5-5" ng-controller="BrowseCtrl" ng-init="end = left" ng-include="'/parts/browse.html'">
+      <div class="progress progress-striped active fade in">
+        <div style="width: 100%" role="progressbar" class="progress-bar">
+          <big>Loading...</big>
+        </div>
+      </div>
+    </div>
     <div class="col-sm-1 input-group-lg container text-center panel panel-heading transfer-controls">
       <div class="col-xs-1 visible-xs"></div>
-      <button class="btn btn-lg btn-default col-sm-12 col-xs-2 tips" title="Transfer contents">
+      <button class="btn btn-lg btn-default col-sm-12 col-xs-2" tooltip="Transfer contents"
+              ng-disabled="!canTransfer(left, right, true)" ng-click="transfer(left, right, true)">
         <i class="icon-share hidden-xs"></i>
         <i class="icon-share visible-xs icon-rotate-90"></i>
       </button>
-      <button class="btn btn-lg btn-default col-sm-12 col-xs-2 tips" title="Transfer">
+      <button class="btn btn-lg btn-default col-sm-12 col-xs-2" tooltip="Transfer"
+              ng-disabled="!canTransfer(left, right, false)" ng-click="transfer(left, right, false)">
         <i class="icon-share-alt hidden-xs"></i>
         <i class="icon-share-alt visible-xs icon-rotate-90"></i>
       </button>
-      <button class="btn btn-lg btn-default col-sm-12 col-xs-2 tips ph" title="Synchronize">
+      <button class="btn btn-lg btn-default col-sm-12 col-xs-2 ph" tooltip="Synchronize"
+              ng-disabled="!canSync(left, right)" ng-click="sync(left, right)">
         <i class="icon-refresh hidden-xs"></i>
         <i class="icon-refresh visible-xs icon-rotate-90"></i>
       </button>
-      <button class="btn btn-lg btn-default col-sm-12 col-xs-2 tips" title="Transfer">
+      <button class="btn btn-lg btn-default col-sm-12 col-xs-2" tooltip="Transfer"
+              ng-disabled="!canTransfer(right, left, false)" ng-click="transfer(right, left, false)">
         <i class="icon-share-alt hidden-xs icon-rotate-180"></i>
         <i class="icon-share-alt visible-xs icon-rotate-270"></i>
       </button>
-      <button class="btn btn-lg btn-default col-sm-12 col-xs-2 tips" title="Transfer contents">
+      <button class="btn btn-lg btn-default col-sm-12 col-xs-2" tooltip="Transfer contents"
+              ng-disabled="!canTransfer(right, left, true)" ng-click="transfer(right, left, true)">
         <i class="icon-share hidden-xs icon-rotate-180"></i>
         <i class="icon-share visible-xs icon-rotate-270"></i>
       </button>
     </div>
-    <div class="col-sm-5-5 form-inline" ng-controller="BrowseCtrl as right" ng-include="'/parts/browse.html'"></div>
+    <div class="col-sm-5-5" ng-controller="BrowseCtrl" ng-init="end = right" ng-include="'/parts/browse.html'">
+      <div class="progress progress-striped active fade in">
+        <div style="width: 100%" role="progressbar" class="progress-bar">
+          <big>Loading...</big>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
 <script>
   function TransferOptionsCtrl($scope) {
     $scope.values = {
-      'optimizer': 'false',
-      'overwrite': 'true',
-      'verify'   : 'false',
-      'encrypt'  : 'false',
-      'compress' : 'false'
+      'optimizer': false,
+      'overwrite': true,
+      'verify'   : false,
+      'encrypt'  : false,
+      'compress' : false
     }
     $scope.options = [{
         'title': 'Use transfer optimization',
         'param': 'optimizer',
         'description':
           'Automatically adjust transfer options using the given optimization algorithm.',
-        'choices': { 'None': 'false', '2nd Order': '2nd_order', 'PCP': 'pcp' }
+        'choices': [ ['None', false], ['2nd Order', '2nd_order'], ['PCP', 'pcp'] ]
       },{
         'title': 'Overwrite existing files',
         'param': 'overwrite',
         'description':
           'By default, destination files with conflicting file names will be overwritten. '+
           'Saying no here will cause the transfer to fail if there are any conflicting files.',
-        'choices': { 'Yes': 'true', 'No': 'false' }
+        'choices': [ ['Yes', true], ['No', false] ]
       },{
-        'title': 'Verify file integrity with checksum',
+        'title': 'Verify file integrity',
         'param': 'verify',
         'description':
-          'Enable this if you want additional data integrity verification of transferred files.',
-        'choices': { 'Yes': 'true', 'No': 'false' }
+          'Enable this if you want checksum verification of transferred files.',
+        'choices': [ ['Yes', true], ['No', false] ]
       },{
         'title': 'Encrypt data channel',
         'param': 'encrypt',
         'description':
           'Enables data transfer encryption, if supported. This provides additional data security '+
           'at the cost of transfer speed.',
-        'choices': { 'Yes': 'true', 'No': 'false' }
+        'choices': [ ['Yes', true], ['No', false] ]
       },{
-        'title': 'Use data channel compression',
+        'title': 'Compress data channel',
         'param': 'compress',
         'description':
-          'Compresses data before sending, if the source supports it. This may improve transfer '+
-          'speed if the data is fairly regular (e.g., text-based or structured). '+
-          'However, this may slightly reduce speed if the data is highly random.',
-        'choices': { 'Yes': 'true', 'No': 'false' }
+          'Compresses data over the wire. This may improve transfer '+
+          'speed if the data is text-based or structured.',
+        'choices': [ ['Yes', true], ['No', false] ]
       }
     ]
-    $scope.set = function (p, v) {
-      this.values[p] = v
-    }
   }
 </script>
 
@@ -145,10 +113,8 @@
         <div style="height: 13em" class="form-group col-lg-3 col-md-4 col-sm-6" ng-repeat="o in options">
           <h4>{{o.title}}</h4>
           <div class="btn-group">
-            <label class="btn btn-default btn-large" ng-repeat="(n,v) in o.choices" ng-class="{active: values[o.param]==v}">
-              <input type="radio" name="{{o.param}}" ng-model="values[o.param]" value="{{v}}" class="hide">
-              {{n}}
-            </label>
+            <button class="btn btn-large btn-default" ng-model="values[o.param]"
+                    ng-repeat="c in o.choices" btn-radio="c[1]">{{c[0]}}</button>
           </div>
           <p class="help-block">
             {{o.description}}
@@ -165,5 +131,83 @@
       Transfer Progress and Queue
     </h4>
   </div>
-  <div class="collapse in" ng-include="'/parts/queue.html'"></div>
+  <div class="collapse in" ng-include="'/parts/queue.html'">
+    <div class="progress progress-striped active fade in">
+      <div style="width: 100%" role="progressbar" class="progress-bar">
+        <big>Loading...</big>
+      </div>
+    </div>
+  </div>
 </div>
+
+<!-- Create new credential modal -->
+<script type="text/ng-template" id="add_cred_modal.html">
+  <div class="modal-dialog" ng-init="nc = {}" role="dialog">
+    <form class="modal-content" ng-submit="$close(nc)">
+      <div class="modal-header">
+        <button type="button" class="close" ng-click="$close()" aria-hidden="true">
+          &times;
+        </button>
+        <h4 class="modal-title">
+          Add a New Credential
+        </h4>
+        <div class="small text-muted">
+          Currently only MyProxy credentials are supported.
+        </div>
+      </div>
+      <div class="modal-body container">
+        <input type="hidden" ng-model="nc.type" value="gss-cert">
+        <div class="form-group col-md-12">
+          <label>MyProxy server</label>
+          <input type="text" class="form-control" ng-model="nc.myproxy_host" placeholder="e.g., myproxy.teragrid.org" required>
+        </div>
+
+        <div class="form-group col-md-6">
+          <label>MyProxy username</label>
+          <input type="text" class="form-control" ng-model="nc.myproxy_user" required>
+        </div>
+
+        <div class="form-group col-md-6">
+          <label>MyProxy password</label>
+          <input type="password" class="form-control" ng-model="nc.myproxy_pass" required>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" ng-click="$close()">
+          Cancel
+        </button>
+        <button type="submit" class="pull-right btn btn-primary">
+          Add credential
+        </button>
+      </div>
+    </form>
+  </div>
+</script>
+
+<!-- Transfer/sync confirmation modal -->
+<script type="text/ng-template" id="xfer_modal.html">
+  <div class="modal-dialog" role="dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" ng-click="$close()" aria-hidden="true">
+          &times;
+        </button>
+        <h3>Confirm Transfer</h3>
+      </div>
+      <div class="modal-body text-center">
+        Transfer
+        <div class="large">
+          <div ng-repeat="(u,f) in src.selected">{{u}}</div>
+        </div>
+        to
+        <div class="large">
+          <div ng-repeat="(u,f) in dest.selected">{{u}}</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-warning" ng-click="$close()">Cancel</button>
+        <button class="btn btn-primary" ng-click="submit(job(src, dest)).then($close)">Submit</button>
+      </div>
+    </div>
+  </div>
+</script>

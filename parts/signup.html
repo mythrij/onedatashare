@@ -1,16 +1,15 @@
-<form role="form" class="signup-form ajax-form" ng-submit="register()" ng-controller="UserCtrl">
-  <input type="hidden" ng-model="info.action" value="register">
+<form role="form" class="signup-form ajax-form" ng-submit="register(user)" ng-controller="RegisterCtrl">
   <div class="form-group">
     <label for="signup-user-id" class="sr-only">User ID</label>
-    <input id="signup-user-id" ng-model="info.user_id" type="text" class="form-control" placeholder="User ID" required>
+    <input id="signup-user-id" ng-model="user.user_id" type="text" class="form-control" placeholder="User ID" required>
   </div>
   <div class="form-group">
     <label for="signup-email" class="sr-only">Email</label>
-    <input id="signup-email" ng-model="info.email" type="email" class="form-control" placeholder="Email" required>
+    <input id="signup-email" ng-model="user.email" type="email" class="form-control" placeholder="Email" required>
   </div>
   <div class="form-group">
     <label for="signup-password" class="sr-only">Password</label>
-    <input id="signup-password" ng-model="info.password" type="password"
+    <input id="signup-password" ng-model="user.password" type="password"
            class="form-control" minlength="6" placeholder="Password" required>
     <span class="small help-block">Password must be at least six characters.</span>
   </div>
@@ -24,3 +23,7 @@
     and <a href="#/privacy">privacy policy</a>.
   </span>
 </form>
+
+<script type="text/ng-template" id="register-confirm.html">
+  Welcome, {{$user.user_id}}!
+</script>

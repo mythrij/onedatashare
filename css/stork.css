@@ -41,7 +41,7 @@ p {
   overflow: hidden;
 }
 
-* {
+body {
   font-family: "Open Sans", sans-serif;
 } h1, h2, h3, h4, h5, h6 {
   font-family: "Open Sans", sans-serif;
@@ -115,30 +115,13 @@ p {
   position: absolute;
 }
 
-.progress span {
+.progress .progress-text {
   position: absolute;
   top: 0;
   z-index: 2;
   color: #FFF;
   text-shadow: 0 1px 2px #000;
   text-align: center;
-  width: 100%;
-}
-
-.progressbar {
-  height: 1.5em;
-  line-height: 1.5em;
-  background: #000;
-  position: relative;
-  overflow: hidden;
-} .progressbar > span {
-  display: block;
-  position: absolute;
-  top: 0; bottom: 0; left: 0; right: 0;
-  z-index: 100;
-} .progressbar > div {
-  position: absolute;
-  top: 0; bottom: 0; left: 0;
   width: 100%;
 }
 
@@ -168,10 +151,10 @@ tr.min-cell {
   height: 1px;
 }
 
-#view.ng-enter, #view.ng-leave {
-  transition: opacity .25s ease-in-out;
-  -moz-transition: opacity .25s ease-in-out;
-  -webkit-transition: opacity .25s ease-in-out;
+.view.ng-enter {
+  animation: fadeIn 0.2s;
+} .view.ng-leave {
+  animation: fadeOut 0.2s;
 }
 
 #wrapper {
@@ -286,8 +269,21 @@ body.logged-out .logged-in {
   display: none;
 } 
 
+.modal.in {
+  display: block;
+}
+
 /* For hiding uncompiled AngularJS elements */
 [ng\:cloak], [ng-cloak], [data-ng-cloak], [x-ng-cloak],
 .ng-cloak, .x-ng-cloak {
   display: none !important;
+}
+
+.wf-loading * {
+  opacity: 0;
+} .wf-active *, .wf-inactive * {
+  -webkit-transition: opacity 0.5s ease-out;
+  -moz-transition: opacity 0.5s ease-out;
+  -o-transition: opacity 0.5s ease-out;
+  transition: opacity 0.5s ease-out;
 }

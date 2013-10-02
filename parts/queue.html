@@ -13,57 +13,136 @@
       </dd>
     </dl>
   </script>
-  <div class="clearfix panel-heading" style="font-weight: bold">
-    <div class="col-xs-2  col-sm-2"></div>
-    <div class="col-xs-2  col-sm-1">ID</div>
-    <div class="col-xs-4  col-sm-3">Progress</div>
-    <div class="col-xs-4  col-sm-2">Speed</div>
-    <div class="hidden-xs col-sm-4">Source/Destination</div>
+  <div class="hidden-xs clearfix panel-heading" style="font-weight: bold">
+    <div class="col-sm-2"></div>
+    <div class="col-sm-1">Job ID</div>
+    <div class="col-sm-3 text-center">Progress</div>
+    <div class="col-sm-2 text-center">Speed</div>
+    <div class="col-sm-4">Source/Destination</div>
   </div>
-  <div class="text-center" ng-if="!jobs.length">
-    <big>No jobs found...</big>
-  </div>
-  <div class="{{j.status}}" ng-repeat="j in jobs">
-    <div class="panel-body clearfix" rel="{{j.job_id}}">
-      <!-- Controls -->
-      <div class="col-xs-2 col-sm-2 btn-group">
-        <button title="Details" class="btn btn-default icon-info" ng-click="j.$info = !j.$info"></button>
-        <button class="btn btn-default icon-remove btn-disabled" disabled="disabled"></button>
-      </div>
-      <!-- ID -->
-      <div class="col-xs-2 col-sm-1">
-        {{j.job_id}}
-      </div>
-      <!-- Progress -->
-      <div class="col-xs-4 col-sm-3">
-        <div class="progress" data-placement="top" data-popover="" data-trigger="hover" bs-popover="'prog-pop.html'">
-          <div role="progressbar" ng-class="color(j)" class="progress-bar" ng-style="pw(j)">
+  <div class="panel-body">
+    <div ng-init="info={}" ng-repeat="j in filteredJobs = (jobs | values | filter:job_filter | orderBy:'-job_id')">
+      <div class="panel panel-body clearfix">
+        <div class="col-xs-12 col-sm-2 btn-group">
+          <button tooltip="Details" class="btn btn-default icon-info" ng-click="info.show = !info.show"></button>
+          <button tooltip="Cancel" class="btn btn-default icon-remove btn-disabled" disabled="disabled"></button>
+        </div>
+
+        <div class="col-xs-3 visible-xs">
+          Job ID
+        </div>
+        <div class="col-xs-9 col-sm-1">
+          {{j.job_id}}
+        </div>
+
+        <div class="col-xs-3 visible-xs">
+          Progress
+        </div>
+        <div class="col-xs-9 col-sm-3">
+          <div class="progress" data-placement="top" data-popover="" data-trigger="hover" bs-popover="'prog-pop.html'"
+               ng-class="{processing: 'progress-striped active'}[j.status]">
+            <div role="progressbar" ng-class="color(j)" class="progress-bar"
+                 ng-style="{width:(j.status=='processing'&&(j.progress.bytes|percent))||'100%'}"></div>
+            <span class="progress-text">
+              {{j.status|inflector}}
+              <span ng-show="j.status=='processing'&&(j.progress.bytes|percent)">
+                ({{j.progress.bytes|percent}})
+              </span>
+            </span>
           </div>
-          <span>{{status(j)}}</span>
+        </div>
+
+        <div class="col-xs-3 visible-xs">
+          Speed
+        </div>
+        <div class="col-xs-9 col-sm-2 text-center" ng-init="p = j.progress.bytes">
+          <span ng-hide="!p || p.avg  <= 0">{{p.avg|size:2}}B/s</span>
+          <span ng-hide="!p || p.inst <= 0">({{p.inst|size:2}}B/s)</span>
+        </div>
+
+        <div class="col-xs-3 visible-xs">
+          Endpoints
+        </div>
+        <div class="col-xs-9 col-sm-4 clearfix endpoints">
+          <span class="pull-left">{{j.src.uri}}</span>
+          <div class="clearfix"></div>
+          <span class="pull-left">{{j.dest.uri}}</span>
+        </div>
+
+        <div class="clearfix"></div>
+
+        <div class="well" ng-show="info.show">
+          <ul class="nav nav-pills">
+            <li ng-class="{active:!info.raw}">
+              <a ng-click="info.raw = false" href>Formatted</a>
+            </li>
+            <li ng-class="{active:info.raw}">
+              <a ng-click="info.raw = true" href>JSON</a>
+            </li>
+          </ul>
+          <dl ng-hide="info.raw" class="panel panel-body dl-horizontal">
+            <dt ng-if="j.message">Message</dt>
+            <dd ng-if="j.message">{{j.message}}</dd>
+
+            <dt ng-if="j.queue_timer.start > 0">Job Submitted</dt>
+            <dd ng-if="j.queue_timer.start > 0">
+              <abbr title="{{j.queue_timer.start | date:'medium'}}" tips>
+                {{j.queue_timer.start | moment}}
+              </abbr>
+            </dd>
+
+            <dt ng-if="j.run_timer.start > 0">Job Started</dt>
+            <dd ng-if="j.run_timer.start > 0">
+              <abbr title="{{j.run_timer.start | date:'medium'}}" tips>
+                {{j.run_timer.start | moment}}
+              </abbr>
+            </dd>
+
+            <dt ng-if="j.queue_timer.end > 0">Job Completed</dt>
+            <dd ng-if="j.queue_timer.end > 0">
+              <abbr title="{{j.queue_timer.end | date:'medium'}}" tips>
+                {{j.queue_timer.end | moment}}
+              </abbr>
+            </dd>
+          </dl>
+          <pre class="panel panel-body" ng-show="info.raw">{{j | json}}</pre>
         </div>
       </div>
-      <!-- Speed -->
-      <div class="col-xs-4 col-sm-2">
-        <div ng-if="j.progress.bytes.avg > 0" ng-bind="pretty(j.progress.bytes.avg)+'B/s'"></div>
-        <div ng-if="j.progress.bytes.inst > 0" ng-bind="'('+pretty(j.progress.bytes.inst)+'B/s)'"></div>
-      </div>
-      <!-- Endpoints-->
-      <div class="visible-xs clearfix"></div>
-      <div class="col-sm-4 clearfix endpoints">
-        <span class="pull-left">{{j.src.uri}}</span>
-        <i class="visible-xs pull-left icon-arrow-right"></i>
-        <div class="hidden-xs clearfix"></div>
-        <span class="pull-left">{{j.dest.uri}}</span>
-      </div>
     </div>
-    <!-- Raw info -->
-    <div class="panel-body clearfix" ng-if="j.$info">
-      <pre>{{pretty_info(j)}}</pre>
+    <div class="text-center" ng-hide="filteredJobs.length">
+      <big>No jobs found...</big>
     </div>
   </div>
   <div class="clearfix panel-footer">
-    <button ng-click="refresh()" class="btn btn-default">Refresh</button>
-    <label for="auto-refresh-checkbox">Auto-refresh</label>
-    <input type="checkbox" id="auto-refresh-checkbox" ng-model="auto">
+    <div class="btn-group input-group">
+      <button ng-click="refresh()" tooltip="Refresh" class="btn btn-default" ng-disabled="auto">
+        <i class="icon-repeat"></i>
+      </button>
+      <button ng-click="toggleAuto()" tooltip="Auto-refresh" class="btn btn-default">
+        <i ng-class="{'icon-check': auto, 'icon-check-empty': !auto}"></i>
+      </button>
+    </div>
+      
+    <div class="btn-group dropup pull-right">
+      <label>
+        Filter:
+        <button class="btn btn-default dropdown-toggle" data-toggle="dropdown">
+          <span class="caret"></span> {{filter | inflector}}
+        </button>
+        <ul class="dropdown-menu" role="menu">
+          <li ng-repeat="f in filters" role="presentation" ng-class="{divider: !f}">
+            <a href ng-if="f" class="show" tabindex="-1" ng-click="set_filter(f)">
+              <i class="icon-ok" ng-class="{invisible: f != filter}"></i>
+              {{f | inflector}}
+            </a>
+          </li>
+        </ul>
+      </label>
+    </div>
+
+    <!--
+    <ul pagination total-items="jobs.length" page="page" max-size="4" class="pagination-small"
+        previous-text="&lsaquo;" next-text="&rsaquo;"></ul>
+    -->
   </div>
 </div>

@@ -10,15 +10,15 @@
           Log in
         </h4>
       </div>
-      <div class="panel-body" ng-controller="UserCtrl">
-        <form class="login-form" ng-submit="login()">
+      <div class="panel-body">
+        <form class="login-form" ng-submit="logIn(user)">
           <div class="form-group">
             <label for="login-user-id">User ID</label>
-            <input id="login-user-id" class="form-control" ng-model="info.user_id" type="text">
+            <input id="login-user-id" class="form-control" ng-model="user.user_id" type="text">
           </div>
           <div class="form-group">
             <label for="login-password">Password</label>
-            <input id="login-password" class="form-control" ng-model="info.password" type="password">
+            <input id="login-password" class="form-control" ng-model="user.password" type="password">
           </div>
           <button class="btn btn-default" type="submit">Log in</button>
         </form>

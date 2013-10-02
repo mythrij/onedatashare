@@ -41,10 +41,8 @@
   text-align: center;
 }
 
-.stork-list .dot {
+.hide-dots .stork-list .dot {
   display: none;
-} .show-dots .stork-list .dot {
-  display: block;
 } .stork-list .dot div:before,
   .stork-list .dot {
   color: #888;

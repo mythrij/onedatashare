@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html xmlns:ng="http://angularjs.org" lang="en" id="ng-app" ng-app="stork">
 <head>
-  <title>StorkCloud</title>
+  <title ng-bind="$title">StorkCloud</title>
   <meta charset="utf-8"> 
   <meta name="robots" content="noindex,nofollow"> 
   <meta name="viewport" content="width=device-width">
@@ -9,6 +9,7 @@
   <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico">
 
   <link href="//cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.0.0-rc2/css/bootstrap.min.css" rel="stylesheet">
+  <link href="//cdnjs.cloudflare.com/ajax/libs/animate.css/2.0/animate.min.css" rel="stylesheet">
   <link href="//cdnjs.cloudflare.com/ajax/libs/font-awesome/3.2.1/css/font-awesome.min.css" rel="stylesheet">
   <!--[if lte IE 7]>
     <link href="//cdnjs.cloudflare.com/ajax/libs/font-awesome/3.2.1/css/font-awesome-ie7.min.css" rel="stylesheet">
@@ -17,13 +18,12 @@
     <script src="//cdnjs.cloudflare.com/ajax/libs/html5shiv/3.6.2/html5shiv.min.js"></script>
     <script src="//cdnjs.cloudflare.com/ajax/libs/respond.js/1.2.0/respond.min.js"></script>
   <![endif]-->
-  <link href="//fonts.googleapis.com/css?family=Open+Sans:400,300&subset=latin,greek" rel="stylesheet">
   <link href="/css/bootstrap-halves.css" rel="stylesheet">
   <link href="/css/stork.css" rel="stylesheet">
   <link href="/css/stork.list.css" rel="stylesheet">
 </head>
 
-<body ng-class="login_state()" ng-controller="UserCtrl">
+<body ng-class="$user && 'logged-in' || 'logged-out'">
   <div id="wrapper">
     <div class="navbar navbar-default navbar-fixed-top" bs-navbar>
       <noscript>
@@ -41,14 +41,22 @@
             <i class="collapsed icon-reorder"></i>
             <i class="collapsed icon-collapse"></i>
           </button>
+
           <a class="navbar-brand" href="#/">
             StorkCloud
+          </a>
+
+          <a id="user-button" class="btn btn-default navbar-toggle logged-in" href="#/user">
+            <i class="icon-user"></i>
+            <span ng-bind="$user.user_id">
+              <em class="text-muted">Loading...</em>
+            </span>
           </a>
         </div>
 
         <div class="navbar-collapse collapse">
           <ul class="nav navbar-nav logged-in" ng-cloak>
-            <li data-match-route="/transfer">
+            <li bs-route="/transfer">
               <a href="#/transfer">
                 <i class="icon-exchange"></i>
                 <span>Transfer</span>
@@ -57,18 +65,18 @@
           </ul>
 
           <ul class="nav navbar-nav navbar-right">
-            <li data-match-route="/user">
-              <a id="user-button" class="fade in logged-in" href="#/user" ng-cloak>
+            <li class="hidden-xs" bs-route="/user">
+              <a id="user-button" class="logged-in" href="#/user" ng-cloak>
                 <i class="icon-user"></i>
-                <span ng-bind="user.user_id"></span>
+                <span ng-bind="$user.user_id"></span>
               </a>
             </li>
-            <li style="width: 100px" data-match-route="/login">
+            <li bs-route="/login">
               <a class="logged-out" href="#/login">
                 <i class="icon-signin"></i>
                 <span>Log in</span>
               </a>
-              <a class="logged-in" ng-click="logout()" href="#/" ng-cloak>
+              <a class="logged-in" ng-controller="LoginCtrl" ng-click="logOut()" href ng-cloak>
                 <i class="icon-signout"></i>
                 <span>Log out</span>
               </a>
@@ -78,7 +86,7 @@
       </div>
     </div>
 
-    <div id="view" class="container" ng-view>
+    <div class="view" class="container" ng-view>
       <div id="app-load-indicator" class="progress progress-striped active fade">
         <div style="width: 100%" role="progressbar" class="progress-bar">
           <big>Loading...</big>
@@ -104,20 +112,29 @@
     </div>
   </div>
 
-  <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
-  <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/underscore.js/1.5.1/underscore-min.js"></script>
-  <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/angular.js/1.1.5/angular.min.js"></script>
-  <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.0.0-rc2/js/bootstrap.min.js"></script>
-  <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/angular-strap/0.7.4/angular-strap.js"></script>
-  <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/json3/3.2.4/json3.min.js"></script>
-  <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/fastclick/0.6.7/fastclick.min.js"></script>
-  <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/Cookies.js/0.3.1/cookies.min.js"></script>
-  <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/URI.js/1.7.2/URI.min.js"></script>
-  <script type="text/javascript" src="/js/bootbox.min.js"></script>
-  <script type="text/javascript" src="/js/stork.list.js"></script>
-  <script type="text/javascript" src="/js/stork.queue.js"></script>
-  <script type="text/javascript" src="/js/stork.js"></script>
-
   <script>
-    $('#app-load-indicator').fadeOut()
+    WebFontConfig = {
+      google: {
+        families: ['Open Sans:400,300'],
+        subsets : ['latin', 'greek']
+      }
+    }
   </script>
+
+  <script src="//cdnjs.cloudflare.com/ajax/libs/webfont/1.3.0/webfont.js"></script>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/underscore.js/1.5.2/underscore-min.js"></script>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.0.0-rc2/js/bootstrap.min.js"></script>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/angular.js/1.1.5/angular.min.js"></script>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/angular-ui/0.4.0/angular-ui.min.js"></script>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/angular-ui-bootstrap/0.6.0/ui-bootstrap-tpls.min.js"></script>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/json3/3.2.4/json3.min.js"></script>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/fastclick/0.6.7/fastclick.min.js"></script>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/Cookies.js/0.3.1/cookies.min.js"></script>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/URI.js/1.7.2/URI.min.js"></script>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/moment.js/2.2.1/moment.min.js"></script>
+  <script src="/js/stork.list.js"></script>
+  <script src="/js/stork.queue.js"></script>
+  <script src="/js/stork.js"></script>
+</body>
+</html>

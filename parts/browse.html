@@ -1,25 +1,8 @@
-<script type="text/ng-template" id="browse-tree.html">
-  <li ng-class="tree_classes(f)">
-    <i ng-mousedown="toggle(f)"></i>
-    <div ng-dblclick="toggle(f)" ng-mousedown="select(f)">
-      {{f.name}}
-      <span class="small text-muted" ng-if="!f.dir">{{size(f)}}</span>
-    </div>
-    <ul class="stork-list" ng-repeat="f in f.shown" ng-include="'browse-tree.html'">
-    </ul>
-    <ul ng-if="is_empty(f.files) && !f.loading" class="text-muted">
-      <li><em>(empty)</em></li>
-    </ul>
-    <ul ng-if="f.loading" class="text-muted">
-      <li><em>Loading...</em></li>
-    </ul>
-  </li>
-</script>
 <div class="file-list panel">
-  <form class="uri panel-heading" ng-submit="refresh()">
+  <form class="uri panel-heading" ng-submit="refresh(temp_uri)">
     <div ng-class="uri_state" class="input-group-lg">
-      <input class="form-control" ng-change="uri_state.changed = true" ng-model="temp_uri" placeholder="Enter a URL">
-      <button type="submit" class="pull-right btn btn-lg tips" title="Go">
+      <input type="url" class="form-control" ng-change="uri_state.changed = true" ng-model="temp_uri" placeholder="Enter a URL">
+      <button type="submit" class="pull-right btn btn-lg" tooltip="Go">
         <i class="icon-play"></i>
       </button>
     </div>
@@ -27,30 +10,34 @@
   <div class="panel-heading container form-inline transfer-toolbar">
     <div class="input-group col-md-8" style="white-space:nowrap">
       <div class="btn-group">
-        <button class="btn btn-default tips" title="Previous Directory" ng-click="up_dir()">
+        <button class="icon-repeat btn btn-default" tooltip="Refresh" ng-click="refresh(temp_uri)">
+        </button>
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-default" tooltip="Previous Directory" ng-click="up_dir()">
           <i class="icon-level-up icon-flip-horizontal"></i>
           <i class="icon-folder-open"></i>
         </button>
       </div>
       <div class="btn-group">
-        <button class="btn btn-default tips ph" title="New folder">
+        <button class="btn btn-default ph" tooltip="New folder">
           <i class="icon-folder-open"></i>
           <i class="icon-plus"></i>
         </button>
-        <button class="icon-trash btn btn-default tips ph" title="Delete"></button>
+        <button class="icon-trash btn btn-default ph" tooltip="Delete"></button>
       </div>
       <div class="btn-group">
-        <button class="icon-repeat btn btn-default tips" title="Refresh" ng-click="refresh()">
-        </button>
-        <button class="icon-lightbulb btn btn-default tips" ng-class="{'active':show_dots}"
-                title="Toggle hidden" ng-click="show_dots = !show_dots">
+        <button class="btn btn-default" ng-class="{'active':show_dots}" tooltip="Toggle hidden"
+                ng-click="show_dots = !show_dots">
+          <i ng-class="{false: 'icon-eye-open', true: 'icon-eye-close'}[!show_dots]"></i>
         </button>
       </div>
     </div>
     <div class="col-md-4" ng-controller="CredCtrl">
-      <select class="form-control dropdown-toggle credential" title="Select credential">
-        <option value="">Credential</option>
-        <optgroup class="saved-credentials" label="Saved credentials">
+      <select ng-change="credChanged()" ng-model="end.cred"
+              class="form-control dropdown-toggle" tooltip="Select credential">
+        <option value="">No credential</option>
+        <optgroup label="Saved credentials">
           <option disabled ng-if="creds.length == 0">(none)</option>
           <option value="{{c.uuid}}" ng-repeat="c in creds">
             {{c.name || 'Unnamed ('+c.type+')'}}
@@ -62,13 +49,35 @@
       </select>
     </div>
   </div>
-  <div class="tree" ng-class="{'show-dots': show_dots}" ng-click="select()">
-    <div>
-      <ul ng-if="f" class="stork-list" ng-include="'browse-tree.html'">
-      </ul>
-      <div ng-if="error" class="fade in alert alert-danger">
-        <strong>Error:</strong> {{error}}
+  <div class="tree" ng-class="{'hide-dots': !show_dots}">
+    <script type="text/ng-template" id="browse-node.html">
+      <i ng-mousedown="toggle(f)"></i>
+      <div ng-dblclick="toggle(f)" ng-mousedown="select(f)">
+        {{f.name}}
+        <span class="small text-muted" ng-if="!f.dir">{{f.size | size}}</span>
       </div>
+      <ul class="stork-list">
+        <li ng-repeat="f in ff = (f.files | orderBy:['-dir','name'])"
+            ng-class="tree_classes(f)" ng-include="'browse-node.html'">
+        </li>
+        <li ng-hide="ff.length">
+          <em class="text-muted">(empty)</em>
+        </li>
+      </ul>
+      <ul ng-if="loading" class="text-muted">
+        <li><em>Loading...</em></li>
+      </ul>
+      <ul ng-if="error" class="alert-danger" style="overflow-x: auto">
+        <li>
+          <strong>Error:</strong> {{f.$error}}
+        </li>
+      </ul>
+    </script>
+    <div>
+      <ul class="stork-list" ng-if="root" ng-init="f = root">
+        <li ng-class="tree_classes(f)" ng-include="'browse-node.html'">
+        </li>
+      </ul>
     </div>
   </div>
 </div>
