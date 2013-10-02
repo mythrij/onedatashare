@@ -188,7 +188,9 @@ public abstract class StorkUtil {
   // -----------------------
   // Make a URI from string, throws if there's a parse error.
   public static URI makeURI(String uri) {
-    try {
+    if (uri == null) {
+      uri = "";
+    } try {
       URI u = new URI(uri).normalize();
 
       if (u.getScheme() == null || u.getScheme().isEmpty())

@@ -234,7 +234,6 @@ public class AdObject implements Comparable<AdObject> {
         throw new RuntimeException("cannot convert to "+c);
 
       Ad ad = asAd();
-      @SuppressWarnings("unchecked")
       C[] arr = (C[]) Array.newInstance(c, ad.size());
 
       try {
@@ -251,7 +250,6 @@ public class AdObject implements Comparable<AdObject> {
       }
       
     } else {
-      @SuppressWarnings("unchecked")
       C[] arr = (C[]) Array.newInstance(c, 1);
       Array.set(arr, 0, as(c));
       return arr;

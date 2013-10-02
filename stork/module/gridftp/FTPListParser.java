@@ -18,7 +18,6 @@ import java.io.*;
 // if information about the listed directory was able to be retrieved from
 // the listing results.
 
-@SuppressWarnings("fallthrough")
 public class FTPListParser {
   String data = null;
   int list_type;

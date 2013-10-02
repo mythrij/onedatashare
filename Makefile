@@ -12,8 +12,7 @@ JARFILE = lib/$(PROJECT)-$(VERSION).jar
 CLASSPATH = 'lib/*:build'
 DBGFLAG = -g  # Uncomment to compile with debugging info.
 JFLAGS = -J-Xmx512m $(DBGFLAG) \
-	-classpath $(CLASSPATH) -sourcepath $(PROJECT) \
-	-Xlint:all -Xlint:-serial -Xmaxerrs 5
+	-classpath $(CLASSPATH) -sourcepath $(PROJECT) -nowarn
 JC  = javac
 JAR = jar -J-Xmx512m
 TAR = tar

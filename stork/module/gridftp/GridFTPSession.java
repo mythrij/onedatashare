@@ -199,7 +199,7 @@ public class GridFTPSession extends StorkSession {
     }
 
     public boolean filter(Reply r, Throwable t) {
-      if (r.getCode() < 200) {
+      if (r != null && r.getCode() < 200) {
         p.write(r.getMessage().getBytes());
         return false;
       } else return true;

@@ -6,7 +6,6 @@ import java.util.*;
 import java.math.*;
 import java.nio.charset.*;
 
-@SuppressWarnings("fallthrough")
 public class AdParser {
   int level = 0;
   char saved = 0;
@@ -26,7 +25,6 @@ public class AdParser {
   // it just picks a printer based on the opening bracket. The hint should
   // be set after at least one object is inserted so we know whether this
   // ad is a map or list.
-  @SuppressWarnings("serial")
   public static class ParsedAd extends Ad {
     public AdPrinter printer = AdPrinter.CLASSAD;
     public AdPrinter setHint(char c) {

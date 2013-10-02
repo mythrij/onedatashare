@@ -20,7 +20,6 @@ import java.net.URI;
 //   files_done  - indication that some files have been transferred
 //   complete    - true if success, false if failure
 
-@SuppressWarnings("fallthrough")
 public class StorkJob {
   private int job_id = 0;
   private JobStatus status = null;
@@ -224,6 +223,8 @@ public class StorkJob {
       if (e != Pipeline.PIPELINE_ABORTED) {
         status(failed);
         message = e.getMessage();
+      } else if (!isTerminated()) {
+        status(failed);
       }
     } finally {
       // Any time we're not running, the sessions should be closed.

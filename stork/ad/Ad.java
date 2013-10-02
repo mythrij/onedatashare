@@ -504,7 +504,6 @@ public class Ad implements Serializable {
 
   // Unmarshal this ad into an object. This operation can throw a runtime
   // exception. Should we reset fields if there's an exception?
-  @SuppressWarnings({"unchecked"})
   public synchronized <O> O unmarshal(O o) {
     Class<?> c = o.getClass();
     if (c == Ad.class) {
@@ -621,7 +620,6 @@ public class Ad implements Serializable {
   }
 
   // Package-private helper methods to unmarshal into lists and maps.
-  @SuppressWarnings({"unchecked"})
   <T> Collection<T> intoCollection(Collection<T> c) {
     if (isList()) for (AdObject o : list())
       c.add((T)o.asObject());
@@ -629,7 +627,6 @@ public class Ad implements Serializable {
       c.add((T)o.asObject());
     return c;
   }
-  @SuppressWarnings({"unchecked"})
   <K,T> Map<K,T> intoMap(Map<K,T> m) {
     int i = 0;
     if (isList()) for (AdObject o : list())

@@ -4,7 +4,6 @@ package stork.module;
 // indicating whether the error is transient. It is meant to be
 // lightweight and does not fill a stack trace.
 
-@SuppressWarnings("serial")
 public class ModuleException extends RuntimeException {
   private static StackTraceElement[] EMPTY = new StackTraceElement[0];
   private final boolean fatal;

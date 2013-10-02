@@ -47,7 +47,6 @@ public class StorkUser {
   }
 
   // A class which can be used to store users.
-  @SuppressWarnings({"serial"})
   public static class UserMap extends HashMap<String, StorkUser> {
     // TODO: Remove this terrible shit later when ads handle generics.
     public static UserMap unmarshal(Ad ad) {
