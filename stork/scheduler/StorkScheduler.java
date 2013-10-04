@@ -204,8 +204,8 @@ public class StorkScheduler {
       if ("register".equals(req.ad.get("action"))) {
         User su = users.register(req.ad);
         Log.info("Registering user: ", su.email);
-        return su.getAd();
-      } return users.login(req.ad).getAd();
+        return su.toAd();
+      } return users.login(req.ad).toAd();
     }
 
     public boolean requiresLogin() {

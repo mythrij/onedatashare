@@ -16,8 +16,8 @@ import java.security.*;
 public class User {
   public String uuid;
   public String email;
-  public String pass_hash;
-  public String pass_salt;
+  public String hash;
+  public String salt;
   public String name;
 
   // The scheduler this user is associated with.
@@ -42,7 +42,7 @@ public class User {
 
     ad.unmarshal(this);
 
-    if (ad.has("pass_hash") && ad.has("pass_salt")) {
+    if (ad.has("hash") && ad.has("salt")) {
       // Do nothing.
     } else if (ad.has("password")) {
       setPassword(ad.get("password"));
@@ -99,7 +99,7 @@ public class User {
       }
 
       String pass = ad.get("password");
-      String hash = ad.get("pass_hash");
+      String hash = ad.get("hash");
 
       if (pass == null && hash == null)
         throw new RuntimeException("No password provided.");
@@ -109,15 +109,18 @@ public class User {
 
       if (su == null)
         throw new RuntimeException("Invalid username or password.");
-      if (su.pass_hash == null)
+      if (su.hash == null)
         throw new RuntimeException("User account is not verified.");
 
-      if (hash == null)
-        hash = su.hash(pass);
+      // If a hash was provided, check it first.
+      if (hash != null && hash.equals(su.hash))
+        return su;
 
-      if (!hash.equals(su.pass_hash))
-        throw new RuntimeException("Invalid username or password.");
-      return su;
+      // Otherwise, check the password.
+      if (pass != null && su.hash(pass).equals(su.hash))
+        return su;
+
+      throw new RuntimeException("Invalid username or password.");
     }
 
     // Put a user into the map, using the normalized email as the key.
@@ -141,15 +144,14 @@ public class User {
     if (pass.length() < PASS_LEN)
       throw new RuntimeException("Password shorter than "+PASS_LEN+" characters.");
 
-    String salt = generateSalt();
-    pass_salt = salt;
-    pass_hash = hash(pass);
+    salt = salt();
+    hash = hash(pass);
   }
 
   // Get an ad to return to the user on login.
-  public Ad getAd() {
+  public Ad toAd() {
     return new Ad("email", email)
-             .put("pass_hash", pass_hash);
+             .put("hash", hash);
   }
 
   // Return the display name of the user. Either their full name or
@@ -173,9 +175,9 @@ public class User {
   }
 
   // Generate a random salt using a secure random number generator.
-  public static String generateSalt() {
-    return generateSalt(12);
-  } public static String generateSalt(int len) {
+  public static String salt() {
+    return salt(24);
+  } public static String salt(int len) {
     byte[] b = new byte[len];
     SecureRandom random = new SecureRandom();
     random.nextBytes(b);
@@ -185,10 +187,10 @@ public class User {
   // Hash a password using salt.
   // TODO: Check password constraints.
   public String hash(String pass) {
-    return hash(pass, email, pass_salt);
-  } public static String hash(String pass, String email, String salt) {
+    return hash(pass, salt);
+  } public static String hash(String pass, String salt) {
     try {
-      String saltpass = salt+'\n'+email+'\n'+pass;
+      String saltpass = salt+'\n'+pass;
       MessageDigest md = MessageDigest.getInstance("SHA-1");
       byte[] digest = saltpass.getBytes("UTF-8");
 
