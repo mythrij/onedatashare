@@ -2,11 +2,12 @@ package stork.scheduler;
 
 import stork.*;
 import stork.ad.*;
-import stork.util.*;
 import stork.cred.*;
 import stork.module.*;
 import stork.module.gridftp.*;
 import stork.module.sftp.*;
+import stork.user.*;
+import stork.util.*;
 
 import java.io.*;
 import java.net.*;
@@ -22,13 +23,14 @@ import java.util.concurrent.*;
 // The entire state of the scheduler can be serialized and saved to disk,
 // and subsequently recovered if so desired.
 //
-// TODO: Break this thing up into a separate package.
+// TODO: Break this thing up into separate classes.
 
 public class StorkScheduler {
   public Ad env = new Ad();
-  public JobQueue job_queue = new JobQueue();
-  public StorkUser.UserMap users = new StorkUser.UserMap();
-  public CredManager creds = new CredManager();
+  public User.Map users = new User.Map(this);
+
+  public transient LinkedBlockingQueue<StorkJob> jobs =
+    new LinkedBlockingQueue<StorkJob>();
 
   private transient StorkQueueThread[]  thread_pool;
   private transient StorkWorkerThread[] worker_pool;
@@ -40,10 +42,11 @@ public class StorkScheduler {
   private transient LinkedBlockingQueue<RequestBell> req_queue =
     new LinkedBlockingQueue<RequestBell>();
 
+  private transient User anonymous = User.anonymous(this);
+
   // Put a job into the scheduling queue.
   public void schedule(StorkJob job) {
-    job.scheduler(this);
-    job_queue.schedule(job);
+    jobs.add(job);
   }
 
   // It's like a thread, but storkier.
@@ -81,15 +84,12 @@ public class StorkScheduler {
     }
 
     public StorkJob getAJob() throws Exception {
-      return job_queue.take();
+      return jobs.take();
     }
 
     // Continually remove jobs from the queue and start them.
     public void execute(StorkJob job) {
       Log.info("Pulled job from queue: "+job);
-
-      // This will validate both deserialized and submitted jobs.
-      job.scheduler(StorkScheduler.this);
 
       // Run the job then check the return status.
       switch (job.process()) {
@@ -128,17 +128,15 @@ public class StorkScheduler {
       // Try handling the command if it's not done already.
       if (!req.isRung()) try {
         if (req.cmd == null)
-          throw new RuntimeException("no command specified");
+          throw new RuntimeException("No command specified.");
 
-        // Check if the handler requires a logged in user.
-        if (env.getBoolean("registration")) {
-          if (req.handler.requiresLogin()) try {
-            req.user = users.login(req.ad);
-            req.ad.remove("pass_hash");
-          } catch (Exception e) {
-            throw new RuntimeException(
-              "action requires login: "+e.getMessage());
-          }
+        // Check if user information was provided.
+        if (req.ad.has("user")) try {
+          req.user = users.login(req.ad.getAd("user"));
+        } catch (Exception e) {
+          if (req.handler.requiresLogin())
+            throw new RuntimeException("Action requires login.");
+          req.user = anonymous;
         }
 
         // Let the magic happen.
@@ -157,12 +155,13 @@ public class StorkScheduler {
   }
 
   // Stork command handlers should implement this interface.
-  public static abstract class CommandHandler {
+  public abstract class CommandHandler {
     public abstract Ad handle(RequestBell req);
 
-    // Override this for commands that don't require logon.
+    // Override this for commands that either don't require logging in or
+    // always require logging in.
     public boolean requiresLogin() {
-      return true;
+      return env.getBoolean("registration");
     }
 
     // Override this is the action affects server state.
@@ -175,15 +174,10 @@ public class StorkScheduler {
 
   class StorkQHandler extends CommandHandler {
     public Ad handle(RequestBell req) {
-      AdSorter sorter = new AdSorter("job_id");
-      boolean count = req.ad.getBoolean("count");
+      List l = new JobSearcher(req.user.jobs).query(req.ad);
 
-      sorter.reverse(req.ad.getBoolean("reverse"));
-
-      // Add jobs to the ad sorter.
-      job_queue.getAds(req.ad, sorter);
-
-      return count ? new Ad("count", sorter.size()) : sorter.asAd();
+      return req.ad.getBoolean("count") ?
+        new Ad("count", l.size()) : Ad.marshal(req.user.jobs);
     }
   }
 
@@ -191,7 +185,7 @@ public class StorkScheduler {
     public Ad handle(RequestBell req) {
       StorkSession sess = null;
       try {
-        EndPoint ep = new EndPoint(StorkScheduler.this, req.ad);
+        EndPoint ep = new EndPoint(req.user, req.ad);
         sess = ep.session();
         return Ad.marshal(sess.list(ep.path(), req.ad).waitFor());
       } finally {
@@ -208,10 +202,10 @@ public class StorkScheduler {
   class StorkUserHandler extends CommandHandler {
     public Ad handle(RequestBell req) {
       if ("register".equals(req.ad.get("action"))) {
-        StorkUser su = users.register(req.ad);
-        Log.info("Registering user: "+su.user_id);
-        return Ad.marshal(su);
-      } return Ad.marshal(users.login(req.ad));
+        User su = users.register(req.ad);
+        Log.info("Registering user: ", su.email);
+        return su.getAd();
+      } return users.login(req.ad).getAd();
     }
 
     public boolean requiresLogin() {
@@ -227,10 +221,15 @@ public class StorkScheduler {
 
   class StorkSubmitHandler extends CommandHandler {
     public Ad handle(RequestBell req) {
-      StorkJob job = StorkJob.create(req.ad);
-      job.scheduler(StorkScheduler.this);  // This will validate the job.
+      StorkJob job = StorkJob.create(req.user, req.ad);
 
+      // Schedule the job to execute and add the job to the user context.
       schedule(job);
+
+      synchronized (req.user) {
+        job.jobId(req.user.jobs.size());
+        req.user.jobs.add(job);
+      }
 
       return job.getAd();
     }
@@ -246,10 +245,11 @@ public class StorkScheduler {
       Range sdr = new Range(), cdr = new Range();
 
       if (r.isEmpty())
-        throw new RuntimeException("no jobs specified");
+        throw new RuntimeException("No jobs specified.");
 
       // Find ad in job list, set it as removed.
-      for (StorkJob j : job_queue.get(req.ad)) try {
+      List<StorkJob> list = new JobSearcher(jobs).query(req.ad);
+      for (StorkJob j : list) try {
         j.remove("removed by user");
         sdr.swallow(j.jobId());
       } catch (Exception e) {
@@ -258,7 +258,7 @@ public class StorkScheduler {
 
       // See if there's anything in our "couldn't delete" range.
       if (sdr.isEmpty())
-        throw new RuntimeException("no jobs were removed");
+        throw new RuntimeException("No jobs were removed.");
       Ad ad = new Ad("removed", sdr.toString());
       if (!cdr.isEmpty())
         ad.put("not_removed", cdr.toString());
@@ -289,11 +289,11 @@ public class StorkScheduler {
     Ad sendCredInfo(RequestBell req) {
       String uuid = req.ad.get("cred");
       if (uuid != null) try {
-        return creds.getCred(uuid).getAd();
+        return req.user.creds.getCred(uuid).getAd();
       } catch (Exception e) {
         throw new RuntimeException("no credential could be found");
       } else {
-        return creds.getCredInfos(req.ad.get("user_id"));
+        return req.user.creds.getCredInfos(req.ad.get("user_id"));
       }
     }
 
@@ -323,7 +323,7 @@ public class StorkScheduler {
         throw new RuntimeException("no action specified");
       } if (action.equals("create")) {
         StorkCred<?> cred = StorkCred.create(req.ad);
-        String uuid = creds.add(cred);
+        String uuid = req.user.creds.add(cred);
         return cred.getAd().put("uuid", uuid);
       } throw new RuntimeException("invalid action");
     }
@@ -412,7 +412,7 @@ public class StorkScheduler {
     assert rb.ad != null;
     rb.handler = handler(rb.cmd);
     if (rb.handler == null) {
-      rb.ring(new Exception("invalid command: "+rb.cmd));
+      rb.ring(new Exception("Invalid command: "+rb.cmd));
     } else try {
       Log.fine("Enqueuing request: "+rb.ad);
       req_queue.add(rb);
@@ -420,7 +420,7 @@ public class StorkScheduler {
       // This can happen if the queue is full. Which right now it never
       // should be, but who knows.
       Log.warning("Rejecting request: ", rb.ad);
-      rb.ring(new Exception("rejected request"));
+      rb.ring(new Exception("Rejected request"));
     } return rb;
   }
 
@@ -510,6 +510,21 @@ public class StorkScheduler {
     return this;
   }
 
+  // Unmarshal data from an ad.
+  private void unmarshalFrom(Ad ad) {
+    // Add all of the users.
+    Ad ua = ad.getAd("users");
+    if (ua != null) for (String s : ua.keySet()) {
+      System.out.println(ua.getAd(s));
+      User u = new User(this, ua.getAd(s));
+      users.add(u);
+
+      // Add their unfinished jobs.
+      if (u.jobs != null) for (StorkJob j : u.jobs)
+        if (!j.isTerminated()) schedule(j.status(JobStatus.scheduled));
+    }
+  }
+
   // Load server state from a file.
   public StorkScheduler loadServerState(String f) {
     return loadServerState(f != null ? new File(f) : null);
@@ -520,7 +535,7 @@ public class StorkScheduler {
     } return this;
   } public StorkScheduler loadServerState(Ad state) {
     try {
-      state.unmarshal(this);
+      unmarshalFrom(state);
     } catch (Exception e) {
       Log.warning("Couldn't load server state: "+e.getMessage());
       e.printStackTrace();

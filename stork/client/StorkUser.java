@@ -7,16 +7,14 @@ import java.io.*;
 import java.util.*;
 
 // User management stuff, like logging in, registering, or changing password.
-// It's hilarious that there's a class called this already and we reference
-// it in here. Use its fully qualified name: stork.scheduler.StorkUser.
 
 public class StorkUser extends StorkClient {
-  private String user_id;
+  private String email;
 
   public StorkUser() {
     super("user");
 
-    args = new String[] { "<user_id>" };
+    args = new String[] { "<email>" };
     desc = new String[] {
       "Log in to a Stork server or register as a new user. "+
       "You will be prompted to enter your password.",
@@ -29,7 +27,7 @@ public class StorkUser extends StorkClient {
 
   public void parseArgs(String[] args) {
     assertArgsLength(args, 1);
-    user_id = stork.scheduler.StorkUser.normalize(args[0]);
+    email = args[0].trim().toLowerCase();
   }
 
   public Ad fillCommand(Ad ad) {
@@ -48,12 +46,12 @@ public class StorkUser extends StorkClient {
 
     if (env.getBoolean("register"))
       ad.put("action", "register");
-    ad.put("user_id", user_id);
+    ad.put("email", email);
     return ad.put("password", password);
   }
       
   public void handle(Ad ad) {
     if (!ad.has("error"))
-      System.out.println("Logged in as: "+ad.get("user_id"));
+      System.out.println("Logged in as: "+ad.get("email"));
   }
 }

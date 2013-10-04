@@ -1,9 +1,10 @@
 package stork.scheduler;
 
 import stork.ad.*;
-import stork.util.*;
 import stork.cred.*;
 import stork.module.*;
+import stork.user.*;
+import stork.util.*;
 
 import java.net.URI;
 
@@ -16,7 +17,7 @@ public class EndPoint {
   private URI uri;
   private AdObject cred;
   private String module;
-  private transient StorkScheduler sched = null;
+  private transient User user;
 
   // Create a new endpoint from a URI.
   private EndPoint() {
@@ -27,12 +28,12 @@ public class EndPoint {
     uri(u);
   } public EndPoint(Ad ad) {
     this(null, ad);
-  } public EndPoint(StorkScheduler sched, Ad ad) {
+  } public EndPoint(User user, Ad ad) {
     uri(ad.get("uri"));
     cred(ad.getObject("cred"));
     module(ad.get("module"));
-    if (sched != null)
-      scheduler(sched);
+    if (user != null)
+      setUser(user);
   }
 
   // Unmarshal strings as end-points with a URI.
@@ -47,8 +48,8 @@ public class EndPoint {
 
   // Quick hack so we can perform lookups in the context of a scheduler.
   // Be sure to set this before doing anything else.
-  public void scheduler(StorkScheduler s) {
-    sched = s;
+  public void setUser(User u) {
+    user = u;
     validate();
   }
 
@@ -82,7 +83,7 @@ public class EndPoint {
     cred = c;
   } public StorkCred<?> cred() {
     return (cred == null)    ? null :
-           (cred.isString()) ? sched.creds.getCred(cred.asString()) :
+           (cred.isString()) ? user.creds.getCred(cred.asString()) :
            (cred.isAd())     ? StorkCred.create(cred.asAd()) : null;
   }
 
@@ -91,8 +92,8 @@ public class EndPoint {
     module = m;
   } public TransferModule module() {
     if (module == null)
-      return sched.xfer_modules.byProtocol(proto());
-    return sched.xfer_modules.byHandle(module);
+      return user.sched.xfer_modules.byProtocol(proto());
+    return user.sched.xfer_modules.byHandle(module);
   }
 
   public String proto() {

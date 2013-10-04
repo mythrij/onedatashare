@@ -1,6 +1,7 @@
 package stork.scheduler;
 
 import stork.ad.*;
+import stork.user.*;
 import stork.util.*;
 import java.util.*;
 
@@ -9,7 +10,7 @@ import java.util.*;
 public class RequestBell extends Bell<Ad> {
   public final Ad ad;
   public final String cmd;
-  public StorkUser user;
+  public User user;
   public StorkScheduler.CommandHandler handler;
   private Ad reply = null;
 

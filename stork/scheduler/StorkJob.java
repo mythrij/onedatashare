@@ -1,8 +1,10 @@
 package stork.scheduler;
 
+import stork.*;
 import stork.ad.*;
 import stork.util.*;
 import stork.module.*;
+import stork.user.*;
 import static stork.scheduler.JobStatus.*;
 
 import java.net.URI;
@@ -22,52 +24,40 @@ import java.net.URI;
 
 public class StorkJob {
   private int job_id = 0;
-  private JobStatus status = null;
-  private EndPoint src = null, dest = null;
-  private String user_id = null;
+  private JobStatus status;
+  private EndPoint src, dest;
   private TransferProgress progress = new TransferProgress();
 
   private int attempts = 0, max_attempts = 10;
-  private String message = null;
+  private String message;
 
-  private Watch queue_timer = null;
-  private Watch run_timer   = null;
+  private Watch queue_timer;
+  private Watch run_timer;
 
-  private transient Thread thread = null;
-  private transient StorkScheduler sched = null;
+  private transient User user;
+  private transient Thread thread;
 
   // Create and enqueue a new job from a user input ad. Don't give this
   // thing unsanitized user input, because it doesn't filter the user_id.
   // That should be filtered by the caller.
   // TODO: Strict filtering and checking.
-  public static StorkJob create(Ad ad) {
+  public static StorkJob create(User user, Ad ad) {
     ad.remove("status", "job_id", "attempts");
     ad.rename("src_url",  "src.url");
     ad.rename("dest_url", "dest.url");
 
     StorkJob j = ad.unmarshalAs(StorkJob.class).status(scheduled);
+    j.user = user;
 
     if (j.src == null || j.dest == null)
       throw new RuntimeException("src or dest was null");
     return j;
   }
 
-  // Call this before scheduling and before executing.
-  public StorkJob scheduler(StorkScheduler s) {
-    src.scheduler(sched = s);
-    dest.scheduler(s);
-    return this;
-  }
-
   // Gets the job info as an ad, merged with progress ad.
   // TODO: More proper filtering.
   public synchronized Ad getAd() {
     return Ad.marshal(this);
-  }
-
-  // Get the user_id of the user who owns this job.
-  public String user_id() {
-    return user_id;
   }
 
   // Sets the status of the job, updates ad, and adjusts state
@@ -104,7 +94,7 @@ public class StorkJob {
   // Called when the job gets removed from the queue.
   public synchronized void remove(String reason) {
     if (isTerminated())
-      throw new RuntimeException("job cannot be removed");
+      throw new RuntimeException("The job has already terminated.");
     message = reason;
     status(removed);
   }
@@ -128,7 +118,7 @@ public class StorkJob {
       return false;
 
     // Check for configured max attempts.
-    int max = sched.env.getInt("max_attempts");
+    int max = Stork.settings.max_attempts;
     if (max > 0 && attempts >= max)
       return false;
 
