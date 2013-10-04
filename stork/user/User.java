@@ -83,13 +83,7 @@ public class User {
         return login(ad);
       } catch (Exception e) {
         throw new RuntimeException("This email is already in use.");
-      } return add(su);
-    }
-
-    // Put a user into the map, using the normalized email as the key.
-    public User add(User su) {
-      put(su.email.trim().toLowerCase().replace('.', '_'), su);
-      return su;
+      } return insert(su);
     }
 
     // Check a login request. Returns the user object if the login was
@@ -126,10 +120,16 @@ public class User {
       return su;
     }
 
+    // Put a user into the map, using the normalized email as the key.
+    public User insert(User su) {
+      put(su.email.trim().toLowerCase().replace('.', '_'), su);
+      return su;
+    }
+
     // Lookup a Stork user by user id. Returns null if the user does
     // not exist.
     public User lookup(String id) {
-      return (id != null) ? get(id.trim().toLowerCase()) : null;
+      return get(id.trim().toLowerCase().replace('.', '_'));
     }
   }
 

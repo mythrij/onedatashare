@@ -517,7 +517,7 @@ public class StorkScheduler {
     if (ua != null) for (String s : ua.keySet()) {
       System.out.println(ua.getAd(s));
       User u = new User(this, ua.getAd(s));
-      users.add(u);
+      users.insert(u);
 
       // Add their unfinished jobs.
       if (u.jobs != null) for (StorkJob j : u.jobs)
