@@ -1,3 +1,14 @@
+// Some fixes until Angular UI merges Bootstrap 3 changes.
+angular.module('template/pagination/pagination.html', []).run(
+  function($templateCache) {
+    $templateCache.put("template/pagination/pagination.html",
+      "<ul class=\"pagination\">\n" +
+      "  <li ng-repeat=\"page in pages\">" +
+      "    <a href ng-class=\"{'btn-primary active': page.active, disabled: page.disabled}\" ng-click=\"selectPage(page.number)\">{{page.text}}</a>" +
+      "</li></ul>\n")
+  }
+);
+
 angular.module('stork', ['ui.bootstrap', 'ui'],
   function ($provide, $routeProvider) {
     $routeProvider.when('/', {
@@ -8,14 +19,10 @@ angular.module('stork', ['ui.bootstrap', 'ui'],
       templateUrl: 'transfer.html',
       controller: TransferCtrl,
       requireLogin: true
-    }).when('/login', {
-      title: 'Login',
-      templateUrl: 'login.html',
-      controller: LoginCtrl
     }).when('/user', {
       title: 'User Settings',
       templateUrl: 'user.html',
-      controller: LoginCtrl
+      requireLogin: true
     }).when('/terms', {
       title: 'Terms of Service',
       templateUrl: 'terms.html'
@@ -64,6 +71,12 @@ angular.module('stork', ['ui.bootstrap', 'ui'],
   return function (input, format) {
     return moment(input, format).fromNow()
   }
+}).filter('paginate', function () {
+  return function (input, page, per) {
+    page = (!page || page < 1) ? 1  : page
+    per  = (!per  || per  < 1) ? 10 : per
+    return input.slice(per*(page-1), per*page)
+  }
 }).directive('bsRoute', function ($location) {
   return {
     link: function (scope, elm, attrs) {
@@ -78,6 +91,14 @@ angular.module('stork', ['ui.bootstrap', 'ui'],
           check()
         }
       )
+    }
+  }
+}).directive('focusMe', function ($timeout) {    
+  return {    
+    link: function (scope, element, attrs, model) {                
+      $timeout(function () {
+        $(element[0]).focus()
+      }, 20)
     }
   }
 }).config(function ($provide) {
@@ -116,6 +137,11 @@ angular.module('stork', ['ui.bootstrap', 'ui'],
           'range': range
         })
       },
+      mkdir: function (uri) {
+        return this.$post('mkdir', {
+          'uri': name
+        })
+      },
       submit: function (job) {
         return this.$post('submit', job)
       }
@@ -129,17 +155,17 @@ angular.module('stork', ['ui.bootstrap', 'ui'],
       },
       saveLogin: function (u) {
         $rootScope.$user = {
-          user_id:   u.user_id,
-          pass_hash: u.pass_hash
+          email:     u.email,
+          hash: u.hash
         }
         var exp = { expires: 31536000 }
-        Cookies.set('user_id',   u.user_id,   exp)
-        Cookies.set('pass_hash', u.pass_hash, exp)
+        Cookies.set('user.email', u.email, exp)
+        Cookies.set('user.hash', u.hash, exp)
       },
       forgetLogin: function () {
         delete $rootScope.$user
-        Cookies.expire('user_id')
-        Cookies.expire('pass_hash')
+        Cookies.expire('user.email')
+        Cookies.expire('user.hash')
       },
       logIn: function (info) {
         if (info)
@@ -151,11 +177,11 @@ angular.module('stork', ['ui.bootstrap', 'ui'],
       },
       $init: function () {
         var u = {
-          user_id:   Cookies.get('user_id'),
-          pass_hash: Cookies.get('pass_hash')
+          email: Cookies.get('user.email'),
+          hash:  Cookies.get('user.hash')
         }
 
-        if (u.user_id && u.pass_hash)
+        if (u.email && u.hash)
           this.logIn(u)
         else
           this.forgetLogin(u)
@@ -183,16 +209,23 @@ angular.module('stork', ['ui.bootstrap', 'ui'],
   )
 })
 
-function LoginCtrl($scope, $stork, $location, $user) {
+function LoginCtrl($scope, $stork, $location, $user, $modal) {
   $scope.logOut = function () {
     $user.forgetLogin()
     $location.path('/login')
   }
   $scope.logIn = function (u) {
-    $user.logIn(u).then(function () {
-      $location.path('/')
+    console.log($scope.user)
+    return $user.logIn(u).then(function () {
+      $scope.$close()
     }, function (e) {
       alert(error)
+    })
+  }
+  $scope.loginModal = function () {
+    $modal.open({
+      templateUrl: '/parts/login.html',
+      controller: LoginCtrl
     })
   }
 }
@@ -262,33 +295,35 @@ function TransferCtrl($scope, $user, $stork, $modal) {
   }
 }
 
-function BrowseCtrl($scope, $stork, $q) {
+function BrowseCtrl($scope, $stork, $q, $modal) {
   $scope.uri_state = { }
-  $scope.show_dots = false
-
-  var is_hidden = function (f) {
-    return f.name && f.name.charAt(0) == '.'
-  }
-
-  var all_hidden = function (f) {
-    if (!f.dir || !f.files || f.files.length == 0)
-      return false
-    for (k in f.files)
-      if (!is_hidden(f.files[k])) return false
-    return true
-  }
+  $scope.showHidden = false
 
   // Fetch and cache the listing for the given URI.
-  var fetch = function (u) {
+  $scope.fetch = function (u) {
     var scope = this
-    return $stork.ls(u.toString(), 1).then(
+    scope.loading = true
+    return $stork.ls(u.href(), 1).then(
       function (d) {
         for (k in d.files) d.files[k].$uri = function () {
-          return u.clone().segment(this.name)
+          return u.clone().segment(URI.encode(this.name))
         }
-        return d
+        return scope.root = d
+      }, function (e) {
+        return $q.reject(scope.error = e)
       }
-    )
+    ).always(function () {
+      scope.loading = false
+    })
+  }
+
+  // Open the mkdir dialog.
+  $scope.mkdir = function () {
+    $modal.open({
+      templateUrl: 'new-folder.html'
+    }).result.then(function (name) {
+      alert(name)
+    })
   }
 
   // Get or set the endpoint URI.
@@ -304,7 +339,7 @@ function BrowseCtrl($scope, $stork, $q) {
         u = u.clone().normalize()
       }
 
-      $scope.temp_uri = u.toString()
+      $scope.temp_uri = u.readable()
       $scope.uri_state.changed = false
       return $scope.end.uri = u
     }
@@ -315,25 +350,28 @@ function BrowseCtrl($scope, $stork, $q) {
       u = $scope.temp_uri
     u = $scope.uri(u)
 
+    // Clean up from last refresh.
+    $scope.unselect()
+    delete $scope.error
+    delete $scope.root
+
     if (!u) {
       delete $scope.root
       $scope.uri_state.changed = false
     } else {
-      $scope.root = fetch(u).then(
+      $scope.open = true
+      $scope.fetch(u).then(
         function (f) {
           if (f.dir)
             $scope.uri(u = u.filename(u.filename()+'/'))
-          f.$open = true
           f.name = u.toString()
           f.$uri = function () { return u.clone() }
           return f
         }, function (e) {
-          return { $error: e }
-        }, function () {
-          return this.f
+          $scope.error = e
         }
       )
-    } $scope.unselect()
+    }
   }
 
   $scope.up_dir = function () {
@@ -343,35 +381,15 @@ function BrowseCtrl($scope, $stork, $q) {
     $scope.refresh(u)
   }
 
-  $scope.tree_classes = function (f) {
-    return {
-      'dir': f.dir,
-      'file': !f.dir,
-      'loading': f.$loading,
-      'alert-warning': !!f.$error,
-      'open': f.$open,
-      'dot': is_hidden(f) && !f.$selected,
-      'alert-info': f.$selected,
-      'empty': f.files && f.files.length == 0
-    }
-  }
-
-  $scope.toggle = function (f) {
-    if (f && f.dir)
-    if (f.$open = !f.$open)
-    if (!f.files) {
+  $scope.toggle = function () {
+    var scope = this
+    if (scope.root && scope.root.dir)
+    if (scope.open = !scope.open)
+    if (!scope.root.files) {
       // We're opening, fetch subdirs if we haven't.
-      f.files = fetch(f.$uri(), f).then(
-        function (f) {
-          return f.files
-        }, function (e) {
-          f.$error = e
-        }
-      )
+      scope.fetch(scope.root.$uri(), scope.root)
     }
   }
-
-  $scope.all_hidden = all_hidden
 
   $scope.select = function (f) {
     var u = f.$uri().toString()
@@ -389,7 +407,7 @@ function BrowseCtrl($scope, $stork, $q) {
   }
 
   $scope.selected_files = function () {
-    return Object.keys(this.end.selected)
+    return _.keys(this.end.selected)
   }
 }
 
@@ -408,25 +426,28 @@ function CredCtrl($scope, $modal) {
 }
 
 function QueueCtrl($scope, $rootScope, $stork, $timeout) {
-  $scope.filter_set = {
-    all: {
-      scheduled:  true, processing: true, paused:   true,
-      removed:    true, failed:     true, complete: true
+  $scope.filters = {
+    all: function (j) {
+      return true
     },
-    pending: {
-      scheduled:  true, processing: true, paused:   true
+    pending: function (j) {
+      return {
+        scheduled: true, processing: true, paused: true
+      }[j.status]
     },
-    done: {
-      removed:    true, failed:     true, complete: true
+    done: function (j) {
+      return {
+        removed: true, failed: true, complete: true
+      }[j.status]
     },
-    scheduled:  { scheduled:  true },
-    processing: { processing: true },
-    paused:     { paused:     true },
-    removed:    { removed:    true },
-    failed:     { failed:     true },
-    complete:   { complete:   true }
+    scheduled:  function (j) { return j.status == 'scheduled' },
+    processing: function (j) { return j.status == 'processing' },
+    paused:     function (j) { return j.status == 'paused' },
+    removed:    function (j) { return j.status == 'removed' },
+    failed:     function (j) { return j.status == 'failed' },
+    complete:   function (j) { return j.status == 'complete' },
   }
-  $scope.filters = [
+  $scope.filterList = [
     'scheduled', 'processing', 'paused',
     'removed', 'failed', 'complete', null,
     'pending', 'done', 'all'
@@ -435,6 +456,26 @@ function QueueCtrl($scope, $rootScope, $stork, $timeout) {
 
   $scope.jobs = { }
   $scope.auto = true
+
+  // Pagination
+  $scope.perPage = 5
+  $scope.page = 1
+
+  $scope.pager = function (len) {
+    var s = $scope.page-2
+    if (s <= 0)
+      s = 1
+    var e = s+5
+    if (e > len/$scope.perPage)
+      e = len/$scope.perPage+1
+    return _.range(s, e+1)
+  }
+  $scope.setPage = function (p) {
+    $scope.page = p
+  }
+  $scope.numPages = function (len) {
+    
+  }
 
   $scope.$on('$destroy', function (event) {
     // Clean up the auto-refresh timer.
@@ -456,6 +497,8 @@ function QueueCtrl($scope, $rootScope, $stork, $timeout) {
     } if ($scope.auto) {
       $scope.refresh().then(function () {
         $rootScope.autoTimer = $timeout($scope.autoRefresh, 1000)
+      }, function () {
+        $scope.auto = false
       })
     }
   }
@@ -509,7 +552,7 @@ $(document).on('click', '.panel-collapse-header', function (e) {
 })
 
 // Tooltips
-$(document).on('mouseover', '[tips]', function () {
+$(document).on('mouseover', '[title]', function () {
   $(this).tooltip({
     'animation': false,
     'container': 'body'

@@ -262,6 +262,11 @@ tr.min-cell {
   content: "\f138";
 }
 
+/* Bootstrap hacks */
+.pagination {
+  margin: 0;
+}
+
 /* Special UI stuff for logged in users */
 body.logged-out .logged-in {
   display: none;

@@ -14,27 +14,27 @@
     </div>
     <div class="col-sm-1 input-group-lg container text-center panel panel-heading transfer-controls">
       <div class="col-xs-1 visible-xs"></div>
-      <button class="btn btn-lg btn-default col-sm-12 col-xs-2" tooltip="Transfer contents"
+      <button class="btn btn-lg btn-default col-sm-12 col-xs-2" title="Transfer contents"
               ng-disabled="!canTransfer(left, right, true)" ng-click="transfer(left, right, true)">
         <i class="icon-share hidden-xs"></i>
         <i class="icon-share visible-xs icon-rotate-90"></i>
       </button>
-      <button class="btn btn-lg btn-default col-sm-12 col-xs-2" tooltip="Transfer"
+      <button class="btn btn-lg btn-default col-sm-12 col-xs-2" title="Transfer"
               ng-disabled="!canTransfer(left, right, false)" ng-click="transfer(left, right, false)">
         <i class="icon-share-alt hidden-xs"></i>
         <i class="icon-share-alt visible-xs icon-rotate-90"></i>
       </button>
-      <button class="btn btn-lg btn-default col-sm-12 col-xs-2 ph" tooltip="Synchronize"
+      <button class="btn btn-lg btn-default col-sm-12 col-xs-2 ph" title="Synchronize"
               ng-disabled="!canSync(left, right)" ng-click="sync(left, right)">
         <i class="icon-refresh hidden-xs"></i>
         <i class="icon-refresh visible-xs icon-rotate-90"></i>
       </button>
-      <button class="btn btn-lg btn-default col-sm-12 col-xs-2" tooltip="Transfer"
+      <button class="btn btn-lg btn-default col-sm-12 col-xs-2" title="Transfer"
               ng-disabled="!canTransfer(right, left, false)" ng-click="transfer(right, left, false)">
         <i class="icon-share-alt hidden-xs icon-rotate-180"></i>
         <i class="icon-share-alt visible-xs icon-rotate-270"></i>
       </button>
-      <button class="btn btn-lg btn-default col-sm-12 col-xs-2" tooltip="Transfer contents"
+      <button class="btn btn-lg btn-default col-sm-12 col-xs-2" title="Transfer contents"
               ng-disabled="!canTransfer(right, left, true)" ng-click="transfer(right, left, true)">
         <i class="icon-share hidden-xs icon-rotate-180"></i>
         <i class="icon-share visible-xs icon-rotate-270"></i>

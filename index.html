@@ -48,7 +48,7 @@
 
           <a id="user-button" class="btn btn-default navbar-toggle logged-in" href="#/user">
             <i class="icon-user"></i>
-            <span ng-bind="$user.user_id">
+            <span ng-bind="$user.email">
               <em class="text-muted">Loading...</em>
             </span>
           </a>
@@ -68,15 +68,15 @@
             <li class="hidden-xs" bs-route="/user">
               <a id="user-button" class="logged-in" href="#/user" ng-cloak>
                 <i class="icon-user"></i>
-                <span ng-bind="$user.user_id"></span>
+                <span ng-bind="$user.email"></span>
               </a>
             </li>
-            <li bs-route="/login">
-              <a class="logged-out" href="#/login">
+            <li ng-controller="LoginCtrl">
+              <a class="logged-out" href="#/login" ng-click="loginModal()">
                 <i class="icon-signin"></i>
                 <span>Log in</span>
               </a>
-              <a class="logged-in" ng-controller="LoginCtrl" ng-click="logOut()" href ng-cloak>
+              <a class="logged-in" ng-click="logOut()" href ng-cloak>
                 <i class="icon-signout"></i>
                 <span>Log out</span>
               </a>
