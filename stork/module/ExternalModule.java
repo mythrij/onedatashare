@@ -11,7 +11,6 @@ import java.net.URI;
 // A transfer module which executes as an independent process.
 
 public class ExternalModule extends TransferModule {
-  private transient Ad info_ad = null;
   private transient File exe;
 
   // Inner class representing a transfer.
@@ -98,12 +97,12 @@ public class ExternalModule extends TransferModule {
   }
 
   public ExternalModule(File exe) {
-    super(getInfoAd(exe));
+    super(readInfoAd(exe));
     this.exe = exe;
   }
 
   // Get an info ad by executing this file with the -i option.
-  private static Ad getInfoAd(File exe) {
+  private static Ad readInfoAd(File exe) {
     if (!exe.isAbsolute())
       exe = exe.getAbsoluteFile();
 
@@ -132,9 +131,4 @@ public class ExternalModule extends TransferModule {
   }
 
   public void closeImpl() { }
-
-  // Return cached info ad or read new one if necessary.
-  public Ad infoAd() {
-    return info_ad;
-  }
 }

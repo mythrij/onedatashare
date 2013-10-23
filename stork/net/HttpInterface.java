@@ -118,7 +118,7 @@ public class HttpInterface extends StorkInterface {
 
       // Merge in query string.
       if (cmd.getQuery() != null)
-        ad.addAll(queryToAd(cmd.getQuery()));
+        ad.addAll(queryToAd(cmd.getRawQuery()));
 
       command = cmd.getPath();
       System.out.println("head: "+ad+", "+cmd+" "+done);

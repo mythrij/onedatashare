@@ -137,6 +137,8 @@ public class StorkScheduler {
           if (req.handler.requiresLogin())
             throw new RuntimeException("Action requires login.");
           req.user = anonymous;
+        } else {
+          req.user = anonymous;
         }
 
         // Let the magic happen.
@@ -178,6 +180,42 @@ public class StorkScheduler {
 
       return req.ad.getBoolean("count") ?
         new Ad("count", l.size()) : Ad.marshal(req.user.jobs);
+    }
+  }
+
+  class StorkMkdirHandler extends CommandHandler {
+    public Ad handle(RequestBell req) {
+      StorkSession sess = null;
+      try {
+        EndPoint ep = new EndPoint(req.user, req.ad);
+        sess = ep.session();
+        sess.mkdir(ep.path());
+        return new Ad("message", "Success!");
+      } finally {
+        if (sess != null) sess.close();
+      }
+    }
+
+    public boolean requiresLogin() {
+      return false;
+    }
+  }
+
+  class StorkRmfHandler extends CommandHandler {
+    public Ad handle(RequestBell req) {
+      StorkSession sess = null;
+      try {
+        EndPoint ep = new EndPoint(req.user, req.ad);
+        sess = ep.session();
+        sess.rm(ep.path());
+        return new Ad("message", "Success!");
+      } finally {
+        if (sess != null) sess.close();
+      }
+    }
+
+    public boolean requiresLogin() {
+      return false;
     }
   }
 
@@ -227,8 +265,8 @@ public class StorkScheduler {
       schedule(job);
 
       synchronized (req.user) {
-        job.jobId(req.user.jobs.size());
         req.user.jobs.add(job);
+        job.jobId(req.user.jobs.size());
       }
 
       return job.getAd();
@@ -572,6 +610,8 @@ public class StorkScheduler {
     cmd_handlers = new HashMap<String, CommandHandler>();
     cmd_handlers.put("q", new StorkQHandler());
     cmd_handlers.put("ls", new StorkLsHandler());
+    cmd_handlers.put("mkdir", new StorkMkdirHandler());
+    cmd_handlers.put("rmf", new StorkRmfHandler());
     cmd_handlers.put("status", new StorkQHandler());
     cmd_handlers.put("submit", new StorkSubmitHandler());
     cmd_handlers.put("rm", new StorkRmHandler());

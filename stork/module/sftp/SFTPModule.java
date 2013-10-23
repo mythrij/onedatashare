@@ -8,12 +8,12 @@ import java.net.URI;
 
 public class SFTPModule extends TransferModule {
   public SFTPModule() {
-    super(new Ad("name", "Stork SFTP/SCP Module")
-            .put("version", "0.1")
-            .put("author", "Brandon Ross")
-            .put("email", "bwross@buffalo.edu")
-            .put("description", "A module for SFTP/SCP transfers.")
-            .put("protocols", "scp", "sftp"));
+    super("Stork SFTP/SCP Module", "scp", "sftp");
+    version = "0.1";
+    author  = "Brandon Ross";
+    email   = "bwross@buffalo.edu";
+    description =
+      "A module for SFTP/SCP transfers.";
   }
 
   // Create a new connection to an FTP server.

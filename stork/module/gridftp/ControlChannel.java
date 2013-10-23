@@ -4,7 +4,6 @@ import stork.ad.*;
 import stork.util.*;
 import static stork.module.ModuleException.*;
 import static stork.util.StorkUtil.Static.*;
-import stork.stat.*;
 import stork.cred.*;
 import stork.scheduler.*;
 
@@ -145,8 +144,7 @@ public class ControlChannel extends Pipeline<String, Reply> {
           }
         }
 
-        pipe("SITE CLIENTINFO appname="+GridFTPModule.name+";appver="+
-             GridFTPModule.version+";schema=gsiftp;");
+        pipe("SITE CLIENTINFO appname=stork;appver=1.0;schema=gsiftp;");
       } else {
         String user = (u.user == null) ? "anonymous" : u.user;
         String pass = (u.pass == null) ? "none" : u.pass;

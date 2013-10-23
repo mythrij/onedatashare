@@ -3,7 +3,6 @@ package stork.module.gridftp;
 import stork.ad.*;
 import stork.module.*;
 import stork.util.*;
-import stork.stat.*;
 import stork.cred.*;
 import static stork.module.ModuleException.*;
 

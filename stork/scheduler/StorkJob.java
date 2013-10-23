@@ -215,7 +215,8 @@ public class StorkJob {
         message = e.getMessage();
       } else if (!isTerminated()) {
         status(failed);
-      }
+        message = e.getMessage();
+      } e.printStackTrace();
     } finally {
       // Any time we're not running, the sessions should be closed.
       thread = null;

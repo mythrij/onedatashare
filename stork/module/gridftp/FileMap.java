@@ -4,7 +4,6 @@ import stork.ad.*;
 import stork.module.*;
 import stork.util.*;
 import static stork.util.StorkUtil.Static.*;
-import stork.stat.*;
 import stork.cred.*;
 
 import java.net.*;
@@ -19,6 +18,7 @@ import org.gridforum.jgss.*;
 
 // A combined sink/source for file I/O.
 
+@Deprecated
 class FileMap implements DataSink, DataSource {
   RandomAccessFile file;
   long rem, total, base;

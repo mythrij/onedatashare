@@ -182,9 +182,9 @@ public class Ad implements Serializable {
     AdObject o = getObject(s);
     return (o != null) ? o.asAd() : def;
   } public Ad[] getAds(Object s) {
-    return getAll(Ad.class, s);
+    return getAll(Ad[].class, s);
   } public Ad[] getAds() {
-    return getAll(Ad.class);
+    return getAll(Ad[].class);
   }
 
   // Get a value as a list of a given type. If the value is not an ad,
@@ -192,9 +192,11 @@ public class Ad implements Serializable {
   // exist, returns null.
   public AdObject[] getAll(Object s) {
     return getAll(null, s);
-  } public <C> C[] getAll(Class<C> c) {
+  } public <C> C getAll(Class<C> c) {
+    assert c.isArray();
     return AdObject.wrap(this).asArray(c);
-  } public <C> C[] getAll(Class<C> c, Object s) {
+  } public <C> C getAll(Class<C> c, Object s) {
+    assert c.isArray();
     AdObject o = getObject(s);
     return (o != null) ? o.asArray(c) : null;
   }
@@ -495,7 +497,7 @@ public class Ad implements Serializable {
   } public boolean isMap() {
     return map != null;
   } public boolean isUndetermined() {
-    return list == map;  // :)
+    return list == map;
   }
 
   // Marshalling
@@ -505,52 +507,49 @@ public class Ad implements Serializable {
   // Unmarshal this ad into an object. This operation can throw a runtime
   // exception. Should we reset fields if there's an exception?
   public synchronized <O> O unmarshal(O o) {
-    Class<?> c = o.getClass();
+    return unmarshal(o, null);
+  } protected synchronized <O> O unmarshal(O o, AdType t) {
+    t = (t != null) ? t : new AdType(o.getClass());
+    Class c = t.clazz();
     if (c == Ad.class) {
       ((Ad)o).addAll(this);
-    } else if (isMap() && o instanceof Map) {
-      for (Map.Entry<String, AdObject> e : map().entrySet())
-        ((Map)o).put(e.getKey(), e.getValue().asObject());
-    } else if (isList() && o instanceof Collection) {
-      ((Collection)o).addAll(list());
-    /*} else if (o.getClass().isArray()) {
-      return 0getAll(o.getClass());*/
-    } else {
-      for (Field f : fieldsFrom(o))
-        marshalField(f, o, false);
+    } else if (o instanceof Map) {
+      AdType kt = t.generics()[0];
+      AdType vt = t.generics()[1];
+      for (Map.Entry<String, AdObject> e : map(false).entrySet())
+        ((Map)o).put(e.getKey(), e.getValue().as(vt));
+    } else if (o instanceof Collection) {
+      AdType vt = t.generics()[0];
+      for (AdObject v : list(false))
+        ((Collection)o).add(v.as(vt));
+    } else if (t.isArray()) {
+      AdType vt = t.component();
+      int i = 0;
+      for (AdObject v : list(false)) try {
+        Array.set(o, i++, v.as(vt));
+      } catch (ArrayIndexOutOfBoundsException e) {
+        break;
+      }
+    } else for (AdMember f : t.fields()) try {
+      f.set(o, getObject(f.name()).as(f));
+    } catch (Exception e) {
+      // Either ad had no such member or it was final and we couldn't set
+      // it. Either way, we don't have to worry about it.
     } return o;
   }
 
   // Construct a new instance of a class and marshal into it.
-  public <O> O unmarshalAs(Class<O> clazz, Object... args) {
-    Class<?>[] ca = new Class<?>[args.length];
-    Constructor<O> c = null;
-    for (int i = 0; i < args.length; i++) {
-      // Hmm, what to do about null arguments...
-      ca[i] = (args[i] != null) ? args[i].getClass() : Object.class;
-    } try {
-      // Get an inherited or public constructor first.
-      c = clazz.getConstructor(ca);
-      return unmarshal(c.newInstance(args));
-    } catch (Exception e) {
-      boolean accessible = false;
-      // If that didn't work, try to get a declared constructor.
-      try {
-        c = clazz.getDeclaredConstructor(ca);
-        accessible = c.isAccessible();
-        c.setAccessible(true);
-        return unmarshal(c.newInstance(args));
-      } catch (Exception e2) {
-        throw new RuntimeException("unmarshalling "+clazz, e2);
-      } finally {
-        if (c != null)
-          c.setAccessible(accessible);
-      }
-    }
+  public <O> O unmarshalAs(Class<O> clazz) {
+    return clazz.cast(unmarshalAs(new AdType(clazz)));
+  } protected Object unmarshalAs(AdType t) {
+    AdMember cons = t.constructor();
+    return unmarshal(cons.construct(), t);
   }
 
   // Marshal an object into an ad.
   public static Ad marshal(Object o) {
+    return marshal(o, new AdType(o.getClass()));
+  } public static Ad marshal(Object o, AdType t) {
     try {
       if (o instanceof Ad) {
         return (Ad)o;
@@ -564,8 +563,8 @@ public class Ad implements Serializable {
         return new Ad((Object[])o);
       } else {
         Ad ad = new Ad();
-        for (Field f : fieldsFrom(o))
-          ad.marshalField(f, o, true);
+        for (AdMember f : t.fields())
+          ad.put(f.name(), f.get(o));
         return ad;
       }
     } catch (RuntimeException e) {
@@ -575,65 +574,12 @@ public class Ad implements Serializable {
     }
   }
 
-  // Helper method to marshal/unmarshal a field to/from an ad.
-  private synchronized void marshalField(Field f, Object o, boolean m) {
-    // Ignore certain types of fields.
-    int mod = f.getModifiers();
-    if (f.isSynthetic() ||
-        Modifier.isTransient(mod) ||
-        Modifier.isStatic(mod)) return;
-
-    // Skip if unmarshalling and ad has no such member.
-    AdObject ao = null;
-    if (!m && (ao = getObject(f.getName())) == null)
-      return;
-
-    // Make the field accessible.
-    boolean accessible = f.isAccessible();
-    f.setAccessible(true);
-
-    // Do the deed.
-    try {
-      if (m) {  // If we're marshalling...
-        putObject(f.getName(), f.get(o));
-      } else {  // Else unmarshalling (ao is not null).
-        f.set(o, ao.as(f.getType()));
-      }
-    } catch (RuntimeException e) {
-      throw e;
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    } finally {
-      // Reset access permissions.
-      f.setAccessible(accessible);
-    }
-  }
-
-  // Helper method to get all interesting fields in a class.
-  private static Set<Field> fieldsFrom(Object o) {
-    return fieldsFrom(o.getClass());
-  } private static Set<Field> fieldsFrom(Class<?> c) {
-    Set<Field> fields = new HashSet<Field>();
-    fields.addAll(Arrays.asList(c.getDeclaredFields()));
-    fields.addAll(Arrays.asList(c.getFields()));
-    return fields;
-  }
-
-  // Package-private helper methods to unmarshal into lists and maps.
-  <T> Collection<T> intoCollection(Collection<T> c) {
-    if (isList()) for (AdObject o : list())
-      c.add((T)o.asObject());
-    else if (isMap()) for (AdObject o : map.values())
-      c.add((T)o.asObject());
-    return c;
-  }
-  <K,T> Map<K,T> intoMap(Map<K,T> m) {
-    int i = 0;
-    if (isList()) for (AdObject o : list())
-      m.put((K)Integer.valueOf(i++), (T)o.asObject());
-    else if (isMap()) for (Map.Entry<?,AdObject> e : map.entrySet())
-      m.put((K)e.getKey(), (T)e.getValue().asObject());
-    return m;
+  // Get the field names of a type as a string array.
+  public static String[] fieldsOf(Type t) {
+    Set<String> set = new HashSet<String>();
+    for (AdMember m : new AdType(t).fields())
+      set.add(m.name());
+    return set.toArray(new String[0]);
   }
 
   // Composition methods
@@ -665,10 +611,25 @@ public class Ad implements Serializable {
     return toClassAd(true);
   }
 
+  private static class TestClass {
+    LinkedList<String> sl;
+    LinkedList<Integer> il;
+    String[] sa;
+    int[] ia;
+  }
+
   // Testing method.
   public static void main(String args[]) {
-    System.out.println("Type an ad:");
-    Ad ad = Ad.parse(System.in);
-    System.out.println("Got ad: \n"+ad);
+    Ad ad = new Ad();
+    ad.put("sl", new int[] { 1, 2, 3 });
+    ad.put("il", new String[] { "1", "2", "3" });
+    ad.put("sa", new int[] { 1, 2, 3 });
+    ad.put("ia", new String[] { "1", "2", "3" });
+    TestClass tc = ad.unmarshalAs(TestClass.class);
+    System.out.println(Ad.marshal(tc));
+    System.out.println(tc.sl);
+    System.out.println(tc.il);
+    System.out.println(tc.sa[0]+tc.sa[2]);
+    System.out.println(tc.ia[0]+tc.ia[2]);
   }
 }

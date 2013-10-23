@@ -77,8 +77,24 @@ public class AdObject implements Comparable<AdObject> {
     if (o instanceof Map)
       return new Ad((Map) o);
     if (o.getClass().isArray())
-      return new Ad((Object[]) o);
+      return new Ad(fixArray(o));
     return Ad.marshal(o);
+  }
+
+  // Helper method to wrap primitive arrays.
+  private static List fixArray(Object o) {
+    List l = fixArray2(o);
+    return l;
+  } private static List fixArray2(final Object array) {
+    assert(array.getClass().isArray());
+    Class c = array.getClass().getComponentType();
+
+    if (c.isPrimitive()) return new AbstractList() {
+      public Object get(int i) { return Array.get(array, i); }
+      public int size() { return Array.getLength(array); }
+    };
+
+    return Arrays.asList((Object[]) array);
   }
 
   public static AdObject wrap(Object o) {
@@ -158,11 +174,11 @@ public class AdObject implements Comparable<AdObject> {
   }
 
   public Collection<?> asList() {
-    return asAd().intoCollection(new LinkedList<Object>());
+    return asAd().unmarshalAs(LinkedList.class);
   }
 
   public Map<?,?> asMap() {
-    return asAd().intoMap(new HashMap<String,Object>());
+    return asAd().unmarshalAs(HashMap.class);
   }
 
   // Helper function to try to find an unmarshal method.
@@ -180,37 +196,16 @@ public class AdObject implements Comparable<AdObject> {
     }
   }
 
-  // Helper method for converting primitive classes to their wrappers.
-  private static Class<?> fixPrimitiveClass(Class<?> c) {
-    if (c == int.class)
-      return Integer.class;
-    if (c == double.class)
-      return Double.class;
-    if (c == float.class)
-      return Float.class;
-    if (c == byte.class)
-      return Byte.class;
-    if (c == long.class)
-      return Long.class;
-    if (c == short.class)
-      return Short.class;
-    if (c == boolean.class)
-      return Boolean.class;
-    if (c == char.class)
-      return Character.class;
-    return c;
-  }
-
   public Object as(Class<?> c) {
+    return as(new AdType(c));
+  } protected Object as(AdType t) {
+    Class c = t.wrapper();
     if (object == null) {
       return null;
-    } if (c.isPrimitive()) {
-      c = fixPrimitiveClass(c);
     } try {
       // Check if it's an array.
-      if (c.isArray())
-        return c.cast(asArray(c.getComponentType()));
-      // Try a primitive type conversion.
+      if (t.isArray())
+        return asArray(t);
       Method m = conv_map.get(c);
       if (m != null)
         return c.cast(m.invoke(this));
@@ -219,7 +214,7 @@ public class AdObject implements Comparable<AdObject> {
       if (m != null)
         return c.cast(m.invoke(null, object));
       // Just unmarshal the ad into the object.
-      return asAd().unmarshalAs(c);
+      return asAd().unmarshalAs(t);
     } catch (RuntimeException e) {
       throw e;
     } catch (Exception e) {
@@ -227,14 +222,20 @@ public class AdObject implements Comparable<AdObject> {
     }
   }
 
-  public <C> C[] asArray(Class<C> c) {
+  public <C> C asArray(Class<C> c) {
+    return c.cast(asArray(new AdType(c)));
+  } protected Object asArray(AdType t) {
+    assert t.isArray();
+    AdType c = t.component();
+    Object arr;
     if (object instanceof Ad) {
-      Method m = conv_map.get(c);
+      // Convert to a list or map and unmarshal into array.
+      Method m = conv_map.get(t.component().clazz());
       if (m == null)
-        throw new RuntimeException("cannot convert to "+c);
+        throw new RuntimeException("cannot convert "+object.getClass()+" to "+c);
 
       Ad ad = asAd();
-      C[] arr = (C[]) Array.newInstance(c, ad.size());
+      arr = c.asArray(ad.size());
 
       try {
         int i = 0;
@@ -242,18 +243,16 @@ public class AdObject implements Comparable<AdObject> {
           Array.set(arr, i++, m.invoke(o));
         else if (ad.isMap()) for (AdObject o : ad.map().values())
           Array.set(arr, i++, m.invoke(o));
-        return arr;
       } catch (RuntimeException e) {
         throw e;
       } catch (Exception e) {
         throw new RuntimeException(e);
       }
-      
     } else {
-      C[] arr = (C[]) Array.newInstance(c, 1);
+      // Convert to a singleton array.
+      arr = t.asArray(1);
       Array.set(arr, 0, as(c));
-      return arr;
-    }
+    } return arr;
   }
 
   // Check if the enclosed object is of a given type.

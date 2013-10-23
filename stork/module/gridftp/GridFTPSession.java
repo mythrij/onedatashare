@@ -6,7 +6,7 @@ import stork.util.*;
 import stork.scheduler.*;
 import static stork.util.StorkUtil.Static.*;
 import static stork.module.ModuleException.*;
-import stork.stat.*;
+import stork.optimizers.*;
 import stork.cred.*;
 
 import java.net.*;
@@ -74,8 +74,8 @@ public class GridFTPSession extends StorkSession {
     // This bell will be rung when the listing has finished, and will
     // contain the root file tree.
     ListBell bell = new ListBell(path, new FileTree(StorkUtil.basename(path)));
-    bell.opts  = opts;
-    bell.cp    = pair;
+    bell.opts = opts;
+    bell.cp   = pair;
 
     if (opts.has("depth")) {
       bell.depth = opts.getInt("depth", 1);
@@ -487,7 +487,7 @@ public class GridFTPSession extends StorkSession {
     return cc.pipe("PASV", new PassiveBell(sink));
   }
 
-  // Ringing this will a PASV reply will parse the reply and ring the
+  // Ringing this with a PASV reply will parse the reply and ring the
   // associated bell with the HostPort.
   private class PassiveBell extends Bell<Reply> {
     Bell<HostPort> next;

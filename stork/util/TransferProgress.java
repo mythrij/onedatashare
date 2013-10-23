@@ -5,7 +5,7 @@ import stork.ad.*;
 
 // Used to track transfer progress. Just tell this thing when some
 // bytes or a file are done and it will update its state with that
-// information and, if an AdSink is attached, publish an ad to it.
+// information.
 
 public class TransferProgress {
   public final transient Watch watch = new Watch();

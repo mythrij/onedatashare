@@ -23,7 +23,7 @@ public class User {
   // The scheduler this user is associated with.
   public transient StorkScheduler sched;
 
-  public LinkedList<StorkJob> jobs = new LinkedList<StorkJob>();
+  public ArrayList<StorkJob> jobs = new ArrayList<StorkJob>();
   public CredManager creds = new CredManager();
 
   // The minimum password length.

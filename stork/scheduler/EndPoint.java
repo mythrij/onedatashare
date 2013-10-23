@@ -91,9 +91,10 @@ public class EndPoint {
   public void module(String m) {
     module = m;
   } public TransferModule module() {
+    TransferModuleTable xm = TransferModuleTable.instance();
     if (module == null)
-      return user.sched.xfer_modules.byProtocol(proto());
-    return user.sched.xfer_modules.byHandle(module);
+      return xm.byProtocol(proto());
+    return xm.byHandle(module);
   }
 
   public String proto() {

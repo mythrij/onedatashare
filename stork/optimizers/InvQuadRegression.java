@@ -1,4 +1,4 @@
-package stork.stat;
+package stork.optimizers;
 
 import java.util.Scanner;
 
