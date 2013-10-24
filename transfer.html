@@ -47,57 +47,16 @@
         </div>
       </div>
     </div>
+
+    <div class="clearfix" ng-if="debugMode"></div>
+    <div class="text-left col-xs-12" ng-if="debugMode">
+      <h4>Raw Job Info</h4>
+      <pre>{{job|json}}</pre>
+    </div>
   </div>
 </div>
 
-<script>
-  function TransferOptionsCtrl($scope) {
-    $scope.values = {
-      'optimizer': false,
-      'overwrite': true,
-      'verify'   : false,
-      'encrypt'  : false,
-      'compress' : false
-    }
-    $scope.options = [{
-        'title': 'Use transfer optimization',
-        'param': 'optimizer',
-        'description':
-          'Automatically adjust transfer options using the given optimization algorithm.',
-        'choices': [ ['None', false], ['2nd Order', '2nd_order'], ['PCP', 'pcp'] ]
-      },{
-        'title': 'Overwrite existing files',
-        'param': 'overwrite',
-        'description':
-          'By default, destination files with conflicting file names will be overwritten. '+
-          'Saying no here will cause the transfer to fail if there are any conflicting files.',
-        'choices': [ ['Yes', true], ['No', false] ]
-      },{
-        'title': 'Verify file integrity',
-        'param': 'verify',
-        'description':
-          'Enable this if you want checksum verification of transferred files.',
-        'choices': [ ['Yes', true], ['No', false] ]
-      },{
-        'title': 'Encrypt data channel',
-        'param': 'encrypt',
-        'description':
-          'Enables data transfer encryption, if supported. This provides additional data security '+
-          'at the cost of transfer speed.',
-        'choices': [ ['Yes', true], ['No', false] ]
-      },{
-        'title': 'Compress data channel',
-        'param': 'compress',
-        'description':
-          'Compresses data over the wire. This may improve transfer '+
-          'speed if the data is text-based or structured.',
-        'choices': [ ['Yes', true], ['No', false] ]
-      }
-    ]
-  }
-</script>
-
-<div class="container panel panel-collapsed" ng-controller="TransferOptionsCtrl">
+<div class="container panel panel-collapsed">
   <div class="panel-heading">
     <h4 class="panel-title panel-collapse-header">
       Transfer Options
@@ -106,14 +65,14 @@
 
   <div id="transfer-options" class="panel-body collapse">
     <span class="text-muted">
-      Note: All of these options are non-functional placeholders for now.
+      Note: Some of these options are non-functional placeholders for now.
     </span>
     <form role="form">
       <div class="form-group container">
-        <div style="height: 13em" class="form-group col-lg-3 col-md-4 col-sm-6" ng-repeat="o in options">
+        <div style="height: 13em" class="form-group col-lg-3 col-md-4 col-sm-6" ng-repeat="o in optSet">
           <h4>{{o.title}}</h4>
           <div class="btn-group">
-            <button class="btn btn-large btn-default" ng-model="values[o.param]"
+            <button class="btn btn-large btn-default" ng-model="job.options[o.param]"
                     ng-repeat="c in o.choices" btn-radio="c[1]">{{c[0]}}</button>
           </div>
           <p class="help-block">
@@ -141,11 +100,11 @@
 </div>
 
 <!-- Create new credential modal -->
-<script type="text/ng-template" id="add_cred_modal.html">
-  <div class="modal-dialog" ng-init="nc = {}" role="dialog">
-    <form class="modal-content" ng-submit="$close(nc)">
+<script type="text/ng-template" id="add-cred-modal.html">
+  <div class="modal-dialog" ng-init="nc = {type: 'gss-cert'}" role="dialog">
+    <form class="modal-content" ng-submit="$close(end.cred = nc)">
       <div class="modal-header">
-        <button type="button" class="close" ng-click="$close()" aria-hidden="true">
+        <button type="button" class="close" ng-click="$dismiss()" aria-hidden="true">
           &times;
         </button>
         <h4 class="modal-title">
@@ -156,7 +115,6 @@
         </div>
       </div>
       <div class="modal-body container">
-        <input type="hidden" ng-model="nc.type" value="gss-cert">
         <div class="form-group col-md-12">
           <label>MyProxy server</label>
           <input type="text" class="form-control" ng-model="nc.myproxy_host" placeholder="e.g., myproxy.teragrid.org" required>
@@ -173,7 +131,7 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-default" ng-click="$close()">
+        <button type="button" class="btn btn-default" ng-click="$dismiss()">
           Cancel
         </button>
         <button type="submit" class="pull-right btn btn-primary">
@@ -189,24 +147,24 @@
   <div class="modal-dialog" role="dialog">
     <div class="modal-content">
       <div class="modal-header">
-        <button type="button" class="close" ng-click="$close()" aria-hidden="true">
+        <button type="button" class="close" ng-click="$dismiss()" aria-hidden="true">
           &times;
         </button>
         <h3>Confirm Transfer</h3>
       </div>
       <div class="modal-body text-center">
-        Transfer
-        <div class="large">
-          <div ng-repeat="(u,f) in src.selected">{{u}}</div>
-        </div>
+        This will perform a transfer from
+        <div class="large">{{job.src.uri}}</div>
         to
-        <div class="large">
-          <div ng-repeat="(u,f) in dest.selected">{{u}}</div>
+        <div class="large">{{job.dest.uri}}</div>
+        <div class="text-left col-xs-12" ng-if="debugMode">
+          <h4>Raw Job Info</h4>
+          <pre>{{job|json}}</pre>
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-warning" ng-click="$close()">Cancel</button>
-        <button class="btn btn-primary" ng-click="submit(job(src, dest)).then($close)">Submit</button>
+        <button class="btn btn-warning" ng-click="$dismiss()">Cancel</button>
+        <button class="btn btn-primary" ng-click="$close(job)">Submit</button>
       </div>
     </div>
   </div>

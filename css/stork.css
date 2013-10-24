@@ -14,6 +14,10 @@ i {
   font: inherit;
 }
 
+a {
+  cursor: pointer;
+}
+
 table {
   border-collapse: collapse;
   border-spacing: 0;
@@ -171,8 +175,6 @@ tr.min-cell {
 } #footer > div {
   font-size: 80%;
   padding: 1em;
-} #footer a {
-  color: inherit;
 }
 
 .login-panel {

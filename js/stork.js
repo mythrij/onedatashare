@@ -1,14 +1,3 @@
-// Some fixes until Angular UI merges Bootstrap 3 changes.
-angular.module('template/pagination/pagination.html', []).run(
-  function($templateCache) {
-    $templateCache.put("template/pagination/pagination.html",
-      "<ul class=\"pagination\">\n" +
-      "  <li ng-repeat=\"page in pages\">" +
-      "    <a href ng-class=\"{'btn-primary active': page.active, disabled: page.disabled}\" ng-click=\"selectPage(page.number)\">{{page.text}}</a>" +
-      "</li></ul>\n")
-  }
-);
-
 angular.module('stork', ['ui.bootstrap', 'ui'],
   function ($provide, $routeProvider) {
     $routeProvider.when('/', {
@@ -112,9 +101,6 @@ angular.module('stork', ['ui.bootstrap', 'ui'],
       $post: function (name, data) {
         return $http.post(api(name), data).then(gr, ge)
       },
-      $get: function (name, data) {
-        return $http.get(api(name), { params: data }).then(gr, ge)
-      },
       login: function (info) {
         return this.$post('user', angular.extend({
           action: 'login'
@@ -125,14 +111,19 @@ angular.module('stork', ['ui.bootstrap', 'ui'],
           action: 'register'
         }, info))
       },
-      ls: function (u, d) {
-        return this.$get('ls', {
-          'uri': u,
-          'depth': d||0
+      history: function (uri) {
+        return this.$post('user', {
+          action: 'history',
+          uri: uri
         })
       },
+      ls: function (end, d) {
+        return this.$post('ls', angular.extend(angular.copy(end), {
+          depth: d||0
+        }))
+      },
       q: function (filter, range) {
-        return this.$get('q', {
+        return this.$post('q', {
           'status': filter || 'all',
           'range': range
         })
@@ -154,10 +145,7 @@ angular.module('stork', ['ui.bootstrap', 'ui'],
         return $rootScope.$user
       },
       saveLogin: function (u) {
-        $rootScope.$user = {
-          email:     u.email,
-          hash: u.hash
-        }
+        $rootScope.$user = u
         var exp = { expires: 31536000 }
         Cookies.set('user.email', u.email, exp)
         Cookies.set('user.hash', u.hash, exp)
@@ -174,6 +162,14 @@ angular.module('stork', ['ui.bootstrap', 'ui'],
       checkAccess: function (redirectTo) {
         if (!$rootScope.$user)
           $location.path(redirectTo||'/')
+      },
+      history: function (uri) {
+        if (uri) return $stork.history(uri).then(
+          function (h) {
+            return $rootScope.$user.history = h
+          }
+        )
+        return $rootScope.user.history()
       },
       $init: function () {
         var u = {
@@ -243,59 +239,90 @@ function RegisterCtrl($scope, $stork, $location, $user, $modal) {
 }
 
 function TransferCtrl($scope, $user, $stork, $modal) {
-  var makeEnd = function (o) {
-    var u = o.uri
-    for (u in o.selected) break
-    return {
-      uri: u,
-      cred: o.cred,
-      module: o.module
+  // Hardcoded options.
+  $scope.optSet = [{
+      'title': 'Use transfer optimization',
+      'param': 'optimizer',
+      'description':
+        'Automatically adjust transfer options using the given optimization algorithm.',
+      'choices': [ ['None', null], ['2nd Order', '2nd_order'], ['PCP', 'pcp'] ]
+    },{
+      'title': 'Overwrite existing files',
+      'param': 'overwrite',
+      'description':
+        'By default, destination files with conflicting file names will be overwritten. '+
+        'Saying no here will cause the transfer to fail if there are any conflicting files.',
+      'choices': [ ['Yes', true], ['No', false] ]
+    },{
+      'title': 'Verify file integrity',
+      'param': 'verify',
+      'description':
+        'Enable this if you want checksum verification of transferred files.',
+      'choices': [ ['Yes', true], ['No', false] ]
+    },{
+      'title': 'Encrypt data channel',
+      'param': 'encrypt',
+      'description':
+        'Enables data transfer encryption, if supported. This provides additional data security '+
+        'at the cost of transfer speed.',
+      'choices': [ ['Yes', true], ['No', false] ]
+    },{
+      'title': 'Compress data channel',
+      'param': 'compress',
+      'description':
+        'Compresses data over the wire. This may improve transfer '+
+        'speed if the data is text-based or structured.',
+      'choices': [ ['Yes', true], ['No', false] ]
     }
-  }
+  ]
 
-  $scope.left = {
-    selected: { }
-  }
-  $scope.right = {
-    selected: { }
-  }
-
-  $scope.job = function (s, d) {
-    return {
-      src:  makeEnd(s),
-      dest: makeEnd(d)
+  $scope.job = {
+    src:  $scope.left  = { },
+    dest: $scope.right = { },
+    options: {
+      'optimizer': null,
+      'overwrite': true,
+      'verify'   : false,
+      'encrypt'  : false,
+      'compress' : false
     }
   }
 
   $scope.canTransfer = function (src, dest, contents) {
     if (!src || !dest || !src.uri || !dest.uri)
       return false
-    if (_.size(src.selected) < 1 || _.size(dest.selected) != 1)
+    if (_.size(src.$selected) < 1 || _.size(dest.$selected) != 1)
       return false
     return true
   }
 
-  $scope.transfer = function (src, dest, contents) {
-    if ($scope.src = src)
-    if ($scope.dest = dest) $modal.open({
-      templateUrl: 'xfer_modal.html',
-      scope: $scope
-    })
+  var TransferJob = function (src, dest) {
+    angular.extend(this, $scope.job)
+    this.src.uri  = _.keys(src.$selected)[0]
+    this.dest.uri = _.keys(dest.$selected)[0]
   }
 
-  $scope.submit = function (job) {
-    return $stork.submit(job).then(
+  $scope.transfer = function (src, dest, contents) {
+    $modal.open({
+      templateUrl: 'xfer_modal.html',
+      controller: function ($scope) {
+        $scope.job = new TransferJob(src, dest)
+      }
+    }).result.then(function (job) {
+      alert(JSON.stringify(job))
+      return $stork.submit(job)
+    }).then(
       function (d) {
+        alert('Job submitted successfully!')
         return d
       }, function (e) {
         alert(e)
-        return e
       }
     )
   }
 }
 
-function BrowseCtrl($scope, $stork, $q, $modal) {
+function BrowseCtrl($scope, $stork, $q, $modal, $user) {
   $scope.uri_state = { }
   $scope.showHidden = false
 
@@ -303,7 +330,11 @@ function BrowseCtrl($scope, $stork, $q, $modal) {
   $scope.fetch = function (u) {
     var scope = this
     scope.loading = true
-    return $stork.ls(u.href(), 1).then(
+
+    var ep = angular.copy($scope.end)
+    ep.uri = u.href()
+
+    return $stork.ls(ep, 1).then(
       function (d) {
         for (k in d.files) d.files[k].$uri = function () {
           return u.clone().segment(URI.encode(this.name))
@@ -341,7 +372,7 @@ function BrowseCtrl($scope, $stork, $q, $modal) {
 
       $scope.temp_uri = u.readable()
       $scope.uri_state.changed = false
-      return $scope.end.uri = u
+      return new URI($scope.end.uri = u.href())
     }
   }
 
@@ -354,6 +385,9 @@ function BrowseCtrl($scope, $stork, $q, $modal) {
     $scope.unselect()
     delete $scope.error
     delete $scope.root
+
+    // Add the URL to the local history.
+    $user.history(u.toString())
 
     if (!u) {
       delete $scope.root
@@ -393,21 +427,17 @@ function BrowseCtrl($scope, $stork, $q, $modal) {
 
   $scope.select = function (f) {
     var u = f.$uri().toString()
-    if (!this.end.selected[u]) {
-      this.end.selected[u] = f
+    if (!$scope.end.$selected[u]) {
+      $scope.end.$selected[u] = f
       f.$selected = true
     } else {
-      delete this.end.selected[u]
+      delete $scope.end.$selected[u]
       delete f.$selected
     }
   }
 
   $scope.unselect = function () {
-    this.end.selected = { }
-  }
-
-  $scope.selected_files = function () {
-    return _.keys(this.end.selected)
+    $scope.end.$selected = { }
   }
 }
 
@@ -415,10 +445,10 @@ function CredCtrl($scope, $modal) {
   $scope.creds = [ ]
   $scope.credChanged = function () {
     if ($scope.end.cred == 'new-myproxy') $modal.open({
-      templateUrl: 'add_cred_modal.html',
+      templateUrl: 'add-cred-modal.html',
       scope: $scope
     }).result.then(function (c) {
-      $scope.end.cred = c
+      //$scope.end.cred = c
     }, function () {
       delete $scope.end.cred
     })

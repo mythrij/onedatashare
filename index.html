@@ -107,7 +107,12 @@
         &copy; 2013 DIDCLab at University at Buffalo
       </div>
       <div>
-        <a href="#/terms">Terms</a> | <a href="#/privacy">Privacy</a>
+        <a href="#/terms" class="text-muted">Terms</a> |
+        <a href="#/privacy" class="text-muted">Privacy</a> |
+        <a href class="text-muted" ng-class="{'text-primary':debugMode}" title="Developer mode"
+                ng-click="debugMode = !debugMode">
+          <i class="icon-cogs"></i>
+        </a>
       </div>
     </div>
   </div>
@@ -136,5 +141,15 @@
   <script src="/js/stork.list.js"></script>
   <script src="/js/stork.queue.js"></script>
   <script src="/js/stork.js"></script>
+
+  <!-- Some fixes until Angular UI merges Bootstrap 3 changes. -->
+  <script type="text/ng-template" id="template/pagination/pagination.html">
+    <ul class="pagination">
+      <li ng-repeat="page in pages">
+        <a href ng-class="{'btn-primary active': page.active, disabled: page.disabled}"
+                ng-click="selectPage(page.number)">{{page.text}}</a>
+      </li>
+    </ul>
+  </script>
 </body>
 </html>

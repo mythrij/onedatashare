@@ -30,8 +30,10 @@
 
 <div class="file-list panel">
   <form class="uri panel-heading" ng-submit="refresh(temp_uri)">
-    <div ng-class="uri_state" class="input-group-lg">
-      <input type="url" class="form-control" ng-change="uri_state.changed = true" ng-model="temp_uri" placeholder="Enter a URL">
+    <div ng-class="uri_state" class="text-left input-group-lg">
+      <input type="text" class="form-control" ng-change="uri_state.changed = true" ng-model="temp_uri"
+             placeholder="Enter a URL"
+             typeahead="h for h in [$viewValue].concat($user.history) | filter:$viewValue | limitTo:11">
       <button type="submit" class="pull-right btn btn-lg" title="Go">
         <i class="icon-play"></i>
       </button>
@@ -86,8 +88,7 @@
                       dot: root.name && root.name.charAt(0) == '.',
                       'alert-warning': !!error, 'alert-info': root.$selected }">
         <i ng-mousedown="toggle()"></i>
-        <div ng-dblclick="toggle()" ng-mousedown="select(root)">
-          {{root.name}}
+        <div ng-dblclick="toggle()" ng-mousedown="select(root)">{{root.name}}
           <span class="small text-muted" ng-if="!root.dir">{{root.size | size}}</span>
           <span ng-if="loading" class="icon-refresh icon-spin text-muted"></span>
         </div>
