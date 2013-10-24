@@ -16,6 +16,12 @@ public abstract class StorkSession {
   protected transient Pipe<Ad>.End pipe = null;
   protected transient boolean closed = false;
 
+  // Common transfer options.
+  public boolean overwrite = true;
+  public boolean verify    = false;
+  public boolean encrypt   = false;
+  public boolean compress  = false;
+
   ////////////////////////////////////////////////////////////////
   // The following methods should be implemented by subclasses: //
   ////////////////////////////////////////////////////////////////

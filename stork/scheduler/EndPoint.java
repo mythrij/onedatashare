@@ -14,10 +14,10 @@ import java.net.URI;
 // TODO: Delegate lookups to job ad.
 
 public class EndPoint {
-  private URI uri;
-  private AdObject cred;
-  private String module;
-  private transient User user;
+  URI uri;
+  AdObject cred;
+  String module;
+  transient User user;
 
   // Create a new endpoint from a URI.
   private EndPoint() {

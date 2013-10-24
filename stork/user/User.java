@@ -1,12 +1,14 @@
 package stork.user;
 
+import stork.Stork;
 import stork.ad.*;
 import stork.cred.*;
 import stork.scheduler.*;
 import stork.util.*;
 
-import java.util.*;
+import java.net.*;
 import java.security.*;
+import java.util.*;
 
 // A user in the StorkCloud system. Each user has their own view of the job
 // queue, transfer credential manager, login credentials, and user info.
@@ -14,7 +16,6 @@ import java.security.*;
 // that never changes.
 
 public class User {
-  public String uuid;
   public String email;
   public String hash;
   public String salt;
@@ -24,7 +25,8 @@ public class User {
   public transient StorkScheduler sched;
 
   public ArrayList<StorkJob> jobs = new ArrayList<StorkJob>();
-  public CredManager creds = new CredManager();
+  public LinkedList<URI>  history;
+  public CredManager        creds = new CredManager();
 
   // The minimum password length.
   public static final int PASS_LEN = 6;
@@ -73,7 +75,7 @@ public class User {
     // Add a user to this user map based on a registration ad.
     public synchronized User register(Ad ad) {
       // Filter some stuff we don't want from users.
-      ad.remove("uuid", "jobs", "creds");
+      ad.remove("jobs", "creds");
 
       User su = new User(sched, ad);
       su.setPassword(ad.get("password"));
@@ -150,8 +152,22 @@ public class User {
 
   // Get an ad to return to the user on login.
   public Ad toAd() {
-    return new Ad("email", email)
-             .put("hash", hash);
+    return Ad.marshal(this).filter("email", "hash", "history");
+  }
+
+  // Add a URL to a user's history. Keep the history limited to the
+  // configured maximum.
+  public synchronized void addHistory(URI u) {
+    if (!isAnonymous() && Stork.settings.max_history > 0) try {
+      if (history == null)
+        history = new LinkedList<URI>();
+      history.remove(u);
+      while (history.size() > Stork.settings.max_history)
+        history.removeLast();
+      history.addFirst(u);
+    } catch (Exception e) {
+      // Just don't add it.
+    }
   }
 
   // Return the display name of the user. Either their full name or

@@ -31,6 +31,8 @@ public class StorkJob {
   private int attempts = 0, max_attempts = 10;
   private String message;
 
+  private Ad options;
+
   private Watch queue_timer;
   private Watch run_timer;
 
@@ -160,6 +162,15 @@ public class StorkJob {
       ss = src.session();
       ds = dest.session();
 
+      // If options were given, marshal them into the sessions.
+      if (options != null) {
+        System.out.println("Marshalling options: "+options);
+        options.unmarshal(ss);
+        options.unmarshal(ds);
+        System.out.println(Ad.marshal(ss));
+        System.out.println(Ad.marshal(ds));
+      }
+
       // Create a pipe to process progress ads from the module.
       Pipe<Ad> pipe = new Pipe<Ad>();
       pipe.new End(false) {
@@ -194,10 +205,16 @@ public class StorkJob {
       if (sft.dir && dft.file)
         throw new RuntimeException("cannot transfer from directory to file");
 
-      // Now let the transfer module do the rest.
+      // Open the files on the endpoints.
       StorkChannel sc = ss.open(StorkUtil.dirname(src.path()),  sft);
       StorkChannel dc = (dft.dir) ? ds.open(dest.path(), sft)
                                   : ds.open(StorkUtil.dirname(dest.path()), dft);
+
+      // If the destination exists and overwriting is not enabled, fail.
+      if (!ds.overwrite && dc.exists())
+        throw new RuntimeException("Destination file already exists.");
+
+      // Let the transfer module do the rest.
       sc.sendTo(dc).waitFor();
 
       // No exceptions happened. We did it!

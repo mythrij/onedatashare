@@ -29,9 +29,10 @@ public class GridFTPSession extends StorkSession {
   
   private transient FTPServerFacade local;
 
-  private int concurrency = 1;
-  private int parallelism = 4;
-  private int pipelining = 20;
+  // Module-specific options.
+  public int concurrency = 1;
+  public int parallelism = 4;
+  public int pipelining = 20;
 
   private transient volatile boolean aborted = false;
   private transient boolean dcau = true;
@@ -209,15 +210,18 @@ public class GridFTPSession extends StorkSession {
       // Parse the list from the reply.
       FileTree ft = p.parseAll(r.getMessage().getBytes());
 
+      System.out.println(Ad.marshal(ft));
+
       if (ft.name == null) {
-        // This can happen if we're either listing a file or the command is
-        // wrongly implemented. First (only) child should be the real entry.
+        // This can happen if "." was not found in the listing. This can
+        // be the case if a file was given as the target, or if the server
+        // simply doesn't include it in the listing.
         if (lb.tree != null)
           ft = lb.tree.copy(ft.files[0]);
         else
           ft.copy(ft.files[0]);
-        if (ft.dir)  // Seems this command just stats, not lists.
-          does_not_list.add(cmd);
+        if (ft.dir)
+          does_not_list.add(cmd);  // Seems this command just stats, not lists.
         if (lb.depth == 0 || !ft.dir)
           lb.ring(ft);
         else
@@ -384,6 +388,16 @@ public class GridFTPSession extends StorkSession {
       return new GridFTPChannel(base, f);
     }
 
+    // FIXME: Temporary hack.
+    public boolean exists() {
+      try {
+        sizeImpl(path());
+        return true;
+      } catch (Exception e) {
+        return false;
+      }
+    }
+
     // Send data to another channel. The two channels should coordinate to
     // produce a bell that will be rung when the exchange is complete. A
     // matching recvFrom should be called on the other channel. Sending
@@ -395,6 +409,8 @@ public class GridFTPSession extends StorkSession {
         throw abort("can only send to other FTP channels");
       final GridFTPChannel gc = (GridFTPChannel) c;
       final ControlChannel dc = gc.cc;
+
+      // TODO: Implement encryption and compression negotiation.
 
       disableDCAU();
       gc.gs.disableDCAU();
@@ -449,6 +465,8 @@ public class GridFTPSession extends StorkSession {
         }
       };
       final TransferBell db = new TransferBell().pairWith(sb);
+
+      // TODO: Pipe checksum verification commands.
 
       // TODO: More robust third-party transfer checking.
       dc.pipe("PASV", gc.gs.new PassiveBell(

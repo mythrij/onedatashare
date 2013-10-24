@@ -11,7 +11,7 @@ public class GridFTPModule extends TransferModule {
     author  = "Brandon Ross";
     email   = "bwross@buffalo.edu";
     description = "A module for FTP and GridFTP transfers.";
-    options(GridFTPOptions.class);
+    options(GridFTPSession.class);
   }
 
   // Interface methods

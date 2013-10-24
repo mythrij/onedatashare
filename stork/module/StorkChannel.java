@@ -24,6 +24,9 @@ public abstract class StorkChannel {
     return file.size;
   }
 
+  // Check if the channel endpoint already exists.
+  public abstract boolean exists();
+
   // Send data to another channel. The two channels should coordinate to
   // produce a bell that will be rung when the exchange is complete. A
   // matching recvFrom should be called on the other channel. Sending

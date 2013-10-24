@@ -243,7 +243,15 @@ public class StorkScheduler {
         User su = users.register(req.ad);
         Log.info("Registering user: ", su.email);
         return su.toAd();
-      } return users.login(req.ad).toAd();
+      } if ("login".equals(req.ad.get("action"))) {
+        return users.login(req.ad).toAd();
+      } if ("history".equals(req.ad.get("action"))) {
+        if (req.ad.has("uri")) try {
+          req.user.addHistory(StorkUtil.makeURI(req.ad.get("uri")));
+        } catch (Exception e) {
+          throw new RuntimeException("Could not parse URI...");
+        } return Ad.marshal(req.user.history);
+      } return req.user.toAd();
     }
 
     public boolean requiresLogin() {

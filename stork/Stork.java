@@ -23,6 +23,7 @@ public class Stork extends Command {
   public static class Settings {
     public int max_jobs = 10;
     public int max_attempts = 10;
+    public int max_history = 10;
 
     public String libexec = "libexec";
 
