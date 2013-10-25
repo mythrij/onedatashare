@@ -85,14 +85,14 @@
     <script type="text/ng-template" id="browse-node.html">
       <li ng-repeat="root in files | orderBy:['-dir','name']"
           ng-class="{ dir: root.dir, file: !root.dir, loading: loading, open: open,
-                      dot: root.name && root.name.charAt(0) == '.',
-                      'alert-warning': !!error, 'alert-info': root.$selected }">
+                      dot: root.name && root.name.charAt(0) == '.' }">
         <i ng-mousedown="toggle()"></i>
-        <div ng-dblclick="toggle()" ng-mousedown="select(root)">{{root.name}}
+        <div ng-class="{'alert-info': selected, 'alert-warning': !!error}" ng-dblclick="toggle()"
+             ng-mousedown="select($event)">{{root.name}}
           <span class="small text-muted" ng-if="!root.dir">{{root.size | size}}</span>
           <span ng-if="loading" class="icon-refresh icon-spin text-muted"></span>
         </div>
-        <ul ng-if="root.files" ng-init="files = root.files; open = false"
+        <ul ng-if="root.files" ng-init="files = root.files; selected = false; open = false"
             class="stork-list" ng-include="'browse-node.html'">
         </ul>
         <ul ng-if="error" class="alert-danger" style="overflow-x: auto">

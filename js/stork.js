@@ -215,7 +215,7 @@ function LoginCtrl($scope, $stork, $location, $user, $modal) {
     return $user.logIn(u).then(function () {
       $scope.$close()
     }, function (e) {
-      alert(error)
+      alert(e)
     })
   }
   $scope.loginModal = function () {
@@ -304,21 +304,20 @@ function TransferCtrl($scope, $user, $stork, $modal) {
 
   $scope.transfer = function (src, dest, contents) {
     $modal.open({
-      templateUrl: 'xfer_modal.html',
+      templateUrl: 'xfer-modal.html',
       controller: function ($scope) {
         $scope.job = new TransferJob(src, dest)
       }
     }).result.then(function (job) {
-      alert(JSON.stringify(job))
-      return $stork.submit(job)
-    }).then(
-      function (d) {
-        alert('Job submitted successfully!')
-        return d
-      }, function (e) {
-        alert(e)
-      }
-    )
+      return $stork.submit(job).then(
+        function (d) {
+          alert('Job submitted successfully!')
+          return d
+        }, function (e) {
+          alert(e)
+        }
+      )
+    })
   }
 }
 
@@ -336,9 +335,6 @@ function BrowseCtrl($scope, $stork, $q, $modal, $user) {
 
     return $stork.ls(ep, 1).then(
       function (d) {
-        for (k in d.files) d.files[k].$uri = function () {
-          return u.clone().segment(URI.encode(this.name))
-        }
         return scope.root = d
       }, function (e) {
         return $q.reject(scope.error = e)
@@ -357,12 +353,27 @@ function BrowseCtrl($scope, $stork, $q, $modal, $user) {
     })
   }
 
+  // Return the scope corresponding to the parent directory.
+  $scope.parentNode = function () {
+    if (this !== $scope) {
+      if (this.$parent.root !== this.root)
+        return this.$parent
+      return this.$parent.parentNode()
+    }
+  }
+
   // Get or set the endpoint URI.
   $scope.uri = function (u) {
     if (u === undefined) {
-      return $scope.end.uri
-    } if (!u) {
-      delete $scope.end.uri
+      if (this.root !== $scope.root) {
+        u = this.parentNode().uri()
+        return u.segment(URI.encode(this.root.name))
+      } else {
+        return new URI($scope.end.uri)
+      }
+    } else if (!u) {
+      if (this.root === $scope.root)
+        delete $scope.end.uri
     } else {
       if (typeof u === 'string') {
         var u = new URI(u).normalize()
@@ -382,7 +393,7 @@ function BrowseCtrl($scope, $stork, $q, $modal, $user) {
     u = $scope.uri(u)
 
     // Clean up from last refresh.
-    $scope.unselect()
+    $scope.unselectAll()
     delete $scope.error
     delete $scope.root
 
@@ -399,7 +410,6 @@ function BrowseCtrl($scope, $stork, $q, $modal, $user) {
           if (f.dir)
             $scope.uri(u = u.filename(u.filename()+'/'))
           f.name = u.toString()
-          f.$uri = function () { return u.clone() }
           return f
         }, function (e) {
           $scope.error = e
@@ -421,22 +431,36 @@ function BrowseCtrl($scope, $stork, $q, $modal, $user) {
     if (scope.open = !scope.open)
     if (!scope.root.files) {
       // We're opening, fetch subdirs if we haven't.
-      scope.fetch(scope.root.$uri(), scope.root)
+      scope.fetch(scope.uri(), scope.root)
     }
   }
 
-  $scope.select = function (f) {
-    var u = f.$uri().toString()
-    if (!$scope.end.$selected[u]) {
-      $scope.end.$selected[u] = f
-      f.$selected = true
+  $scope.select = function (e) {
+    var scope = this
+    var u = this.uri().toString()
+
+    if (!this.selected) {
+      if (!e.ctrlKey)
+        $scope.unselectAll()
+      $scope.end.$selected[u] = new function () {
+        this.unselect = function () {
+          delete scope.selected
+        }
+      }
+      this.selected = true
     } else {
+      if (!e.ctrlKey)
+        $scope.unselectAll()
       delete $scope.end.$selected[u]
-      delete f.$selected
+      delete this.selected
     }
   }
 
-  $scope.unselect = function () {
+  $scope.unselectAll = function () {
+    var s = $scope.end.$selected
+    if (s) _.each(s, function (f) {
+      f.unselect()
+    })
     $scope.end.$selected = { }
   }
 }
@@ -485,7 +509,7 @@ function QueueCtrl($scope, $rootScope, $stork, $timeout) {
   $scope.filter = 'pending'
 
   $scope.jobs = { }
-  $scope.auto = true
+  $scope.auto = false
 
   // Pagination
   $scope.perPage = 5
