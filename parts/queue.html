@@ -35,7 +35,7 @@
       <div class="panel panel-body clearfix">
         <div class="col-xs-12 col-sm-2 btn-group">
           <button title="Details" class="btn btn-default icon-info" ng-click="info.show = !info.show"></button>
-          <button title="Cancel" class="btn btn-default icon-remove btn-disabled" disabled="disabled"></button>
+          <button title="Cancel" class="btn btn-default icon-remove" ng-click="cancel(j)" ng-disabled="filters.done(j)"></button>
         </div>
 
         <div class="col-xs-3 visible-xs">
@@ -51,7 +51,7 @@
         <div class="col-xs-9 col-sm-3">
           <div class="progress" data-placement="top" data-popover="" data-trigger="hover" bs-popover="'prog-pop.html'"
                ng-class="{processing: 'progress-striped active'}[j.status]">
-            <div role="progressbar" ng-class="color(j)" class="progress-bar"
+            <div role="progressbar" ng-class="color[j.status]" class="progress-bar"
                  ng-style="{width:(j.status=='processing'&&(j.progress.bytes|percent))||'100%'}"></div>
             <span class="progress-text">
               {{j.status|inflector}}

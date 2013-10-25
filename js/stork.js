@@ -122,6 +122,11 @@ angular.module('stork', ['ui.bootstrap', 'ui'],
           depth: d||0
         }))
       },
+      rm: function (id) {
+        return this.$post('rm', {
+          range: id
+        })
+      },
       q: function (filter, range) {
         return this.$post('q', {
           'status': filter || 'all',
@@ -506,10 +511,10 @@ function QueueCtrl($scope, $rootScope, $stork, $timeout) {
     'removed', 'failed', 'complete', null,
     'pending', 'done', 'all'
   ]
-  $scope.filter = 'pending'
+  $scope.filter = 'all'
 
   $scope.jobs = { }
-  $scope.auto = false
+  $scope.auto = true
 
   // Pagination
   $scope.perPage = 5
@@ -526,9 +531,6 @@ function QueueCtrl($scope, $rootScope, $stork, $timeout) {
   }
   $scope.setPage = function (p) {
     $scope.page = p
-  }
-  $scope.numPages = function (len) {
-    
   }
 
   $scope.$on('$destroy', function (event) {
@@ -557,6 +559,18 @@ function QueueCtrl($scope, $rootScope, $stork, $timeout) {
     }
   }
 
+  $scope.cancel = function (j) {
+    if (j.job_id &&
+        confirm("Are you sure you want to remove job "+j.job_id+"?"))
+      return $stork.rm(j.job_id).then(
+        function (m) {
+          j.status = 'removed'
+        }, function (e) {
+          alert("failure!")
+        }
+      )
+  }
+
   $scope.set_filter = function (f) {
     $scope.filter = f
   }
@@ -583,14 +597,12 @@ function QueueCtrl($scope, $rootScope, $stork, $timeout) {
       }
     )
   }
-  $scope.color = function (j) {
-    return {
-      processing: 'progress-bar-success',
-      scheduled:  'progress-bar-warning',
-      complete:   '',
-      removed:    'progress-bar-danger',
-      failed:     'progress-bar-danger'
-    }[j.status]
+  $scope.color = {
+    processing: 'progress-bar-success',
+    scheduled:  'progress-bar-warning',
+    complete:   '',
+    removed:    'progress-bar-danger',
+    failed:     'progress-bar-danger'
   }
 
   $scope.autoRefresh()
@@ -608,8 +620,10 @@ $(document).on('click', '.panel-collapse-header', function (e) {
 // Tooltips
 $(document).on('mouseover', '[title]', function () {
   $(this).tooltip({
-    'animation': false,
-    'container': 'body'
+    animation: false,
+    container: 'body',
+    placement: 'auto top'
   })
+  $('.tooltip').remove()
   $(this).tooltip('show')
 })
