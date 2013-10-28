@@ -47,9 +47,14 @@ public class GridFTPSession extends StorkSession {
     super(e);
     cc = new ControlChannel(e);
     cc.setPipelining(pipelining);
+    setParallelism(parallelism);
 
     // Add a few things we already know can't be used for listing.
     does_not_list.add("MLST");
+  }
+
+  public void setParallelism(int p) {
+    cc.pipe("OPTS RETR Parallelism="+p+","+p+","+p);
   }
 
   // Close control channel.

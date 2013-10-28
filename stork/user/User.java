@@ -25,7 +25,7 @@ public class User {
   public transient StorkScheduler sched;
 
   public ArrayList<StorkJob> jobs = new ArrayList<StorkJob>();
-  public LinkedList<URI>  history;
+  public LinkedList<URI>  history = new LinkedList<URI>();
   public CredManager        creds = new CredManager();
 
   // The minimum password length.
@@ -159,8 +159,6 @@ public class User {
   // configured maximum.
   public synchronized void addHistory(URI u) {
     if (!isAnonymous() && Stork.settings.max_history > 0) try {
-      if (history == null)
-        history = new LinkedList<URI>();
       history.remove(u);
       while (history.size() > Stork.settings.max_history)
         history.removeLast();

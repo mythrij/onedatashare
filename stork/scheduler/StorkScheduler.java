@@ -294,11 +294,12 @@ public class StorkScheduler {
         throw new RuntimeException("No jobs specified.");
 
       // Find ad in job list, set it as removed.
-      List<StorkJob> list = new JobSearcher(jobs).query(req.ad);
+      List<StorkJob> list = new JobSearcher(req.user.jobs).query(req.ad);
       for (StorkJob j : list) try {
         j.remove("removed by user");
         sdr.swallow(j.jobId());
       } catch (Exception e) {
+        Log.info("Couldn't remove job ", j.jobId(), ": ", e.getMessage());
         cdr.swallow(j.jobId());
       }
 
