@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # These environment variables can be used to configure this script:
 #
