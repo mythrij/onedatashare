@@ -1,6 +1,6 @@
 <script type="text/ng-template" id="new-folder.html">
-  <div class="modal-dialog" role="dialog">
-    <form class="modal-content" ng-submit="$close(name)">
+  <div ng-init="parent = selectedUris()[0]||uri().href()" class="modal-dialog" role="dialog">
+    <form class="modal-content" ng-submit="$close([parent, name])">
       <div class="modal-header">
         <button type="button" class="close" ng-click="$dismiss()" aria-hidden="true">
           &times;
@@ -11,9 +11,11 @@
           Create a New Folder
         </h4>
       </div>
-      <div class="modal-body container form-group col-sm-push-3 col-sm-6">
-        <label>Name</label>
-        <input type="text" class="form-control" ng-model="name" focus-me required>
+      <div class="modal-body container ">
+        <div class="form-group col-sm-push-3 col-sm-6">
+          <label>Name</label>
+          <input type="text" class="form-control" ng-model="name" focus-me required>
+        </div>
       </div>
       <div class="clearfix"></div>
       <div class="text-center modal-footer">
@@ -32,7 +34,7 @@
   <form class="uri panel-heading" ng-submit="refresh(temp_uri)">
     <div ng-class="uri_state" class="text-left input-group-lg">
       <input type="text" class="form-control" ng-change="uri_state.changed = true" ng-model="temp_uri"
-             placeholder="Enter a URL"
+             placeholder="Enter a URL" typeahead-wait-ms="10"
              typeahead="h for h in [$viewValue].concat($user.history) | filter:$viewValue | limitTo:11">
       <button type="submit" class="pull-right btn btn-lg" title="Go">
         <i class="icon-play"></i>
@@ -56,10 +58,10 @@
           <i class="icon-folder-open"></i>
           <i class="icon-plus"></i>
         </button>
-        <button class="icon-trash btn btn-default ph" title="Delete"></button>
+        <button class="icon-trash btn btn-default ph" title="Delete" ng-click="rm(selectedUris())"></button>
       </div>
       <div class="btn-group">
-        <button class="btn btn-default" ng-class="{'active':showHidden}" title="Toggle hidden"
+        <button class="btn btn-default" ng-class="{active:showHidden}" title="Toggle hidden"
                 ng-click="showHidden = !showHidden">
           <i ng-class="{false: 'icon-eye-open', true: 'icon-eye-close'}[!showHidden]"></i>
         </button>
@@ -86,7 +88,7 @@
       <li ng-repeat="root in files | orderBy:['-dir','name']"
           ng-class="{ dir: root.dir, file: !root.dir, loading: loading, open: open,
                       dot: root.name && root.name.charAt(0) == '.' }">
-        <i ng-mousedown="toggle()"></i>
+        <i class="text-muted" ng-mousedown="toggle()"></i>
         <div ng-class="{'alert-info': selected, 'alert-warning': !!error}" ng-dblclick="toggle()"
              ng-mousedown="select($event)">{{root.name}}
           <span class="small text-muted" ng-if="!root.dir">{{root.size | size}}</span>

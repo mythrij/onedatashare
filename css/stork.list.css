@@ -2,10 +2,7 @@
   padding-left: 0;
 	margin: 0;
 } .stork-list ul {
-	padding-left: 0.4em;
-} .stork-list li > ul {
-  margin-left: 0.55em;
-  border-left: 0.1em dashed #222;
+	padding-left: 1.2em;
 }
 
 .stork-list li {
@@ -19,13 +16,6 @@
 
 .stork-list .inaccessible {
   color: #F00;
-}
-
-.stork-list li > div {
-  border: 1px dotted transparent;
-} .stork-list li.selected > div {
-  background-color: #EFF;
-  border: 1px dotted #000;
 }
 
 .stork-list li ul {

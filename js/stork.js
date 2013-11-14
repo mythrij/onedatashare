@@ -60,6 +60,10 @@ angular.module('stork', ['ui.bootstrap', 'ui'],
   return function (input, format) {
     return moment(input, format).fromNow()
   }
+}).filter('URI', function () {
+  return function (input) {
+    return new URI(input)
+  }
 }).filter('paginate', function () {
   return function (input, page, per) {
     page = (!page || page < 1) ? 1  : page
@@ -117,8 +121,10 @@ angular.module('stork', ['ui.bootstrap', 'ui'],
           uri: uri
         })
       },
-      ls: function (end, d) {
-        return this.$post('ls', angular.extend(angular.copy(end), {
+      ls: function (ep, d) {
+        if (typeof ep === 'string')
+          ep = { uri: ep }
+        return this.$post('ls', angular.extend(angular.copy(ep), {
           depth: d||0
         }))
       },
@@ -133,10 +139,15 @@ angular.module('stork', ['ui.bootstrap', 'ui'],
           'range': range
         })
       },
-      mkdir: function (uri) {
-        return this.$post('mkdir', {
-          'uri': name
-        })
+      mkdir: function (ep) {
+        if (typeof ep === 'string')
+          ep = { uri: ep }
+        return this.$post('mkdir', ep)
+      },
+      rmf: function (ep) {
+        if (typeof ep === 'string')
+          ep = { uri: ep }
+        return this.$post('rmf', ep)
       },
       submit: function (job) {
         return this.$post('submit', job)
@@ -301,17 +312,15 @@ function TransferCtrl($scope, $user, $stork, $modal) {
     return true
   }
 
-  var TransferJob = function (src, dest) {
-    angular.extend(this, $scope.job)
-    this.src.uri  = _.keys(src.$selected)[0]
-    this.dest.uri = _.keys(dest.$selected)[0]
-  }
-
   $scope.transfer = function (src, dest, contents) {
+    var job = angular.copy($scope.job)
+    job.src.uri  = _.keys(src.$selected)
+    job.dest.uri = _.keys(dest.$selected)
+
     $modal.open({
       templateUrl: 'xfer-modal.html',
       controller: function ($scope) {
-        $scope.job = new TransferJob(src, dest)
+        $scope.job = job
       }
     }).result.then(function (job) {
       return $stork.submit(job).then(
@@ -352,9 +361,32 @@ function BrowseCtrl($scope, $stork, $q, $modal, $user) {
   // Open the mkdir dialog.
   $scope.mkdir = function () {
     $modal.open({
-      templateUrl: 'new-folder.html'
-    }).result.then(function (name) {
-      alert(name)
+      templateUrl: 'new-folder.html',
+      scope: $scope
+    }).result.then(function (pn) {
+      var u = new URI(pn[0]).segment(pn[1])
+      return $stork.mkdir(u.href()).then(
+        function (m) {
+          $scope.refresh()
+        }, function (e) {
+          alert('Could not create folder.')
+        }
+      )
+    })
+  }
+
+  // Delete the selected files.
+  $scope.rm = function (uris) {
+    _.each(uris, function (u) {
+      if (confirm("Delete "+u+"?")) {
+        return $stork.rmf(u).then(
+          function () {
+            $scope.refresh()
+          }, function (e) {
+            alert('Could not delete file: '+e)
+          }
+        )
+      }
     })
   }
 
@@ -467,6 +499,10 @@ function BrowseCtrl($scope, $stork, $q, $modal, $user) {
       f.unselect()
     })
     $scope.end.$selected = { }
+  }
+
+  $scope.selectedUris = function () {
+    return _.keys($scope.end.$selected)
   }
 }
 
@@ -598,7 +634,7 @@ function QueueCtrl($scope, $rootScope, $stork, $timeout) {
     )
   }
   $scope.color = {
-    processing: 'progress-bar-success',
+    processing: 'progress-bar-success progress-striped active',
     scheduled:  'progress-bar-warning',
     complete:   '',
     removed:    'progress-bar-danger',

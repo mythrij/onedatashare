@@ -188,12 +188,13 @@ tr.min-cell {
 }
 
 #stork-queue .endpoints {
+  padding-left: 0;
   overflow-x: auto;
   overflow-y: hidden;
-} #stork-queue .endpoints span {
+} #stork-queue .endpoints div {
   white-space: nowrap;
 } #stork-queue .endpoints i {
-  padding: 0 1em;
+  padding: 0 0.5em;
 }
 
 .transfer-wrapper {

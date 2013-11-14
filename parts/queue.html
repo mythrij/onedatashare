@@ -28,7 +28,7 @@
     <div class="col-sm-1">Job ID</div>
     <div class="col-sm-3 text-center">Progress</div>
     <div class="col-sm-2 text-center">Speed</div>
-    <div class="col-sm-4">Source/Destination</div>
+    <div class="col-sm-4 text-center">Source/Destination</div>
   </div>
   <div class="panel-body">
     <div ng-init="info={}" ng-repeat="j in filteredJobs = (jobs | values | filter:filters[filter] | orderBy:'-job_id') | paginate:page:perPage">
@@ -73,14 +73,15 @@
         <div class="col-xs-3 visible-xs">
           Endpoints
         </div>
-        <div class="col-xs-9 col-sm-4 clearfix endpoints">
-          <span class="pull-left">{{j.src.uri}}</span>
-          <div class="clearfix"></div>
-          <span class="pull-left">{{j.dest.uri}}</span>
+        <div class="col-xs-9 col-sm-4 clearfix endpoints text-center">
+          <abbr title="{{j.src.uri[0]}}">{{(j.src.uri[0]|URI).host()}}</abbr>
+          <i class="icon-long-arrow-right"></i>
+          <abbr title="{{j.dest.uri[0]}}">{{(j.dest.uri[0]|URI).host()}}</abbr>
         </div>
 
         <div class="clearfix"></div>
 
+        <!-- Job details panel -->
         <div class="well" ng-if="info.show">
           <ul class="nav nav-pills">
             <li ng-class="{active:!info.raw}">
@@ -93,6 +94,18 @@
           <dl ng-hide="info.raw" class="panel panel-body dl-horizontal">
             <dt ng-if="j.message">Message</dt>
             <dd ng-if="j.message">{{j.message}}</dd>
+
+            <dt>Source</dt>
+            <dd>
+              <div ng-repeat="u in j.src.uri">{{u}}</div>
+            </dd>
+
+            <dt>Destination</dt>
+            <dd>
+              <div ng-repeat="u in j.dest.uri">{{u}}</div>
+            </dd>
+
+            <hr>
 
             <dt ng-if="j.queue_timer.start > 0">Job Submitted</dt>
             <dd ng-if="j.queue_timer.start > 0">
