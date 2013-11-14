@@ -27,7 +27,7 @@ class AdType {
       return ((Method)m).getGenericReturnType();
     if (m instanceof Constructor)
       return ((Constructor)m).getDeclaringClass();
-    return null;
+    throw new Error("Invalid member: "+m);
   }
 
   // Print the wrapped type in a way similar to how it would appear in
@@ -210,6 +210,15 @@ class AdType {
   protected AdMember constructor(Class... params) {
     try {
       return new AdMember(clazz().getDeclaredConstructor(params));
+    } catch (Exception e) {
+      return null;
+    }
+  }
+
+  // Get a method based on the parameter type.
+  protected AdMember method(String name, Class... params) {
+    try {
+      return new AdMember(clazz().getDeclaredMethod(name, params));
     } catch (Exception e) {
       return null;
     }

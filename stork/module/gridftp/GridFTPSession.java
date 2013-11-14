@@ -303,11 +303,20 @@ public class GridFTPSession extends StorkSession {
   }
 
   // Remove a file or directory.
-  protected Bell<Reply> rmImpl(String path) {
-    if (path.endsWith("/"))
-      return cc.pipe("RMD "+path);
-    else
-      return cc.pipe("DELE "+path);
+  protected Bell<Reply> rmImpl(final String path) {
+    final Bell<Reply> bell = new Bell<Reply>();
+    cc.pipe("RMD "+path, new Bell<Reply>() {
+      public void done(Reply r) {
+        bell.ring(r);
+      } public void fail(Reply r, Throwable t) {
+        cc.pipe("DELE "+path, new Bell<Reply>() {
+          public void always(Reply r, Throwable t) {
+            bell.ring(r, t);
+          }
+        });
+      }
+    });
+    return bell;
   }
 
   public GridFTPChannel openImpl(String base, FileTree ft) {

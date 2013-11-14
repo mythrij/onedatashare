@@ -66,9 +66,9 @@ public abstract class TransferModule {
   }
 
   // Create a new session capable of interacting with a URI.
-  public StorkSession session(String uri) {
+  public StorkSession session(String... uri) {
     return session(new EndPoint(uri));
-  } public StorkSession session(URI uri) {
+  } public StorkSession session(URI... uri) {
     return session(new EndPoint(uri));
   } public abstract StorkSession session(EndPoint e);
 

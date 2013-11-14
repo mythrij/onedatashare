@@ -540,10 +540,7 @@ public class Ad implements Serializable {
 
   // Construct a new instance of a class and marshal into it.
   public <O> O unmarshalAs(Class<O> clazz) {
-    return clazz.cast(unmarshalAs(new AdType(clazz)));
-  } protected Object unmarshalAs(AdType t) {
-    AdMember cons = t.constructor();
-    return unmarshal(cons.construct(), t);
+    return AdObject.wrap(this).as(clazz);
   }
 
   // Marshal an object into an ad.

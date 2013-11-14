@@ -134,6 +134,6 @@ public abstract class StorkSession {
 
   // Get the authority for the session.
   public final String authority() {
-    return ep.uri().getAuthority();
+    return ep.uri()[0].getAuthority();
   }
 }

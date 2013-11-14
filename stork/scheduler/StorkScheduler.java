@@ -26,15 +26,18 @@ import java.util.concurrent.*;
 // TODO: Break this thing up into separate classes.
 
 public class StorkScheduler {
+  public static volatile StorkScheduler instance;
+
   public Ad env = new Ad();
-  public User.Map users = new User.Map(this);
+  public User.Map users = new User.Map();
+  public CredManager creds = new CredManager();
 
   public transient LinkedBlockingQueue<StorkJob> jobs =
     new LinkedBlockingQueue<StorkJob>();
 
   private transient StorkQueueThread[]  thread_pool;
   private transient StorkWorkerThread[] worker_pool;
-  private transient Thread dump_state_thread;
+  private transient DumpStateThread dump_state_thread;
 
   private transient Map<String, CommandHandler> cmd_handlers;
   public transient TransferModuleTable xfer_modules;
@@ -42,7 +45,7 @@ public class StorkScheduler {
   private transient LinkedBlockingQueue<RequestBell> req_queue =
     new LinkedBlockingQueue<RequestBell>();
 
-  private transient User anonymous = User.anonymous(this);
+  private transient User anonymous = User.anonymous();
 
   // Put a job into the scheduling queue.
   public void schedule(StorkJob job) {
@@ -187,7 +190,7 @@ public class StorkScheduler {
     public Ad handle(RequestBell req) {
       StorkSession sess = null;
       try {
-        EndPoint ep = new EndPoint(req.user, req.ad);
+        EndPoint ep = req.ad.unmarshalAs(EndPoint.class);
         sess = ep.session();
         sess.mkdir(ep.path());
         return new Ad("message", "Success!");
@@ -205,7 +208,7 @@ public class StorkScheduler {
     public Ad handle(RequestBell req) {
       StorkSession sess = null;
       try {
-        EndPoint ep = new EndPoint(req.user, req.ad);
+        EndPoint ep = req.ad.unmarshalAs(EndPoint.class);
         sess = ep.session();
         sess.rm(ep.path());
         return new Ad("message", "Success!");
@@ -223,7 +226,7 @@ public class StorkScheduler {
     public Ad handle(RequestBell req) {
       StorkSession sess = null;
       try {
-        EndPoint ep = new EndPoint(req.user, req.ad);
+        EndPoint ep = req.ad.unmarshalAs(EndPoint.class);
         sess = ep.session();
         return Ad.marshal(sess.list(ep.path(), req.ad).waitFor());
       } finally {
@@ -336,11 +339,11 @@ public class StorkScheduler {
     Ad sendCredInfo(RequestBell req) {
       String uuid = req.ad.get("cred");
       if (uuid != null) try {
-        return req.user.creds.getCred(uuid).getAd();
+        return creds.getCred(uuid).getAd();
       } catch (Exception e) {
         throw new RuntimeException("no credential could be found");
       } else {
-        return req.user.creds.getCredInfos(req.ad.get("user_id"));
+        return Ad.marshal(creds.getCredInfo(req.user.creds));
       }
     }
 
@@ -369,8 +372,9 @@ public class StorkScheduler {
       if (action == null) {
         throw new RuntimeException("no action specified");
       } if (action.equals("create")) {
-        StorkCred<?> cred = StorkCred.create(req.ad);
-        String uuid = req.user.creds.add(cred);
+        StorkCred<?> cred = req.ad.unmarshalAs(StorkCred.class);
+        String uuid = creds.add(cred);
+        req.user.creds.add(uuid);
         return cred.getAd().put("uuid", uuid);
       } throw new RuntimeException("invalid action");
     }
@@ -485,13 +489,20 @@ public class StorkScheduler {
   // Thread which dumps server state periodically, or can be forced
   // to dump the server state.
   private class DumpStateThread extends Thread {
+    private boolean dead = false;
+
     public DumpStateThread() {
       super("server dump thread");
       setDaemon(true);
     }
 
+    public void kill() {
+      dead = true;
+      interrupt();
+    }
+
     public void run() {
-      while (true) {
+      while (!dead) {
         int delay = env.getInt("state_save_interval", 120);
         if (delay < 1) delay = 1;
 
@@ -501,7 +512,9 @@ public class StorkScheduler {
           sleep(delay*1000);
         } catch (Exception e) {
           // Ignore.
-        } dumpState();
+        } if (!dead) {
+          dumpState();
+        }
       }
     }
 
@@ -563,7 +576,7 @@ public class StorkScheduler {
     Ad ua = ad.getAd("users");
     if (ua != null) for (String s : ua.keySet()) {
       System.out.println(ua.getAd(s));
-      User u = new User(this, ua.getAd(s));
+      User u = new User(ua.getAd(s));
       users.insert(u);
 
       // Add their unfinished jobs.
@@ -589,19 +602,30 @@ public class StorkScheduler {
     } return this;
   }
 
+  // start() will return the singleton instance.
+  public static StorkScheduler instance() {
+    return start();
+  }
+
   // Restart a scheduler from saved state.
   public static StorkScheduler restart(String s) {
     return restart(new File(s));
-  } public static StorkScheduler restart(File f) {
-    return new StorkScheduler().loadServerState(f).init();
+  } public static synchronized StorkScheduler restart(File f) {
+    if (instance != null)
+      instance.kill();
+    instance = null;
+    return start(f).init();
   }
 
   // Start a new scheduler with an optional config environment.
   public static StorkScheduler start() {
-    return new StorkScheduler().init();
+    return start((Ad)null);
   } public static StorkScheduler start(File f) {
     return start(Ad.parse(f));
-  } public static StorkScheduler start(Ad env) {
+  } public static synchronized StorkScheduler start(Ad env) {
+    if (instance != null)
+      return instance;
+
     StorkScheduler s = new StorkScheduler();
 
     if (env == null)
@@ -611,7 +635,7 @@ public class StorkScheduler {
 
     s.env = env;
 
-    return s.init();
+    return instance = s.init();
   }
 
   private StorkScheduler init() {
@@ -644,6 +668,18 @@ public class StorkScheduler {
     return this;
   }
 
+  // TODO: Kill the scheduler and free any resources.
+  private void kill() {
+    for (StorkThread t : thread_pool)
+      t.dead = true;
+    for (StorkThread t : worker_pool)
+      t.dead = true;
+    dump_state_thread.kill();
+  }
+
   // Don't allow these to be created willy-nilly.
-  private StorkScheduler() { }
+  private StorkScheduler() {
+    if (instance != null)
+      throw new Error("A Stork scheduler has already been instantiated");
+  }
 }

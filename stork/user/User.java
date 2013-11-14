@@ -21,26 +21,22 @@ public class User {
   public String salt;
   public String name;
 
-  // The scheduler this user is associated with.
-  public transient StorkScheduler sched;
-
   public ArrayList<StorkJob> jobs = new ArrayList<StorkJob>();
   public LinkedList<URI>  history = new LinkedList<URI>();
-  public CredManager        creds = new CredManager();
+  public HashSet<String>    creds = new HashSet<String>();
 
   // The minimum password length.
   public static final int PASS_LEN = 6;
 
   // Create an anonymous user. Only instantiate one of these, and do not
   // register it in any UserMap.
-  private User(StorkScheduler s) { 
+  private User() { 
     email = "anonymous";
-    sched = s;
   }
 
   // Create a user from an ad.
-  public User(StorkScheduler sched, Ad ad) {
-    this(sched, ad.get("email"));
+  public User(Ad ad) {
+    this(ad.get("email"));
 
     ad.unmarshal(this);
 
@@ -52,8 +48,7 @@ public class User {
   }
 
   // Create a user with the given email.
-  public User(StorkScheduler sched, String email) {
-    this(sched);
+  public User(String email) {
     try {
       //InternetAddress ia = new InternetAddress(email, true);
       //email = ia.getAddress();
@@ -65,19 +60,12 @@ public class User {
 
   // A class which can be used to store users.
   public static class Map extends HashMap<String, User> {
-    StorkScheduler sched;
-
-    // A user map must be associated with a scheduler.
-    public Map(StorkScheduler sched) {
-      this.sched = sched;
-    }
-
     // Add a user to this user map based on a registration ad.
     public synchronized User register(Ad ad) {
       // Filter some stuff we don't want from users.
       ad.remove("jobs", "creds");
 
-      User su = new User(sched, ad);
+      User su = new User(ad);
       su.setPassword(ad.get("password"));
 
       // If the user already exists, try logging in.
@@ -174,9 +162,9 @@ public class User {
     return (name != null) ? name : email;
   }
 
-  // Get an anonymous user associated with the given scheduler.
-  public static User anonymous(StorkScheduler sched) {
-    return new User(sched) {
+  // Get an anonymous user.
+  public static User anonymous() {
+    return new User() {
       public boolean isAnonymous() {
         return true;
       }

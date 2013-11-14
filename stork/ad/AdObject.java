@@ -182,22 +182,16 @@ public class AdObject implements Comparable<AdObject> {
   }
 
   // Helper function to try to find an unmarshal method.
-  private <C> Method getUnmarshalMethod(Class<C> c) {
-    try {
-      try {
-        // Look for a unmarshalling method which takes the stored type.
-        return c.getMethod("unmarshal", object.getClass());
-      } catch (NoSuchMethodException e) {
-        // Look for a unmarshalling method that takes an object.
-        return c.getMethod("unmarshal", Object.class);
-      }
-    } catch (NoSuchMethodException e) {
-      return null;
-    }
+  private AdMember getUnmarshalMethod(AdType t) {
+    AdMember m = t.method("unmarshal", object.getClass());
+    if (m != null) return m;
+    m = t.method("unmarshal", Object.class);
+    if (m != null) return m;
+    return null;
   }
 
-  public Object as(Class<?> c) {
-    return as(new AdType(c));
+  public <T> T as(Class<T> c) {
+    return c.cast(as(new AdType(c)));
   } protected Object as(AdType t) {
     Class c = t.wrapper();
     if (object == null) {
@@ -206,20 +200,28 @@ public class AdObject implements Comparable<AdObject> {
       // Check if it's an array.
       if (t.isArray())
         return asArray(t);
-      Method m = conv_map.get(c);
-      if (m != null)
-        return c.cast(m.invoke(this));
+      // Check if it's an enum.
+      if (t.isEnum())
+        return t.resolveEnum(asString());
+      Method cm = conv_map.get(c);
+      if (cm != null)
+        return c.cast(cm.invoke(this));
       // Try looking for an unmarshalling method.
-      m = getUnmarshalMethod(c);
+      AdMember m = getUnmarshalMethod(t);
       if (m != null)
         return c.cast(m.invoke(null, object));
-      // Just unmarshal the ad into the object.
-      return asAd().unmarshalAs(t);
+      // Try looking for a likely constructor.
+      m = t.constructor(object.getClass());
+      if (m != null)
+        return c.cast(m.construct(object));
+      // Try the nullary constructor.
+      if (isAd() && (m = t.constructor()) != null)
+        return asAd().unmarshal(c.cast(m.construct()), t);
     } catch (RuntimeException e) {
       throw e;
     } catch (Exception e) {
       throw new RuntimeException(c.toString(), e);
-    }
+    } throw new RuntimeException("Cannot unmarshal as "+t);
   }
 
   public <C> C asArray(Class<C> c) {
@@ -229,20 +231,15 @@ public class AdObject implements Comparable<AdObject> {
     AdType c = t.component();
     Object arr;
     if (object instanceof Ad) {
-      // Convert to a list or map and unmarshal into array.
-      Method m = conv_map.get(t.component().clazz());
-      if (m == null)
-        throw new RuntimeException("cannot convert "+object.getClass()+" to "+c);
-
       Ad ad = asAd();
       arr = c.asArray(ad.size());
 
       try {
         int i = 0;
         if (ad.isList()) for (AdObject o : ad.list())
-          Array.set(arr, i++, m.invoke(o));
+          Array.set(arr, i++, o.as(c));
         else if (ad.isMap()) for (AdObject o : ad.map().values())
-          Array.set(arr, i++, m.invoke(o));
+          Array.set(arr, i++, o.as(c));
       } catch (RuntimeException e) {
         throw e;
       } catch (Exception e) {
@@ -250,7 +247,7 @@ public class AdObject implements Comparable<AdObject> {
       }
     } else {
       // Convert to a singleton array.
-      arr = t.asArray(1);
+      arr = c.asArray(1);
       Array.set(arr, 0, as(c));
     } return arr;
   }

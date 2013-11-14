@@ -32,9 +32,8 @@ public class FTPURI {
       pass = ui[1];
   }
 
-  public FTPURI(EndPoint e) {
-    this.uri = e.uri();
-    StorkCred<?> cred = e.cred();
+  public FTPURI(URI uri, StorkCred cred) {
+    this.uri = uri;
 
     host = uri.getHost();
     proto = uri.getScheme();

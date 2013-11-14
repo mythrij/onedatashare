@@ -153,10 +153,13 @@ public class StorkJob {
       synchronized (this) {
         // Must be scheduled to be able to run.
         if (status != scheduled)
-          throw new RuntimeException("trying to run unscheduled job");
+          throw new RuntimeException("Trying to run unscheduled job");
         status(processing);
         thread = Thread.currentThread();
       }
+
+      if (dest.uri().length != 1)
+        throw new RuntimeException("Only one destination allowed");
 
       // Establish connections to end-points.
       ss = src.session();
@@ -189,33 +192,36 @@ public class StorkJob {
       // Set the pipe.
       ss.setPipe(pipe.new End());
 
-      // Get the file trees. FIXME: hax
-      Bell<FileTree> dfb = ds.list(dest.path());
-      FileTree sft = ss.list(src.path(), new Ad("recursive", true)).waitFor();
-      FileTree dft;
+      // For each source file tree, perform the transfer.
+      Ad opts = new Ad("recursive", true);
+      for (URI su : src.uri()) {
+        Bell<FileTree> dfb = ds.list(dest.path());
+        FileTree sft = ss.list(su.getPath(), opts).waitFor();
+        FileTree dft;
 
-      try {
-        dft = dfb.waitFor();
-      } catch (Exception e) {
-        // Assume it's a new whatever the source is.
-        dft = new FileTree(sft.name);
-        dft.copy(sft);
+        try {
+          dft = dfb.waitFor();
+        } catch (Exception e) {
+          // Assume it's a new whatever the source is.
+          dft = new FileTree(sft.name);
+          dft.copy(sft);
+        }
+
+        if (sft.dir && dft.file)
+          throw new RuntimeException("Cannot transfer from directory to file");
+
+        // Open the files on the endpoints.
+        StorkChannel sc = ss.open(StorkUtil.dirname(su.getPath()),  sft);
+        StorkChannel dc = (dft.dir) ? ds.open(dest.path(), sft)
+                                    : ds.open(StorkUtil.dirname(dest.path()), dft);
+
+        // If the destination exists and overwriting is not enabled, fail.
+        if (!ds.overwrite && dc.exists())
+          throw new RuntimeException("Destination file already exists.");
+
+        // Let the transfer module do the rest.
+        sc.sendTo(dc).waitFor();
       }
-
-      if (sft.dir && dft.file)
-        throw new RuntimeException("cannot transfer from directory to file");
-
-      // Open the files on the endpoints.
-      StorkChannel sc = ss.open(StorkUtil.dirname(src.path()),  sft);
-      StorkChannel dc = (dft.dir) ? ds.open(dest.path(), sft)
-                                  : ds.open(StorkUtil.dirname(dest.path()), dft);
-
-      // If the destination exists and overwriting is not enabled, fail.
-      if (!ds.overwrite && dc.exists())
-        throw new RuntimeException("Destination file already exists.");
-
-      // Let the transfer module do the rest.
-      sc.sendTo(dc).waitFor();
 
       // No exceptions happened. We did it!
       status(complete);

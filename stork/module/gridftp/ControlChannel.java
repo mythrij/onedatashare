@@ -110,7 +110,7 @@ public class ControlChannel extends Pipeline<String, Reply> {
   }
 
   public ControlChannel(EndPoint e) {
-    this(new FTPURI(e));
+    this(new FTPURI(e.uri()[0], e.cred));
   } public ControlChannel(FTPURI u) {
     my_uri = u;
     port = u.port;

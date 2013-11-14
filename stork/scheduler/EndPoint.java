@@ -3,7 +3,6 @@ package stork.scheduler;
 import stork.ad.*;
 import stork.cred.*;
 import stork.module.*;
-import stork.user.*;
 import stork.util.*;
 
 import java.net.URI;
@@ -14,83 +13,45 @@ import java.net.URI;
 // TODO: Delegate lookups to job ad.
 
 public class EndPoint {
-  URI uri;
-  AdObject cred;
-  String module;
-  transient User user;
+  public URI[] uri;
+  public StorkCred cred;
+  public String module;
 
-  // Create a new endpoint from a URI.
+  // Create an endpoint from a set of URI strings or URI objects.
   private EndPoint() {
-    // Only used by deserialization.
-  } public EndPoint(String s) {
-    uri(s);
-  } public EndPoint(URI u) {
-    uri(u);
-  } public EndPoint(Ad ad) {
-    this(null, ad);
-  } public EndPoint(User user, Ad ad) {
-    uri(ad.get("uri"));
-    cred(ad.getObject("cred"));
-    module(ad.get("module"));
-    if (user != null)
-      setUser(user);
+    // Used for unmarshalling.
+  } public EndPoint(String... s) {
+    new Ad("uri", s).unmarshal(this);
+  } public EndPoint(URI... u) {
+    new Ad("uri", u).unmarshal(this);
   }
 
-  // Unmarshal strings as end-points with a URI.
-  public static EndPoint unmarshal(String u) {
-    return new EndPoint(u);
-  }
+  // Get the URI, checking for validity.
+  public URI[] uri() {
+    if (uri == null || uri.length < 1)
+      throw new RuntimeException("No URI specified");
+    if (uri[0].getScheme() == null)
+      throw new RuntimeException("No scheme specified");
+    if (!uri[0].isAbsolute() && uri.length > 1)
+      throw new RuntimeException("First URI must be absolute");
+    if (!uri[0].isAbsolute() && uri.length == 1)
+      throw new RuntimeException("URI must be absolute");
+    uri[0] = uri[0].normalize();
 
-  // Unmarshal ads end-points with constructor.
-  public static EndPoint unmarshal(Ad ad) {
-    return new EndPoint(ad);
-  }
+    URI root = StorkUtil.rootURI(uri[0]);
 
-  // Quick hack so we can perform lookups in the context of a scheduler.
-  // Be sure to set this before doing anything else.
-  public void setUser(User u) {
-    user = u;
-    validate();
-  }
+    // Make sure the rest of the URIs, if any, are relative.
+    for (int i = 1; i < uri.length; i++) {
+      if (root.relativize(uri[i]).isAbsolute())
+        throw new RuntimeException("Additional URIs must be relative");
+      uri[i] = uri[i].normalize();
+    }
 
-  // Validate that this thing was created properly.
-  public void validate() {
-    uri();
-    cred();
-    module();
-  }
-
-  // Get or set the URI.
-  public void uri(String s) {
-    uri(StorkUtil.makeURI(s));
-  } public void uri(URI u) {
-    uri = u;
-  } public URI uri() {
-    if (uri == null)
-      throw new RuntimeException("missing URI");
-    if (uri.getScheme() == null)
-      throw new RuntimeException("no scheme specified");
-    return uri = uri.normalize();
-  }
-
-  // Get or set the cred token. This AdObject hack lets us accept anonymous
-  // credentials until a better solution is found.
-  public void cred(String c) {
-    cred(AdObject.wrap(c));
-  } public void cred(Ad ad) {
-    cred(AdObject.wrap(ad));
-  } public void cred(AdObject c) {
-    cred = c;
-  } public StorkCred<?> cred() {
-    return (cred == null)    ? null :
-           (cred.isString()) ? user.creds.getCred(cred.asString()) :
-           (cred.isAd())     ? StorkCred.create(cred.asAd()) : null;
+    return uri;
   }
 
   // Get or set the transfer module.
-  public void module(String m) {
-    module = m;
-  } public TransferModule module() {
+  public TransferModule module() {
     TransferModuleTable xm = TransferModuleTable.instance();
     if (module == null)
       return xm.byProtocol(proto());
@@ -98,11 +59,11 @@ public class EndPoint {
   }
 
   public String proto() {
-    return uri().getScheme();
+    return uri()[0].getScheme();
   }
 
   public String path() {
-    return uri().getPath();
+    return uri()[0].getPath();
   }
 
   // Create a session for this endpoint.

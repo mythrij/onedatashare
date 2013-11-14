@@ -198,7 +198,20 @@ public abstract class StorkUtil {
 
       return u;
     } catch (Exception e) {
-      throw new RuntimeException("couldn't parse URI: "+e.getMessage(), e);
+      throw new RuntimeException("Couldn't parse URI: "+e.getMessage(), e);
+    }
+  }
+
+  // Return a new URI based on the given URI with the non-server components
+  // removed.
+  public static URI rootURI(String uri) {
+    return rootURI(makeURI(uri));
+  } public static URI rootURI(URI uri) {
+    try {
+      return new URI(uri.getScheme(), uri.getUserInfo(), uri.getHost(),
+                     uri.getPort(), null, null, null);
+    } catch (Exception e) {
+      throw new RuntimeException("Couldn't encode URI: "+e.getMessage(), e);
     }
   }
 
