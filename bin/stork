@@ -30,6 +30,18 @@ PROG="${SPLIT[0]}"
 unset SPLIT[0]
 set -- "${SPLIT[@]}" "$@"
 
+# Determine the command and if -d was specified.
+for ARG in "$@"; do
+  [ -z "$CMD" ] && [ "$ARG[0]" != "-" ] && CMD=$ARG
+  [ "$ARG" = "-d" ] && {
+    DAEMONIZE=true
+    break
+  }
+done
+
+# Only daemonize if we're running a server.
+[ -n "$DAEMONIZE" ] && [ "$CMD" != "server" ] && DAEMONIZE=
+
 # Determine the absolute location of STORK_HOME.
 [ -z "$STORK_HOME" ] && STORK_HOME=$(dirname "$PROGDIR")
 [ -d "$STORK_HOME" ] || {
@@ -54,5 +66,10 @@ cd "$STORK_HOME" || {
 # Determine Java binary location.
 JAVA="$JAVA_HOME/bin/java"
 
-# Run it.
-exec $JAVA -Xmx512m -cp "$STORK_HOME/lib/*" $JFLAGS $CLASS $@
+# Run it. TODO: Don't simply nohup or redirect to /dev/null.
+[ "$DAEMONIZE" = true ] && {
+  nohup $JAVA -Xmx512m -cp "$STORK_HOME/lib/*" $JFLAGS $CLASS $@ &> /dev/null &
+  echo Starting Stork server in background...
+} || {
+  exec $JAVA -Xmx512m -cp "$STORK_HOME/lib/*" $JFLAGS $CLASS $@
+}
