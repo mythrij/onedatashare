@@ -91,8 +91,12 @@
         <i class="text-muted" ng-mousedown="toggle()"></i>
         <div ng-class="{'alert-info': selected, 'alert-warning': !!error}" ng-dblclick="toggle()"
              ng-mousedown="select($event)">{{root.name}}
-          <span class="small text-muted" ng-if="!root.dir">{{root.size | size}}</span>
+          <span class="small text-muted" ng-if="!root.dir">{{root.size | size}}B</span>
           <span ng-if="loading" class="icon-refresh icon-spin text-muted"></span>
+          <div class="small text-muted" style="padding-left:1em">
+            <span ng-if="root.time">{{root.time*1000 | date:'medium'}}</span>
+            {{root.perm}}
+          </div>
         </div>
         <ul ng-if="root.files" ng-init="files = root.files; selected = false; open = false"
             class="stork-list" ng-include="'browse-node.html'">
