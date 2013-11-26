@@ -4,8 +4,10 @@ import stork.ad.*;
 import stork.util.*;
 import stork.cred.*;
 import stork.module.*;
+import stork.scheduler.*;
 import static stork.module.ModuleException.*;
 
+import java.util.*;
 import java.net.URI;
 import com.jcraft.jsch.*;
 
@@ -21,8 +23,9 @@ public class SFTPSession extends StorkSession {
   private ChannelSftp channel;
 
   // Create a new connection from a URI and options.
-  public SFTPSession(URI uri, Ad opts) {
-    super(uri, opts);
+  public SFTPSession(EndPoint e) {
+    super(e);
+    URI uri = e.uri()[0];
 
     int port = uri.getPort();
     if (port < 0)
@@ -50,8 +53,8 @@ public class SFTPSession extends StorkSession {
 
       channel = (ChannelSftp) session.openChannel("sftp");
       channel.connect();
-    } catch (Exception e) {
-      throw abort(e);
+    } catch (Exception ex) {
+      throw abort(ex);
     }
   }
 
@@ -61,37 +64,33 @@ public class SFTPSession extends StorkSession {
 
   // Get a directory listing of a path from the session.
   protected Bell<FileTree> listImpl(String path, Ad opts) {
-    Ad ad = new Ad("name", path);
-    AdSorter sorter = new AdSorter("dir", "name");
+    FileTree ft = new FileTree(StorkUtil.basename(path));
+    ft.dir = true;
+    List<FileTree> sub = new LinkedList<FileTree>();
 
     try {
       for (Object o : channel.ls(path)) {
         ChannelSftp.LsEntry ls = (ChannelSftp.LsEntry) o;
+
         String name = ls.getFilename();
-        boolean dir = ls.getAttrs().isDir();
-        long size   = ls.getAttrs().getSize();
+        FileTree sft = new FileTree(name);
+        sft.dir  = ls.getAttrs().isDir();
+        sft.file = !sft.dir;
+        sft.size = ls.getAttrs().getSize();
 
         // Ignore certain names.
         if (name == null || name.equals(".") || name.equals(".."))
           continue;
-
-        Ad a = new Ad("name", name);
-
-        if (dir) {
-          ad.put("dir", true);
-        } else {
-          a.put("file", true);
-          a.put("size", size);
-        }
-
-        // Add file to list.
-        sorter.add(a);
+        sub.add(sft);
       }
+
+      ft.setFiles(sub);
+      Bell<FileTree> bell = new Bell<FileTree>();
+      bell.ring(ft);
+      return bell;
     } catch (Exception e) {
       throw abort(e);
     }
-
-    return null;//ad.put("files", sorter.getAds());
   }
 
   // Get the size of a file given by a path.
@@ -133,16 +132,10 @@ public class SFTPSession extends StorkSession {
   }
 
   // Testing code.
-  public static void main(String[] args) {
-    try {
-      URI u = new URI(args[0]);
-      SFTPSession sess = new SFTPSession(u, null);
-      System.out.println(sess.list(u.getPath()));
-      sess.close();
-    } catch (Exception e) {
-      e.printStackTrace();
-      System.out.println("Usage: SFTPSession <url>");
-      System.exit(1);
-    }
+  public static void main(String[] args) throws Exception {
+    URI u = new URI(args[0]);
+    SFTPSession sess = new SFTPSession(new EndPoint(u));
+    System.out.println(Ad.marshal(sess.list(u.getPath()).waitFor()));
+    sess.close();
   }
 }
