@@ -21,6 +21,12 @@ public class Bell<O> {
   private O o;
   private Throwable t;
 
+  // Thrown by reject() to prevent ringing of the bell.
+  private static final RuntimeException REJECT = new RuntimeException();
+
+  // These bells will be rung after this bell rings.
+  private Set<Bell<T super O>> thens;
+
   public Bell() { }
 
   // Create an already-rung bell.
@@ -29,28 +35,22 @@ public class Bell<O> {
     state = RUNG;
   }
 
-  // Ring the bell to wakeup sleeping threads, optionally with a return
-  // value for waitFor(). This will run the rung objects through filter()
-  // before actually ringing the bell. Returns whether or not filter() let
-  // the call ring the bell.
-  public synchronized boolean ring() {
+  // Resolve the bell with a value or exception.
+  public boolean ring() {
     return ring(null, null);
   } public boolean ring(Throwable t) {
     return ring(null, t);
   } public boolean ring(O o) {
     return ring(o, null);
   } public boolean ring(O o, Throwable t) {
-    boolean b = startRing(o, t);
-    if (b) endRing();
-    return b;
+    return startRing(o, t) ? endRing() : false;
   }
 
-  // These can be used for more fine-grained timing requirements. This
-  // checks the filters and begins ringing the bell.
-  public synchronized boolean startRing(O o, Throwable t) {
+  // This checks the filters and begins ringing the bell.
+  protected synchronized boolean startRing(O o, Throwable t) {
     // Make darn sure the bell only rings once.
     if (state() != UNRUNG)
-      throw new Error("this bell cannot be run again");
+      throw new Error("this bell cannot be rung");
     if (!filter(o, t))
       return false;
     state = RINGING;
@@ -59,19 +59,19 @@ public class Bell<O> {
     return true;
   }
 
-  // Call the end handlers.
-  public void endRing() {
+  // Call the end handlers. Always returns true.
+  protected void endRing() {
     // Run the handlers, and make sure to catch anything they may throw.
     if (state() != RINGING) {
       throw new Error("bell has not begun ringing");
     } if (t != null) try {
-      fail(o, t);
+      fail(t);
     } catch (RuntimeException e) {
       t = e;
     } else try {
       done(this.o = o);
     } catch (RuntimeException e) {
-      fail(o, t = e);
+      fail(t = e);
     } try {
       always(o, t);
     } catch (RuntimeException e) {
@@ -115,28 +115,59 @@ public class Bell<O> {
     return state() != UNRUNG;
   }
 
-  // This can be implemented by subclasses to intercept incoming objects and
-  // protentially prevent them from causing the bell to be rung. It should
-  // return true if the object should ring the bell, false otherwise.
-  public boolean filter(O o, Throwable t) {
-    return true;
-  }
-
   // Check if we can write this to the pipeline.
   protected boolean ready() {
     return true;
   }
 
-  // Handlers which can optionally be overriden by subclasses.
-  protected void done(O o) {
-    // Called on success, with the ringing object. Can throw if something's
-    // wrong, which will trigger fail and alter the stored throwable.
-  } protected void fail(O o, Throwable t) {
-    // Called on failure (or if done throws). Can throw to alter the stored
-    // throwable.
-  } protected void always(O o, Throwable t) {
-    // Called always, after everything else has been called. Can throw to
-    // alter the stored throwable.
+  // A bell which will ring when the passed bells have been rung.
+  public static class And extends Bell {
+    private Set<Bell> bells;
+
+    public And(Bell... bells) {
+      this(Arrays.asList(base));
+    } public And(Collection<Bell> bells) {
+      this.bells = new HashSet<Bell>();
+      this.bells.addAll(bs);
+      for (Bell b : this.bells)
+        b.then(this);
+    }
+
+    boolean andRing(Bell b) {
+      if (!isRung()) {
+        bells.remove(b);
+        if (bells.isEmpty()) return ring();
+      } return false;
+    }
+  }
+
+  // An async handlers which can intercept and modify the result of ringing the
+  // bell. Subclasses should access the stored result using get(), which will
+  // throw if the bell was rung with a throwable. Throwing from this method
+  // will cause the bell to fail. Returning will cause the bell to be resolved
+  // with the returned object. Calling reject() will cause ring() -- the only
+  // method from which this method should be called -- to return false and the
+  // bell to remain unrung.
+  protected O onRing() {
+    return get();
+  }
+
+  // Used in onRing() to reject the ringing object.
+  protected final reject() { throw REJECT; }
+
+  // A "thenned" bell will be rung when this bell is rung. If the bell is
+  // already rung when the thenned bell is attached, the thenned bell will
+  // be rung.
+  public synchronized void then(Bell<T super O>... bells) {
+    then(Arrays.asList(bells));
+  } public synchronized void then(Collection<Bell<T super O>> bells) {
+    if (isRung()) for (Bell b : bells) {
+      b.ring(o, t);
+    } else {
+      if (thens == null)
+        thens = new HashSet<Bell<T super O>>();
+      thens.addAll(bells);
+    }
   }
 
   // A bell link can be used to create a new bell from this one which will
