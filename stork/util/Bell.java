@@ -1,185 +1,523 @@
-package stork.util;
+//package stork.util;
 
-// A "bell" that can be "rung" to wakeup things waiting on it. An
-// optional value can be passed to ring() that will be returned to
-// threads calling waitFor().
-//
-// A bell can be extended to include handlers that execute depending on
-// what the bell was rung with. Any of the handlers may throw a runtime
-// exception, which will cause the bell to store the exception and pass
-// it on to anything waiting on the bell.
-//
-// Subclasses can also override the filter method to intercept objects,
-// potentially modify or act on them, or prevent them from ringing the bell.
+import java.util.*;
+import java.util.concurrent.*;
 
-public class Bell<O> {
-  public static final int UNRUNG  = 0;
-  public static final int RINGING = 1;
-  public static final int RUNG    = 2;
-  private volatile int state = UNRUNG;
+// Utility classes and interfaces for bells.
 
-  private O o;
-  private Throwable t;
+public final class Bell {
+  // Bell states
+  public static enum State {
+    UNRUNG, SUCCESS, FAILURE;
 
-  // Thrown by reject() to prevent ringing of the bell.
-  private static final RuntimeException REJECT = new RuntimeException();
-
-  // These bells will be rung after this bell rings.
-  private Set<Bell<T super O>> thens;
-
-  public Bell() { }
-
-  // Create an already-rung bell.
-  public Bell(O o) {
-    this.o = o;
-    state = RUNG;
-  }
-
-  // Resolve the bell with a value or exception.
-  public boolean ring() {
-    return ring(null, null);
-  } public boolean ring(Throwable t) {
-    return ring(null, t);
-  } public boolean ring(O o) {
-    return ring(o, null);
-  } public boolean ring(O o, Throwable t) {
-    return startRing(o, t) ? endRing() : false;
-  }
-
-  // This checks the filters and begins ringing the bell.
-  protected synchronized boolean startRing(O o, Throwable t) {
-    // Make darn sure the bell only rings once.
-    if (state() != UNRUNG)
-      throw new Error("this bell cannot be rung");
-    if (!filter(o, t))
-      return false;
-    state = RINGING;
-    this.o = o;
-    this.t = t;
-    return true;
-  }
-
-  // Call the end handlers. Always returns true.
-  protected void endRing() {
-    // Run the handlers, and make sure to catch anything they may throw.
-    if (state() != RINGING) {
-      throw new Error("bell has not begun ringing");
-    } if (t != null) try {
-      fail(t);
-    } catch (RuntimeException e) {
-      t = e;
-    } else try {
-      done(this.o = o);
-    } catch (RuntimeException e) {
-      fail(t = e);
-    } try {
-      always(o, t);
-    } catch (RuntimeException e) {
-      t = e;
-    } state = RUNG;
-
-    synchronized (this) { notifyAll(); }
-  }
-
-  // Handles either getting the object or throwing the throwable. Only
-  // call this once the bell has completed being rung. It will busy wait
-  // otherwise, just to punish you.
-  protected O innerGet() {
-    while (state() != RUNG);
-    if (t != null) throw (t instanceof RuntimeException) ?
-      (RuntimeException) t : new RuntimeException(t);
-    return o;
-  }
-
-  // Wait for the bell to ring, optionally for some maximum duration.
-  public O waitFor() {
-    try {  // This will never happen, but Java doesn't believe that.
-      return waitFor(false);
-    } catch (InterruptedException e) {
-      throw new Error("the impossible has happened", e);
+    // Fluency methods for ring().
+    public boolean succeeded() {
+      return this == SUCCESS;
+    } public boolean failed() {
+      return this != SUCCESS;
+    } public boolean rang() {
+      return this != UNRUNG;
     }
-  } public O waitFor(boolean interruptable) throws InterruptedException {
-    synchronized (this) {
-      while (state() != RUNG) try {
+  }
+
+  // Interfaces
+  // ==========
+  // Bells that can be rung with objects of type I. The ring methods return a
+  // boolean indicating whether or not the bell was rung, and thus now contains
+  // a value. The "promise" side of the bell.
+  interface In<I> {
+    // Ring the bell with nothing, setting the value to null. Returns whether
+    // or not the value caused the bell to ring.
+    State ring();
+
+    // Ring the bell with an object. Returns whether or not the value caused
+    // the bell to ring.
+    State ring(I i);
+
+    // Ring the bell with an exception, causing it to fail. Returns whether or
+    // not the value caused the bell to ring.
+    State ring(Throwable t);
+  }
+
+  // Bells that yield objects of type O when read. The "future" side of the
+  // bell. This extends the Java future interface to support promise
+  // pipelining with then().
+  interface Out<O> extends Future<O> {
+    // Ring the given bells when this bell rings.
+    void then(In<O>... in);
+    void then(Collection<In<O>> in);
+  }
+
+  // A bell that is rung with objects of type I and yields objects of type O.
+  interface To<I,O> extends In<I>, Out<O> { }
+
+  // Base Implementations
+  // ====================
+  // A simple base class for implementing handlers for then() which simply
+  // calls handle() whenever the bell is rung.
+  // TODO: Conceptually this is similar to done()/fail()/always() in other
+  // bells. Is there a way we can tie the two together?
+  public static abstract class Handler implements In {
+    public final State ring(Object o)    { return ring(); }
+    public final State ring(Throwable o) { return ring(); }
+    public final State ring() {
+      try {
+        handle();
+        return State.SUCCESS;
+      } catch (Throwable t) {
+        return State.FAILURE;
+      }
+    }
+
+    // This will be run whenever the bell in rung in any way. Subclasses should
+    // override this to implement the behavior.
+    protected abstract void handle() throws Throwable;
+  }
+
+  // A base class for bells that exhibit typical "out" behavior.
+  public static abstract class BasicOut<I,O> extends Handler
+  implements To<I,O> {
+    State state = State.UNRUNG;
+    private O value;
+    private Throwable error;
+    private Set<In<O>> thens;
+
+    // Get the stored value. If the bell has not rung, this method blocks until
+    // it rings. If the bell has failed, this method throws the exception
+    // wrapped in an ExecutionException.
+    public synchronized O get()
+    throws InterruptedException, ExecutionException {
+      while (!isDone())
         wait();
-      } catch (InterruptedException e) {
-        if (interruptable) throw e;
-      } return innerGet();
+      return getValue();
+    }
+
+    // Get the stored value. If the bell has not rung, this method blocks until
+    // it rings, up to a given amount of time. If the bell has failed, this
+    // method throws the exception wrapped in an ExecutionException.
+    public synchronized O get(long timeout, TimeUnit unit)
+    throws InterruptedException, ExecutionException, TimeoutException {
+      if (isDone())
+        return getValue();
+      unit.timedWait(this, timeout);
+      if (isDone())
+        return getValue();
+      throw new TimeoutException();
+    }
+
+    // Helper method which either returns the value or throws the wrapped
+    // exception. This should ONLY be called when the bell is known to be
+    // resolved.
+    protected synchronized O getValue() throws ExecutionException {
+      switch (state) {
+        case SUCCESS:
+          return value;
+        case FAILURE :
+          if (error == null)
+            throw new CancellationException();
+          throw new ExecutionException(error);
+        default:
+          throw new Error("bell has not rung");
+      }
+    }
+
+    // Cancelling simply resolves the bell with a cancellation exception.
+    public synchronized boolean cancel(boolean may_interrupt) {
+      if (state != State.UNRUNG)
+        return false;
+      resolve((Throwable) null);
+      return true;
+    }
+
+    // Check if the bell has been resolved.
+    public synchronized boolean isDone() {
+      return state != State.UNRUNG;
+    }
+
+    // Check if the bell has been cancelled.
+    public synchronized boolean isCancelled() {
+      return state == State.FAILURE && error == null;
+    }
+
+    // This should be used by subclasses to resolve the bell.
+    protected synchronized void resolve(O value) {
+      this.value = value;
+      state = State.SUCCESS;
+      notifyAll();
+      ringOthers(thens);
+    } protected synchronized void resolve(Throwable error) {
+      this.error = error;
+      state = State.FAILURE;
+      notifyAll();
+      ringOthers(thens);
+    }
+
+    // Schedule a compatible bell to be rung after this bell rings. If this
+    // bell has already rung when then() is called, the passed bell will be
+    // rung immediately with this bell's value.
+    public synchronized void then(In<O>... bells) {
+      then(Arrays.asList(bells));
+    } public synchronized void then(Collection<In<O>> bells) {
+      if (isDone()) {
+        ringOthers(bells);
+      } else {
+        if (thens == null)
+          thens = new HashSet<In<O>>();
+        thens.addAll(bells);
+      }
+    }
+
+    // Helper method for ringing thenned bells. ONLY call this if this bell has
+    // been rung.
+    private synchronized void ringOthers(Collection<In<O>> bells) {
+      if (bells != null) try {
+        O v = getValue();
+        for (In<O> b : bells) if (b != this) try {
+          b.ring(v);
+        } catch (Exception e) {
+          // This is here to absorb any runtime exceptions that might come out
+          // of ring(), such as casting exceptions if someone is playing fast
+          // and loose with our generic variadic parameters. Bad code monkey,
+          // bad!
+        }
+      } catch (Throwable t) {
+        // At this point, ringing with a throwable should not throw any
+        // exceptions.
+        for (In<O> b : bells) if (b != this) b.ring(t);
+      }
     }
   }
 
-  // Check the bell state.
-  protected synchronized int state() {
-    return state;
-  } public boolean isRung() {
-    return state() != UNRUNG;
-  }
+  // This special exception is thrown by ring handlers to ignore ringing
+  // values.
+  private static class DiscardedRingException extends RuntimeException { }
 
-  // Check if we can write this to the pipeline.
-  protected boolean ready() {
-    return true;
-  }
-
-  // A bell which will ring when the passed bells have been rung.
-  public static class And extends Bell {
-    private Set<Bell> bells;
-
-    public And(Bell... bells) {
-      this(Arrays.asList(base));
-    } public And(Collection<Bell> bells) {
-      this.bells = new HashSet<Bell>();
-      this.bells.addAll(bs);
-      for (Bell b : this.bells)
-        b.then(this);
-    }
-
-    boolean andRing(Bell b) {
-      if (!isRung()) {
-        bells.remove(b);
-        if (bells.isEmpty()) return ring();
-      } return false;
+  // This special exception is thrown by ring handlers to alter the final
+  // value of this bell.
+  private static class AlterationException extends RuntimeException {
+    final BasicTo.Holder holder;
+    AlterationException(BasicTo.Holder h, Throwable t) {
+      super(t);
+      holder = h;
     }
   }
 
-  // An async handlers which can intercept and modify the result of ringing the
-  // bell. Subclasses should access the stored result using get(), which will
-  // throw if the bell was rung with a throwable. Throwing from this method
-  // will cause the bell to fail. Returning will cause the bell to be resolved
-  // with the returned object. Calling reject() will cause ring() -- the only
-  // method from which this method should be called -- to return false and the
-  // bell to remain unrung.
-  protected O onRing() {
-    return get();
-  }
+  // A base class for all bells that exhibit typical behavior. This class
+  // provides on-ring handlers which can be used to perform tasks when the bell
+  // is rung, and potentially alter or ignore values.
+  public static abstract class BasicTo<I,O> extends BasicOut<I,O> {
+    // This is a workaround to Java's infuriating restrictions regarding
+    // generic casting and inner throwables. Because we can't directly cast the
+    // value held by an AlterationException to an O, we have to use this stupid
+    // indirection technique, and cast the "holder" held by the exception
+    // instead. The compiler complains in the name of "type safety", but at
+    // least it lets it happen. I don't know why the compiler is so concerned
+    // about type safety in this case when there are already so many ways
+    // within the language to break type safety anyway. Maybe it should mind
+    // its own business, feh.
+    class Holder { O value; }
 
-  // Used in onRing() to reject the ringing object.
-  protected final reject() { throw REJECT; }
+    // Subclasses need to define the method for converting input objects into
+    // output values.
+    protected abstract O convert(I i);
 
-  // A "thenned" bell will be rung when this bell is rung. If the bell is
-  // already rung when the thenned bell is attached, the thenned bell will
-  // be rung.
-  public synchronized void then(Bell<T super O>... bells) {
-    then(Arrays.asList(bells));
-  } public synchronized void then(Collection<Bell<T super O>> bells) {
-    if (isRung()) for (Bell b : bells) {
-      b.ring(o, t);
-    } else {
-      if (thens == null)
-        thens = new HashSet<Bell<T super O>>();
-      thens.addAll(bells);
+    // Try to ring the bell and return the bell's state.
+    public final synchronized State ring(I i) {
+      return ring(i, null);
+    } public final synchronized State ring(Throwable t) {
+      if (t == null)
+        t = new NullPointerException();
+      return ring(null, t);
+    } public final synchronized State ring() {
+      return ring(null, null);
+    } protected synchronized State ring(I i, Throwable t) {
+      // At least one must be null.
+      if (i != null && t != null)
+        throw new Error("rung with both an object and an exception");
+      // Subclasses should handle this check themselves if they want different
+      // behavior.
+      if (state != State.UNRUNG)
+        throw new Error("bell has already rung");
+
+      // The calling of the handlers has been moved into a separate method for
+      // resuability purposes. This will handle calling resolve() as well.
+      callHandlers(i, t);
+
+      return state;
+    }
+
+    // This method will call the handlers and take care of whatever havoc they
+    // may wreak.
+    private void callHandlers(I i, Throwable t) {
+      callHandlers(i, null, t, false);
+    } private void callHandlers(I i, O o, Throwable t, boolean always) {
+      // Try running the handlers and intercept any exceptions they throw.
+      try {
+        if (!always) {
+          // First call the done() and fail() handlers. These may alter what
+          // get passed to always() in the second iteration.
+          if (t != null) {
+            fail(t);
+          } else {
+            done(i);
+            o = convert(i);
+          }
+        } else {
+          // Now call the always() handler, which may see something different
+          // than done() and fail() saw if alter() was called.
+          always(o, t);
+        }
+      } catch (DiscardedRingException e) {
+        // The handlers chose to ignore the ring. Bubble up to ring() so it
+        // knows the bell was not resolved.
+        return;
+      } catch (AlterationException ae) {
+        // alter() was called, so update the resolution values we're working
+        // with.
+        o = ((Holder) ae.holder).value;
+        t = ae.getCause();
+      } catch (Throwable th) {
+        // The handler threw some other exception. Update the state with that.
+        t = th;
+      }
+
+      // What we do next depends on whether we called always() or not...
+      if (!always) {
+        // We need to call this again, but run always() instead.
+        callHandlers(null, o, t, true);
+      } else {
+        // We just ran the always() handler. Whatever values we have now are
+        // the values we will use to resolve the bell.
+        if (t != null) resolve(t);
+        else           resolve(o);
+      }
+    }
+
+    // Handlers
+    // ========
+    // Subclasses may override these to implement on-ring handlers. A few methods
+    // can be called inside of these handlers to control the ring result:
+    //
+    // alter(...)
+    //   Changes the final value of the bell. Calling alter() will not result
+    //   in the handlers being called multiple times, though calling alter() in
+    //   done() or fail() will cause always() to see the changed value. Calling
+    //   alter() will also bypass the call to convert().
+    //              
+    // discard()
+    //   Ignores the ringing value and leaves the bell unrung. The handlers
+    //   will be called again when the bell is rung in the future.
+    //
+    // Multiple variants of the handler methods are exposed, allowing the
+    // opportunity for less verbose method signatures in subclasses. Well-
+    // behaved subclasses will implement at most one variant of each of done,
+    // fail, and always. The method with the most specific signature will be
+    // the one ultimately called.
+    //
+    // Any of these methods may throw to fail the handler. This is equivalent
+    // to calling alter(error). Note that in Java, the "throws" part is
+    // optional when overriding methods, unless the method actually throws an
+    // exception that must be handled.
+
+    // Called when the bell is rung successfully. This is analogous to the "try"
+    // part of a try-catch-finally construction.
+    public void done() throws Throwable {
+      // Override this if you don't care about the ringing value.
+    } public void done(I i) throws Throwable {
+      // Override this to check the value. This is the done handler that will
+      // actually get called on ring. By default, it delegates to nullary
+      // method done().
+      done();
+    }
+
+    // Called when the bell is rung with an exception. This is analogous to the
+    // "catch" part of a try-catch-finally construction.
+    public void fail() throws Throwable {
+      // Override this if you don't care about the exception.
+    } public void fail(Throwable t) throws Throwable {
+      // Override this to see the value and change it by returning a new value.
+      // This is the handler that will actually get called on failure. By default,
+      // it delegates to nullary method fail().
+      fail();
+    }
+
+    // This will be called at the end of handling (i.e., after done() or fail()
+    // has executed), regardless of whether the bell failed or succeeded. It
+    // may change the value by returning or throwing This is analogous to the
+    // "finally" part of a try-catch-finally construction.
+    public void always() throws Throwable {
+    } public void always(O o) throws Throwable {
+    } public void always(Throwable t) throws Throwable {
+    } public void always(O o, Throwable t) throws Throwable {
+      // Override this to see either the TODO
+      if (t != null) always(t);
+    }
+
+    // This may be called by either done, fail, or always to ignore the ringing
+    // value and leave the bell unrung.
+    protected final void discard() {
+      throw new DiscardedRingException();
+    }
+
+    // This may be called by either done, fail, or always to alter the final
+    // result of the ring. Calling this throws a special runtime exception. As
+    // such, to work, the exception thrown by this method should not be
+    // discarded by a handler.
+    protected final void alter(Throwable t) {
+      alter(null, t);
+    } protected final void alter(O o) {
+      alter(o , null);
+    } protected final void alter() {
+      alter(null, null);
+    } private final void alter(O o, Throwable t) {
+      // Annoying workaround. See remarks above Holder class definition.
+      Holder h = new Holder();
+      h.value = o;
+      throw new AlterationException(h, t);
     }
   }
 
-  // A bell link can be used to create a new bell from this one which will
-  // wait for this one to ring. It must implement a method that transforms
-  // the parent bell's object into the right type.
-  public abstract class Link<T> extends Bell<T> {
-    public boolean ring(T o, Throwable t) {
-      throw new Error("linked bells should never be rung");
-    } protected T innerGet() {
-      return transform(Bell.this.innerGet());
-    } public synchronized int state() {
-      return Bell.this.state();
-    } public abstract T transform(O o);
+  // A base class for all single-type bells.
+  public static abstract class Basic<T> extends BasicTo<T,T> {
+    // These simply use the input as the output.
+    public final T convert(T t) { return t; }
+  }
+
+  // A bell that, once rung, cannot be rung again (future rings will be
+  // ignored), and will not have its value reset when read. Calls to get() will
+  // block if the bell has not rung.
+  public static class Single<I> extends Basic<I> {
+    protected synchronized State ring(I i, Throwable t) {
+      try {
+        return super.ring(i, t);
+      } catch (Throwable th) {
+        // This will only happen if the bell was already rung. Single
+        // assignment bells just ignore it.
+      } return state;
+    }
+  }
+
+  // A bell that will reset (become unrung) after the value has been read.
+  /*
+  public static class Sync<T> extends Basic<T> {
+    protected synchronized State ring(I i, Throwable t) {
+      try {
+        super.ring(i, t);
+      } catch (Throwable t) {
+        // This will only happen if the bell was already rung. Single
+        // assignment bells just ignore it.
+        return state;
+      }
+    }
+  }
+  */
+
+  // A base class for a bell which can be used to gather and act on the values
+  // of its children as they ring. The reduction behavior can be defined by
+  // subclasses by implementing reduce(). Subclasses may ring inside of either
+  // implementation of reduce(). If the bell has not rung when all of the
+  // sub-bells have rung and been reduced, this bell will automatically be rung
+  // with the result of defaultValue().
+  public static abstract class Reduce<I,O> extends Single<O> {
+    private Set<Out<? extends I>> set;
+
+    protected Reduce(Out<? extends I>... bells) {
+      this(Arrays.asList(bells));
+    } protected Reduce(Collection<Out<? extends I>> bells) {
+      set = new HashSet<Out<? extends I>>(bells);
+      if (bells.isEmpty()) {
+        ring();
+      } else for (final Out<? extends I> b : bells) b.then(new Handler() {
+        public void handle() {
+          doReduce(b);
+        }
+      });
+    }
+
+    // Wrap the reduction step, and make sure the bell gets set once the set is
+    // empty.
+    private synchronized final void doReduce(Out<? extends I> b) {
+      if (set == null || set.isEmpty()) {
+        return;
+      } else if (set.remove(b)) try {
+        reduce(b.get());
+      } catch (Throwable t) {
+        reduce(t);
+      } if (set.isEmpty() && !isDone()) try {
+        ring(defaultValue());
+      } catch (Throwable t) {
+        ring(t);
+      } else if (isDone()) {
+        set.clear();
+        set = null;
+      }
+    }
+
+    // Subclasses implement the reduction logic. Throwing in either of these
+    // will ring this bell with the exception.
+    protected <T extends I> void reduce(T v) { }
+    protected void reduce(Throwable t) { }
+
+    // The value to set the bell to if reduce() does not ring it.
+    protected O defaultValue() throws Throwable { return null; }
+  }
+
+  // A bell which will be rung only when all the target bells have rung. The
+  // bell will contain true if all the bells succeed, false otherwise.
+  public static class And extends Reduce<Object,Boolean> {
+    public And(Out<? extends Object>... bells)          { super(bells); }
+    public And(Collection<Out<? extends Object>> bells) { super(bells); }
+
+    protected void reduce(Throwable t) {
+      ring(Boolean.FALSE);
+    } protected Boolean defaultValue() {
+      return Boolean.TRUE;
+    }
+  }
+
+  // A bell which will be rung when at least one target bell has succeeded, or
+  // all target bells have failed. The bell will contain true if at least one
+  // target bell succeeded, or false otherwise.
+  public static class Or extends Reduce<Object,Boolean> {
+    public Or(Out<? extends Object>... bells)          { super(bells); }
+    public Or(Collection<Out<? extends Object>> bells) { super(bells); }
+
+    protected <T extends Object> void reduce(T b) {
+      ring(Boolean.TRUE);
+    } protected Boolean defaultValue() {
+      return Boolean.FALSE;
+    }
+  }
+
+  // Utility Methods
+  // ===============
+  // Convenience method for creating an "and bell".
+  public static And and(Out<? extends Object>... bells) {
+    return and(Arrays.asList(bells));
+  } public static And and(Collection<Out<? extends Object>> bells) {
+    return new And(bells);
+  }
+
+  // Convenience method for creating an "or bell".
+  public static Or or(Out<? extends Object>... bells) {
+    return or(Arrays.asList(bells));
+  } public static Or or(Collection<Out<? extends Object>> bells) {
+    return new Or(bells);
+  }
+
+  private Bell() { /* utility class, don't instantiate */ }
+
+  public static void main(String[] args) throws Exception {
+    Single<String> a = new Single<String>();
+    Single<String> b = new Single<String>() {
+      public void done(String o) {
+        System.out.println("rang: "+o);
+        alter("goodbye");
+      }
+    };
+    a.then(b);
+    a.ring("hello");
+    System.out.println(a.get());
+    System.out.println(b.get());
   }
 }
