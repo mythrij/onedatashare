@@ -1,4 +1,4 @@
-//package stork.util;
+package stork.util;
 
 import java.util.*;
 import java.util.concurrent.*;
@@ -44,8 +44,8 @@ public final class Bell {
   // pipelining with then().
   interface Out<O> extends Future<O> {
     // Ring the given bells when this bell rings.
-    void then(In<O>... in);
-    void then(Collection<In<O>> in);
+    void then(In<? super O>... in);
+    void then(Collection<In<? super O>> in);
   }
 
   // A bell that is rung with objects of type I and yields objects of type O.
@@ -53,34 +53,98 @@ public final class Bell {
 
   // Base Implementations
   // ====================
-  // A simple base class for implementing handlers for then() which simply
-  // calls handle() whenever the bell is rung.
-  // TODO: Conceptually this is similar to done()/fail()/always() in other
-  // bells. Is there a way we can tie the two together?
-  public static abstract class Handler implements In {
-    public final State ring(Object o)    { return ring(); }
-    public final State ring(Throwable o) { return ring(); }
-    public final State ring() {
+  // A simple base class for implementing handlers for then(). Multiple
+  // variants of the handler methods are exposed, allowing the opportunity for
+  // less verbose method signatures in subclasses. Well-behaved subclasses will
+  // implement at most one variant of each of done, fail, and always. The
+  // method with the most specific signature will be the one ultimately called.
+  //
+  // Any of the handler methods may throw to fail the handler. Note that in
+  // Java, the "throws" part is optional when overriding methods, unless the
+  // method actually throws an exception that must be handled.
+  public static abstract class Handler<I> implements In<I> {
+    public State ring()            { return ring(null, null); }
+    public State ring(I i)         { return ring(i, null); }
+    public State ring(Throwable t) { return ring(null, t); }
+    private State ring(I i, Throwable t) {
       try {
-        handle();
+        callHandlers(i, t);
         return State.SUCCESS;
-      } catch (Throwable t) {
+      } catch (Throwable th) {
         return State.FAILURE;
       }
     }
 
-    // This will be run whenever the bell in rung in any way. Subclasses should
-    // override this to implement the behavior.
-    protected abstract void handle() throws Throwable;
+    // This basic implementation simply calls the handlers, which are expected
+    // to be overridden by subclasses. Subclasses can further override this to
+    // add additional handler semantics.
+    protected void callHandlers(I i, Throwable t) throws Throwable {
+      try {
+        if (t != null)
+          fail(t);
+        else
+          done(i);
+      } catch (Throwable th) {
+        t = th;
+      } finally {
+        always(i, t);
+      } if (t != null) {
+        throw t;
+      }
+    }
+
+    // Called when the bell is rung successfully. This is analogous to the "try"
+    // part of a try-catch-finally construction.
+    public void done() throws Throwable {
+      // Override this if you don't care about the ringing value.
+    } public void done(I i) throws Throwable {
+      // Override this to check the value. This is the done handler that will
+      // actually get called on ring. By default, it delegates to nullary
+      // method done().
+      done();
+    }
+
+    // Called when the bell is rung with an exception. This is analogous to the
+    // "catch" part of a try-catch-finally construction.
+    public void fail() throws Throwable {
+      // Override this if you don't care about the exception.
+    } public void fail(Throwable t) throws Throwable {
+      // Override this to see the value and change it by returning a new value.
+      // This is the handler that will actually get called on failure. By default,
+      // it delegates to nullary method fail().
+      fail();
+    }
+
+    // This will be called at the end of handling (i.e., after done() or fail()
+    // has executed), regardless of whether the bell failed or succeeded. It
+    // may change the value by returning or throwing. This is analogous to the
+    // "finally" part of a try-catch-finally construction.
+    public void always() throws Throwable {
+      // Override this if you do not care about the ringing value. By default,
+      // this does nothing.
+    } public void always(I i) throws Throwable {
+      // Override this to only see the value. By default, this does nothing.
+      always();
+    } public void always(Throwable t) throws Throwable {
+      // Override this to only see the throwable. By default, this does nothing.
+      always();
+    } public void always(I i, Throwable t) throws Throwable {
+      // Override this to see either the ringing value or the error. This is the
+      // actual method called when the handlers are called.
+      if (t == null)
+        always(i);
+      else
+        always(t);
+    }
   }
 
   // A base class for bells that exhibit typical "out" behavior.
-  public static abstract class BasicOut<I,O> extends Handler
+  public static abstract class BasicOut<I,O> extends Handler<I>
   implements To<I,O> {
     State state = State.UNRUNG;
     private O value;
     private Throwable error;
-    private Set<In<O>> thens;
+    private Set<In<? super O>> thens;
 
     // Get the stored value. If the bell has not rung, this method blocks until
     // it rings. If the bell has failed, this method throws the exception
@@ -140,12 +204,12 @@ public final class Bell {
     }
 
     // This should be used by subclasses to resolve the bell.
-    protected synchronized void resolve(O value) {
+    synchronized void resolve(O value) {
       this.value = value;
       state = State.SUCCESS;
       notifyAll();
       ringOthers(thens);
-    } protected synchronized void resolve(Throwable error) {
+    } synchronized void resolve(Throwable error) {
       this.error = error;
       state = State.FAILURE;
       notifyAll();
@@ -155,35 +219,36 @@ public final class Bell {
     // Schedule a compatible bell to be rung after this bell rings. If this
     // bell has already rung when then() is called, the passed bell will be
     // rung immediately with this bell's value.
-    public synchronized void then(In<O>... bells) {
+    public synchronized void then(In<? super O>... bells) {
       then(Arrays.asList(bells));
-    } public synchronized void then(Collection<In<O>> bells) {
+    } public synchronized void then(Collection<In<? super O>> bells) {
       if (isDone()) {
         ringOthers(bells);
       } else {
         if (thens == null)
-          thens = new HashSet<In<O>>();
+          thens = new HashSet<In<? super O>>();
         thens.addAll(bells);
       }
     }
 
     // Helper method for ringing thenned bells. ONLY call this if this bell has
     // been rung.
-    private synchronized void ringOthers(Collection<In<O>> bells) {
+    private synchronized void ringOthers(Collection<In<? super O>> bells) {
       if (bells != null) try {
         O v = getValue();
-        for (In<O> b : bells) if (b != this) try {
+        for (In<? super O> b : bells) if (b != this) try {
           b.ring(v);
         } catch (Exception e) {
           // This is here to absorb any runtime exceptions that might come out
-          // of ring(), such as casting exceptions if someone is playing fast
-          // and loose with our generic variadic parameters. Bad code monkey,
-          // bad!
+          // of ring() and pass it off to the thenned bell. This can happen,
+          // e.g., someone is playing fast and loose with our generic variadic
+          // parameters. Bad code monkey, bad!
+          b.ring(e);
         }
       } catch (Throwable t) {
         // At this point, ringing with a throwable should not throw any
         // exceptions.
-        for (In<O> b : bells) if (b != this) b.ring(t);
+        for (In<? super O> b : bells) if (b != this) b.ring(t);
       }
     }
   }
@@ -205,6 +270,19 @@ public final class Bell {
   // A base class for all bells that exhibit typical behavior. This class
   // provides on-ring handlers which can be used to perform tasks when the bell
   // is rung, and potentially alter or ignore values.
+  //
+  // A few special methods can be called inside the ring handlers to control the ring
+  // result:
+  //
+  // alter(...)
+  //   Changes the final value of the bell. Calling alter() will not result
+  //   in the handlers being called multiple times, though calling alter() in
+  //   done() or fail() will cause always() to see the changed value. Calling
+  //   alter() will also bypass the call to convert().
+  //              
+  // discard()
+  //   Ignores the ringing value and leaves the bell unrung. The handlers
+  //   will be called again when the bell is rung in the future.
   public static abstract class BasicTo<I,O> extends BasicOut<I,O> {
     // This is a workaround to Java's infuriating restrictions regarding
     // generic casting and inner throwables. Because we can't directly cast the
@@ -246,113 +324,6 @@ public final class Bell {
       return state;
     }
 
-    // This method will call the handlers and take care of whatever havoc they
-    // may wreak.
-    private void callHandlers(I i, Throwable t) {
-      callHandlers(i, null, t, false);
-    } private void callHandlers(I i, O o, Throwable t, boolean always) {
-      // Try running the handlers and intercept any exceptions they throw.
-      try {
-        if (!always) {
-          // First call the done() and fail() handlers. These may alter what
-          // get passed to always() in the second iteration.
-          if (t != null) {
-            fail(t);
-          } else {
-            done(i);
-            o = convert(i);
-          }
-        } else {
-          // Now call the always() handler, which may see something different
-          // than done() and fail() saw if alter() was called.
-          always(o, t);
-        }
-      } catch (DiscardedRingException e) {
-        // The handlers chose to ignore the ring. Bubble up to ring() so it
-        // knows the bell was not resolved.
-        return;
-      } catch (AlterationException ae) {
-        // alter() was called, so update the resolution values we're working
-        // with.
-        o = ((Holder) ae.holder).value;
-        t = ae.getCause();
-      } catch (Throwable th) {
-        // The handler threw some other exception. Update the state with that.
-        t = th;
-      }
-
-      // What we do next depends on whether we called always() or not...
-      if (!always) {
-        // We need to call this again, but run always() instead.
-        callHandlers(null, o, t, true);
-      } else {
-        // We just ran the always() handler. Whatever values we have now are
-        // the values we will use to resolve the bell.
-        if (t != null) resolve(t);
-        else           resolve(o);
-      }
-    }
-
-    // Handlers
-    // ========
-    // Subclasses may override these to implement on-ring handlers. A few methods
-    // can be called inside of these handlers to control the ring result:
-    //
-    // alter(...)
-    //   Changes the final value of the bell. Calling alter() will not result
-    //   in the handlers being called multiple times, though calling alter() in
-    //   done() or fail() will cause always() to see the changed value. Calling
-    //   alter() will also bypass the call to convert().
-    //              
-    // discard()
-    //   Ignores the ringing value and leaves the bell unrung. The handlers
-    //   will be called again when the bell is rung in the future.
-    //
-    // Multiple variants of the handler methods are exposed, allowing the
-    // opportunity for less verbose method signatures in subclasses. Well-
-    // behaved subclasses will implement at most one variant of each of done,
-    // fail, and always. The method with the most specific signature will be
-    // the one ultimately called.
-    //
-    // Any of these methods may throw to fail the handler. This is equivalent
-    // to calling alter(error). Note that in Java, the "throws" part is
-    // optional when overriding methods, unless the method actually throws an
-    // exception that must be handled.
-
-    // Called when the bell is rung successfully. This is analogous to the "try"
-    // part of a try-catch-finally construction.
-    public void done() throws Throwable {
-      // Override this if you don't care about the ringing value.
-    } public void done(I i) throws Throwable {
-      // Override this to check the value. This is the done handler that will
-      // actually get called on ring. By default, it delegates to nullary
-      // method done().
-      done();
-    }
-
-    // Called when the bell is rung with an exception. This is analogous to the
-    // "catch" part of a try-catch-finally construction.
-    public void fail() throws Throwable {
-      // Override this if you don't care about the exception.
-    } public void fail(Throwable t) throws Throwable {
-      // Override this to see the value and change it by returning a new value.
-      // This is the handler that will actually get called on failure. By default,
-      // it delegates to nullary method fail().
-      fail();
-    }
-
-    // This will be called at the end of handling (i.e., after done() or fail()
-    // has executed), regardless of whether the bell failed or succeeded. It
-    // may change the value by returning or throwing This is analogous to the
-    // "finally" part of a try-catch-finally construction.
-    public void always() throws Throwable {
-    } public void always(O o) throws Throwable {
-    } public void always(Throwable t) throws Throwable {
-    } public void always(O o, Throwable t) throws Throwable {
-      // Override this to see either the TODO
-      if (t != null) always(t);
-    }
-
     // This may be called by either done, fail, or always to ignore the ringing
     // value and leave the bell unrung.
     protected final void discard() {
@@ -374,6 +345,52 @@ public final class Bell {
       Holder h = new Holder();
       h.value = o;
       throw new AlterationException(h, t);
+    }
+
+    // This method will call the handlers and take care of whatever havoc they
+    // may wreak (i.e., throwing special control exceptions).
+    protected void callHandlers(I i, Throwable t) {
+      callHandlers(i, null, t, false);
+    } private void callHandlers(I i, O o, Throwable t, boolean always) {
+      // Try running the handlers and intercept any exceptions they throw.
+      try {
+        if (!always) {
+          // First call the done() and fail() handlers. These may alter what
+          // get passed to always() in the second iteration.
+          if (t != null) {
+            fail(t);
+          } else {
+            done(i);
+            o = convert(i);
+          }
+        } else {
+          // Now call the always() handler, which may see something different
+          // than done() and fail() saw if alter() was called.
+          always(i, t);
+        }
+      } catch (DiscardedRingException e) {
+        // The handlers chose to ignore the ring.
+        return;
+      } catch (AlterationException ae) {
+        // alter() was called, so update the resolution values we're working
+        // with.
+        o = ((Holder) ae.holder).value;
+        t = ae.getCause();
+      } catch (Throwable th) {
+        // The handler threw some other exception. Update the state with that.
+        t = th;
+      }
+
+      // What we do next depends on whether we called always() or not...
+      if (!always) {
+        // We need to call this again, but run always() instead.
+        callHandlers(i, o, t, true);
+      } else {
+        // We just ran the always() handler. Whatever values we have now are
+        // the values we will use to resolve the bell.
+        if (t != null) resolve(t);
+        else           resolve(o);
+      }
     }
   }
 
@@ -427,11 +444,11 @@ public final class Bell {
       set = new HashSet<Out<? extends I>>(bells);
       if (bells.isEmpty()) {
         ring();
-      } else for (final Out<? extends I> b : bells) b.then(new Handler() {
-        public void handle() {
-          doReduce(b);
+      } else for (final Out<? extends I> b : bells) b.then(
+        new Handler<I>() {
+          public void always() { doReduce(b); }
         }
-      });
+      );
     }
 
     // Wrap the reduction step, and make sure the bell gets set once the set is
