@@ -1,32 +1,25 @@
 package stork.util;
 
-import stork.ad.*;
 import java.util.*;
 
-// A pipeline can be used by command-based protocols to send multiple
-// commands across a channel without waiting for acknowledgment. The
-// pipelining level specifies the number of unacknowledged commands that
-// can be in the pipeline before more are allowed to be sent. If the
-// pipeline is full, the pipe() method will block. The pipelining level
-// can also be set to zero to do "infinite" pipelining.
+// A pipeline can be used by command-based protocols to send multiple commands
+// across a channel without waiting for acknowledgment. The pipelining level
+// specifies the number of unacknowledged commands that can be in the pipeline
+// before more are allowed to be sent. If the pipeline is full, the pipe()
+// method will block. The pipelining level can also be set to zero to do
+// "infinite" pipelining.
 //
-// A pipelined command consists of a send handler, a receive handler, and
-// an abort handler. The send handler actually handles issuing the command.
-// The receive handler is called when it's the command's turn to have its
-// acknowledgement reply handled. The abort handler allows the command to
-// be canceled (if supported).
-//
-// TODO: Actually implement the command abort functionality.
+// A pipelined command consists of a send handler, a receive handler, and an
+// abort handler. The send handler actually handles issuing the command.  The
+// receive handler is called when it is the command's turn to have its
+// acknowledgement reply handled. The abort handler allows the command to be
+// canceled (if supported).
 
 public abstract class Pipeline<C,R> extends Thread {
   private final LinkedList<PipeCommand> sent, deferred;
   private int pending = 0;
   private int level;
   private boolean dead = false;
-
-  // This exception gets thrown whenever the pipe gets killed.
-  public static final RuntimeException PIPELINE_ABORTED =
-    new RuntimeException("pipeline aborted");
 
   public Pipeline(int l) {
     super("pipeline");
@@ -40,56 +33,63 @@ public abstract class Pipeline<C,R> extends Thread {
   }
 
   // Internal representation of a command passed to the pipeliner.
-  private class PipeCommand {
+  private class PipeCommand extends Bell<R> {
     C cmd;
-    Bell<R> bell;
 
-    // A null command simply rings the bell when reached.
-    PipeCommand(C c, Bell<R> b) {
-      cmd = c; bell = b;
+    PipeCommand(C c) {
+      cmd = c;
     }
 
-    // Get the reply and ring the bell with it. If it's a sync (i.e. the
-    // command is null), just ring it with nothing.
-    boolean handle() {
+    // Read a reply and try to ring the bell with it. Returns true if the bell
+    // rang, false otherwise. If the pipeline was interrupted while waiting for the reply,
+    // throws an interrupted exception.
+    boolean handle() throws InterruptedException {
       if (cmd == null) {
-        return bell.ring();
-      } else try {
-        return bell.ring(handleReply(cmd), null);
-      } catch (RuntimeException e) {
-        Log.warning("Command failed: ", cmd);
-        return bell.ring(null, e);
+        return ring().rang();
+      } try {
+        return ring(handleReply()).rang();
+      } catch (InterruptedException t) {
+        throw t;
+      } catch (Throwable t) {
+        // Otherwise, it was some other exception.
+        return ring(t).rang();
       }
     }
-
-    // This gets called if the pipeline is killed.
-    void kill() {
-      if (!bell.isRung())
-        bell.ring(PIPELINE_ABORTED);
-    }
-
-    public String toString() {
-      return cmd.toString();
-    }
   }
 
-  // Implement write behavior in subclasses. Should return true if the
-  // command was sent, or false to indicate we should call this again
-  // later. It should only throw if the connection is closed.
-  public abstract boolean handleWrite(C c);
+  // Write a command to the queue to be piped.
+  public synchronized Bell pipe(C c) {
+    return pipe(new PipeCommand(c));
+  } private synchronized Bell pipe(PipeCommand c) {
+    deferred.add(c);
+    notifyAll();
+    return c;
+  }
 
-  // Implement read behavior in subclasses. This should block until a reply
+  // Return a synchronization future. I.e., a future that will be resolved once
+  // the pipeline has reached the point where sync() was called.
+  public synchronized Bell sync() {
+    return pipe(null);
+  }
+
+  // Subclasses should implement write behavior. Should return true if the
+  // command was sent, or false to indicate we should call this again later. It
+  // should only throw if the connection is closed.
+  protected abstract boolean handleWrite(C c);
+
+  // Subclasses should implement read behavior. This should block until a reply
   // is received.
-  public abstract R handleReply(C c);
+  protected abstract R handleReply(C c) throws InterruptedException;
 
-  // Set the number of commands that are allowed to be piped without
-  // acknowledgements. Treats n <= 0 as "infinite".
+  // Set the number of commands that are allowed to be pending (i.e., waiting
+  // for replies). A value less than 1 means an unlimited number of commands
+  // are allowed to be pending.
   public synchronized void setPipelining(int n) {
-    level = (n <= 0) ? 0 : n;
+    level = (n < 0) ? 0 : n;
   }
 
-  // Should be run as a thread. Reads replies from sent commands with the
-  // read handler then adds them to the done queue.
+  // Reads replies from sent commands with the read handler then adds them to
+  // the done queue.
   public void run() {
     while (!dead) try {
       waitForWork();
@@ -104,18 +104,17 @@ public abstract class Pipeline<C,R> extends Thread {
         if (c.cmd != null)
           pending--;
       }
-    } catch (Exception e) {
-      // This probably means we died, but let the loop check.
-      Log.warning("Pipeline thread caught exception", e);
-      e.printStackTrace();
-      kill();
+    } catch (InterruptedException e) {
+      for (PipeCommand p : sent)     p.cancel();
+      for (PipeCommand p : deferred) p.cancel();
+      dead = true;
+      notifyAll();
     }
   }
 
   // Block until something has been deferred or sent.
-  private synchronized void waitForWork() {
-    while (sent.isEmpty() && deferred.isEmpty())
-      waitFor();
+  private synchronized void waitForWork() throws InterruptedException {
+    while (sent.isEmpty() && deferred.isEmpty()) wait();
   }
 
   // Write a command and update the pending level.
@@ -144,46 +143,5 @@ public abstract class Pipeline<C,R> extends Thread {
         deferred.removeFirst();
       else break;
     } notifyAll();
-  }
-
-  // Write a command to the queue to be piped.
-  public synchronized Bell<R> pipe(C c, Bell<R> h) {
-    h = (h == null) ? new Bell<R>() : h;
-    return pipe(new PipeCommand(c, h));
-  } public synchronized Bell<R> pipe(C c) {
-    return pipe(c, null);
-  } private synchronized Bell<R> pipe(PipeCommand c) {
-    deferred.add(c);
-    notifyAll();
-    return c.bell;
-  }
-
-  // Wait until every command is done.
-  public void sync() {
-    pipe(null, null).waitFor();
-  }
-
-  // Kill the processing thread.
-  public final synchronized void kill() {
-    if (dead) return;
-    Log.warning("Pipeline killed");
-    Log.fine("Sent:     ", sent);
-    Log.fine("Deferred: ", deferred);
-    for (PipeCommand p : sent)     p.kill();
-    for (PipeCommand p : deferred) p.kill();
-    dead = true;
-    notifyAll();
-    throw PIPELINE_ABORTED;
-  }
-
-  // Wait forever unless the pipeline has died.
-  private synchronized void waitFor() {
-    if (dead) {
-      throw PIPELINE_ABORTED;
-    } else try {
-      wait();
-    } catch (Exception e) {
-      if (dead) throw PIPELINE_ABORTED;
-    }
   }
 }
