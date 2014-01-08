@@ -79,7 +79,7 @@ public class GridFTPSession extends StorkSession {
 
     // This bell will be rung when the listing has finished, and will
     // contain the root file tree.
-    ListBell bell = new ListBell(path, new FileTree(StorkUtil.basename(path)));
+    ListBell bell = new RootListBell(path);
     bell.opts = opts;
     bell.cp   = pair;
 
@@ -97,13 +97,52 @@ public class GridFTPSession extends StorkSession {
     return bell;
   }
 
+  // Picks and pipes an appropriate listing command from a list that will ring
+  // the list bell when it's done.
+  private static String[] cc_list_cmds = { "MLST", "MLSC", "STAT" };
+  private static String[] dc_list_cmds = { "MLSD", "LIST" };
+  private Bell<FileTree> pipeListing(String path, ListBell lb) {
+    // Try all of the command channel-based alternatives.
+    for (String cmd : cc_list_cmds) if (lb.canListWith(cmd))
+      return cc.pipe(cmd+" "+path, new CCListBell(lb, cmd));
+
+    // Other alternatives require a data channel to list, so let's
+    // pipe a passive command.
+    for (String cmd : dc_list_cmds) if (cc.supports(cmd)) {
+      DCListBell dlb = new DCListBell(lb, cmd);
+      pipePassive(dlb.sink());
+      return cc.pipe(cmd+" "+path, dlb);
+    }
+
+    throw abort("server does not support listing");
+  }
+
+  // This is the main list bell that maintains the file tree.
+  private class RootListBell extends ListBell {
+    private List<String> paths = new LinkedList<String>();
+    private final String path;  // root path
+    private final FileTree tree;
+    
+    public RootListBell(String path) {
+      this.path = path;
+      tree = new FileTree(path);
+    }
+
+    public void done(FileTree ft) {
+      tree.copy(ft);
+      if (hasPendingSublists)
+        defer();
+      if (depth == 0)
+        get().setFiles((FileTree[]) null);
+    }
+  }
+
   // Ring this when the listing and all sublistings are complete.
   private class ListBell extends Bell<FileTree> {
     String name;
     ListBell parent;  // This will be null if we're root.
     FileTree tree;    // This will be set for all sublists.
     int depth;
-    int sublists = 0;
     Ad opts;
     ChannelPair cp;
 
@@ -158,36 +197,12 @@ public class GridFTPSession extends StorkSession {
     }
 
     // Once we've rung, close the channel pair.
-    protected void done(FileTree f) {
+    protected void onRing() {
+      if (hasPendingSublists)
+        defer();
       if (depth == 0)
-        f.setFiles((FileTree[]) null);
-    } protected void always(FileTree f, Throwable t) {
-      if (parent != null)
-        parent.ring(parent.tree, null);
+        get().setFiles((FileTree[]) null);
     }
-  }
-
-  // Pipe the appropriate listing command that will ring the list bell
-  // when it's done.
-  //private static String[] cc_list_cmds = {};
-  private static String[] cc_list_cmds = { "MLST", "MLSC", "STAT" };
-  private static String[] dc_list_cmds = { "MLSD", "LIST" };
-  private Bell<Reply> pipeListing(ListBell lb) {
-    String p = lb.path();
-
-    // Try all of the command channel-based alternatives.
-    for (String c : cc_list_cmds) if (lb.canListWith(c))
-      return cc.pipe(c+" "+p, new CCListBell(lb, c));
-
-    // Other alternatives require a data channel to list, so let's
-    // pipe a passive command.
-    for (String c : dc_list_cmds) if (cc.supports(c)) {
-      DCListBell dlb = new DCListBell(lb, c);
-      pipePassive(dlb.sink());
-      return cc.pipe(c+" "+p, dlb);
-    }
-
-    throw abort("server does not support listing");
   }
 
   // A handler for reading lists over the control channel.

@@ -1,16 +1,18 @@
 package stork.module;
 
+import java.util.concurrent.*;
+import java.net.URI;
+
 import stork.ad.*;
 import stork.util.*;
 import stork.scheduler.*;
 import static stork.module.ModuleException.*;
-import java.net.URI;
 
 // Represents a connection to a remote end point. A session should
 // provide methods for starting a transfer, listing directories, and
 // performing other operations on the end point.
 
-public abstract class StorkSession {
+public abstract class StorkSession implements AutoCloseable {
   public transient EndPoint ep = null;
 
   protected transient Pipe<Ad>.End pipe = null;
@@ -27,16 +29,16 @@ public abstract class StorkSession {
   ////////////////////////////////////////////////////////////////
 
   // Get a directory listing of a path from the session.
-  protected abstract Bell<FileTree> listImpl(String path, Ad opts);
+  protected abstract Future<FileTree> listImpl(String path, Ad opts);
 
   // Get the size of a file given by a path.
-  protected abstract Bell<Long> sizeImpl(String path);
+  protected abstract Future<Long> sizeImpl(String path);
 
   // Create a directory at the end-point, as well as any parent directories.
-  protected abstract Bell<?> mkdirImpl(String path);
+  protected abstract Future<?> mkdirImpl(String path);
 
   // Remove a file or directory.
-  protected abstract Bell<?> rmImpl(String path);
+  protected abstract Future<?> rmImpl(String path);
 
   // Close the session and free any resources.
   protected abstract void closeImpl();
@@ -73,9 +75,9 @@ public abstract class StorkSession {
   }
 
   // Public interfaces to abstract methods.
-  public final Bell<FileTree> list(String path) {
+  public final Future<FileTree> list(String path) {
     return list(path, null);
-  } public final Bell<FileTree> list(String path, Ad opts) {
+  } public final Future<FileTree> list(String path, Ad opts) {
     checkConnected();
     path = StorkUtil.normalizePath(path);
     if (opts == null)

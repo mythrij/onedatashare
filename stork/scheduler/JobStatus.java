@@ -13,7 +13,6 @@ public enum JobStatus {
 
   JobStatus() {
     this(true);
-    //filter = EnumSet.of(Enum.valueOf(S.class, name()));
   } JobStatus(boolean real) {
     isFilter = !real;
   }

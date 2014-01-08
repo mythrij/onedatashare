@@ -1,7 +1,9 @@
 package stork.module;
 
-import stork.util.*;
 import java.net.*;
+import java.util.concurrent.*;
+
+import stork.util.*;
 
 // A source, sink, or conduit for data. Typically a channel represents a
 // remote file resource, but can also be a conduit which redirects and
@@ -32,9 +34,9 @@ public abstract class StorkChannel {
   // matching recvFrom should be called on the other channel. Sending
   // with a length of -1 will cause data to be sent until the source is
   // out of data.
-  public final Bell<?> sendTo(StorkChannel c) {
+  public final Future<?> sendTo(StorkChannel c) {
     return sendTo(c, 0, -1);
-  } public abstract Bell<?> sendTo(StorkChannel c, long off, long len);
+  } public abstract Future<?> sendTo(StorkChannel c, long off, long len);
 
   // Close the channel, finalizing any resources held by the channel,
   // and ending any ongoing transfers.

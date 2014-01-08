@@ -1,13 +1,14 @@
 package stork.scheduler;
 
+import java.net.URI;
+import java.util.concurrent.*;
+
 import stork.*;
 import stork.ad.*;
 import stork.util.*;
 import stork.module.*;
 import stork.user.*;
 import static stork.scheduler.JobStatus.*;
-
-import java.net.URI;
 
 // A representation of a transfer job submitted to Stork. The entire
 // state of the job should be stored in the ad representing this job.
@@ -62,12 +63,18 @@ public class StorkJob {
     return Ad.marshal(this);
   }
 
-  // Sets the status of the job, updates ad, and adjusts state
-  // according to the status.
+  // Sets the status of the job, updates ad, and adjusts state according to the
+  // status. This can also be used to set a message.
   public synchronized JobStatus status() {
     return status;
   } public synchronized StorkJob status(JobStatus s) {
+    return status(s, message);
+  } public synchronized StorkJob status(String msg) {
+    return status(status, msg);
+  } public synchronized StorkJob status(JobStatus s, String msg) {
     assert !s.isFilter;
+
+    message = msg;
 
     // Update state.
     switch (status = s) {
@@ -134,117 +141,130 @@ public class StorkJob {
   }
 
   // Return whether or not the job has terminated.
-  public boolean isTerminated() {
+  public synchronized boolean isTerminated() {
     switch (status) {
-      case scheduled:
-      case processing:
-      case paused:
-        return false;
-      default:
+      case failed:
+      case pending:
+      case complete:
         return true;
+      default:
+        return false;
     }
   }
 
   // Run the job and watch it to completion.
   public void run() {
-    StorkSession ss = null, ds = null;
-
-    try {
-      synchronized (this) {
-        // Must be scheduled to be able to run.
-        if (status != scheduled)
-          throw new RuntimeException("Trying to run unscheduled job");
-        status(processing);
-        thread = Thread.currentThread();
+    // Check that the job is scheduled to run.
+    synchronized (this) {
+      if (status != scheduled) {
+        status(failed, "Trying to run unscheduled job.");
+        return;
       }
+      status(processing);
+      thread = Thread.currentThread();
+    }
 
-      if (dest.uri().length != 1)
-        throw new RuntimeException("Only one destination allowed");
+    // Check that only one destination was given.
+    if (dest.uri().length != 1)
+      throw new RuntimeException("Only one destination may be specified.");
 
-      // Establish connections to end-points.
-      ss = src.session();
-      ds = dest.session();
-
+    // Establish connections to end-points.
+    try (StorkSession ss = src.session(); StorkSession ds = dest.session()) {
       // If options were given, marshal them into the sessions.
       if (options != null) {
-        System.out.println("Marshalling options: "+options);
         options.unmarshal(ss);
         options.unmarshal(ds);
-        System.out.println(Ad.marshal(ss));
-        System.out.println(Ad.marshal(ds));
       }
 
-      // Create a pipe to process progress ads from the module.
-      Pipe<Ad> pipe = new Pipe<Ad>();
-      pipe.new End(false) {
-        public void store(Ad ad) {
-          Log.finer("Progress: ", ad);
-          if (ad.has("bytes_total") || ad.has("files_total"))
-            progress.transferStarted(ad.getLong("bytes_total"),
-                                     ad.getInt("files_total"));
-          if (ad.has("bytes_done") || ad.has("files_done"))
-            progress.done(ad.getLong("bytes_done"), ad.getInt("files_done"));
-          if (ad.getBoolean("complete"))
-            progress.transferEnded(!ad.has("error"));
-        }
-      };
-
-      // Set the pipe.
-      ss.setPipe(pipe.new End());
-
-      // For each source file tree, perform the transfer.
-      Ad opts = new Ad("recursive", true);
-      for (URI su : src.uri()) {
-        Bell<FileTree> dfb = ds.list(dest.path());
-        FileTree sft = ss.list(su.getPath(), opts).waitFor();
-        FileTree dft;
-
-        try {
-          dft = dfb.waitFor();
-        } catch (Exception e) {
-          // Assume it's a new whatever the source is.
-          dft = new FileTree(sft.name);
-          dft.copy(sft);
-        }
-
-        if (sft.dir && dft.file)
-          throw new RuntimeException("Cannot transfer from directory to file");
-
-        // Open the files on the endpoints.
-        StorkChannel sc = ss.open(StorkUtil.dirname(su.getPath()),  sft);
-        StorkChannel dc = (dft.dir) ? ds.open(dest.path(), sft)
-                                    : ds.open(StorkUtil.dirname(dest.path()), dft);
-
-        // If the destination exists and overwriting is not enabled, fail.
-        if (!ds.overwrite && dc.exists())
-          throw new RuntimeException("Destination file already exists.");
-
-        // Let the transfer module do the rest.
-        sc.sendTo(dc).waitFor();
-      }
-
-      // No exceptions happened. We did it!
-      status(complete);
+      doTransfer(ss, ds);
     } catch (ModuleException e) {
       if (e.isFatal() || !shouldReschedule())
         status(failed);
       else
         reschedule();
       message = e.getMessage();
-    } catch (Exception e) {
-      // Only change the state if the exception isn't from an interrupt.
-      if (e != Pipeline.PIPELINE_ABORTED) {
-        status(failed);
-        message = e.getMessage();
-      } else if (!isTerminated()) {
-        status(failed);
-        message = e.getMessage();
-      } e.printStackTrace();
+    } catch (CancellationException e) {
+      status(removed);
     } finally {
       // Any time we're not running, the sessions should be closed.
       thread = null;
-      if (ss != null) ss.close();
-      if (ds != null) ds.close();
     }
+  }
+
+  // Do the transfer using the given sessions.
+  private void doTransfer(StorkSession ss, StorkSession ds) {
+    // Create a pipe to process progress ads from the module.
+    // TODO: Replace this with something better.
+    Pipe<Ad> pipe = new Pipe<Ad>();
+    pipe.new End(false) {
+      public void store(Ad ad) {
+        Log.finer("Progress: ", ad);
+        if (ad.has("bytes_total") || ad.has("files_total"))
+          progress.transferStarted(ad.getLong("bytes_total"),
+                                   ad.getInt("files_total"));
+        if (ad.has("bytes_done") || ad.has("files_done"))
+          progress.done(ad.getLong("bytes_done"), ad.getInt("files_done"));
+        if (ad.getBoolean("complete"))
+          progress.transferEnded(!ad.has("error"));
+      }
+    };
+
+    // Set the pipe.
+    ss.setPipe(pipe.new End());
+
+    // For each source file tree, perform the transfer.
+    Ad opts = new Ad("recursive", true);
+    List<Bell> xfer_bells = new LinkedList<Bell>();
+    for (URI su : src.uri()) {
+      final Bell<FileTree> sfb = ss.list(src.path(), opts);
+      final Bell<FileTree> dfb = ds.list(dest.path());
+
+      // Wait for both listings, then 
+      new Bells.And(sfb, dfb) {
+        public void done() {
+          FileTree sft, dft;
+
+          // Get the source file tree.
+          try {
+            sft = sfb.get();
+          } catch (Exception e) {
+            // Something went wrong listing the source. Abort!
+            status(
+          }
+
+          try {
+            dft = dfb.get();
+          } catch (Exception e) {
+            // Assume it's a new whatever the source is.
+            dft = new FileTree(sft.name);
+            dft.copy(sft);
+          }
+        }
+      };
+
+      if (sft.dir && dft.file)
+        throw new RuntimeException("Cannot transfer from directory to file");
+
+      // Open the files on the endpoints.
+      StorkChannel sc = ss.open(StorkUtil.dirname(su.getPath()),  sft);
+      StorkChannel dc = (dft.dir) ? ds.open(dest.path(), sft)
+                                  : ds.open(StorkUtil.dirname(dest.path()), dft);
+
+      // If the destination exists and overwriting is not enabled, fail.
+      if (!ds.overwrite && dc.exists())
+        throw new RuntimeException("Destination file already exists.");
+
+      // Let the transfer module do the rest, and save the bell.
+      xfer_bells.add(sc.sendTo(dc));
+    }
+
+    // Collect all the transfer bells and make sure they succeeded.
+    new Bells.All(xfer_bells) {
+      public void done() {
+        status(complete);
+      } public void fail() {
+        status(failed);
+      }
+    };
   }
 }
