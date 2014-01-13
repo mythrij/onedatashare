@@ -25,7 +25,7 @@ public final class Bell {
   // Bells that can be rung with objects of type I. The ring methods return a
   // boolean indicating whether or not the bell was rung, and thus now contains
   // a value. The "promise" side of the bell.
-  interface In<I> {
+  public interface In<I> {
     // Ring the bell with nothing, setting the value to null. Returns whether
     // or not the value caused the bell to ring.
     State ring();
@@ -42,14 +42,15 @@ public final class Bell {
   // Bells that yield objects of type O when read. The "future" side of the
   // bell. This extends the Java future interface to support promise
   // pipelining with then().
-  interface Out<O> extends Future<O> {
+  public interface Out<O> extends Future<O> {
     // Ring the given bells when this bell rings.
-    void then(In<? super O>... in);
+    void then(In<? super O> in);
     void then(Collection<In<? super O>> in);
+    O get();
   }
 
   // A bell that is rung with objects of type I and yields objects of type O.
-  interface To<I,O> extends In<I>, Out<O> { }
+  public interface To<I,O> extends In<I>, Out<O> { }
 
   // Base Implementations
   // ====================
@@ -149,37 +150,41 @@ public final class Bell {
     // Get the stored value. If the bell has not rung, this method blocks until
     // it rings. If the bell has failed, this method throws the exception
     // wrapped in an ExecutionException.
-    public synchronized O get()
-    throws InterruptedException, ExecutionException {
-      while (!isDone())
+    public synchronized O get() {
+      while (!isDone()) try {
         wait();
-      return getValue();
+      } catch (InterruptedException e) {
+        throw new RuntimeException(e);
+      } return getValue();
     }
 
     // Get the stored value. If the bell has not rung, this method blocks until
     // it rings, up to a given amount of time. If the bell has failed, this
     // method throws the exception wrapped in an ExecutionException.
     public synchronized O get(long timeout, TimeUnit unit)
-    throws InterruptedException, ExecutionException, TimeoutException {
-      if (isDone())
+    throws TimeoutException {
+      if (isDone()) {
         return getValue();
-      unit.timedWait(this, timeout);
-      if (isDone())
+      } try {
+        unit.timedWait(this, timeout);
+      } catch (InterruptedException e) {
+        throw new RuntimeException(e);
+      } if (isDone()) {
         return getValue();
-      throw new TimeoutException();
+      } throw new TimeoutException();
     }
 
     // Helper method which either returns the value or throws the wrapped
     // exception. This should ONLY be called when the bell is known to be
     // resolved.
-    protected synchronized O getValue() throws ExecutionException {
+    protected synchronized O getValue() {
       switch (state) {
         case SUCCESS:
           return value;
         case FAILURE :
           if (error == null)
             throw new CancellationException();
-          throw new ExecutionException(error);
+          throw new RuntimeException(error);
         default:
           throw new Error("bell has not rung");
       }
@@ -196,6 +201,16 @@ public final class Bell {
     // Check if the bell has been resolved.
     public synchronized boolean isDone() {
       return state != State.UNRUNG;
+    }
+
+    // Check if the bell resolved successfully.
+    public synchronized boolean isSuccessful() {
+      return state == State.SUCCESS;
+    }
+
+    // Check if the bell resolved successfully.
+    public synchronized boolean isFailed() {
+      return state == State.FAILURE;
     }
 
     // Check if the bell has been cancelled.
@@ -219,8 +234,10 @@ public final class Bell {
     // Schedule a compatible bell to be rung after this bell rings. If this
     // bell has already rung when then() is called, the passed bell will be
     // rung immediately with this bell's value.
-    public synchronized void then(In<? super O>... bells) {
-      then(Arrays.asList(bells));
+    public synchronized void then(In<? super O> bell) {
+      // Java generics syntax suuuucks.
+      In<O> bell2 = (In<O>) bell;
+      then((In<? super O>) Collections.singleton(bell2));
     } public synchronized void then(Collection<In<? super O>> bells) {
       if (isDone()) {
         ringOthers(bells);
@@ -285,14 +302,14 @@ public final class Bell {
   //   will be called again when the bell is rung in the future.
   public static abstract class BasicTo<I,O> extends BasicOut<I,O> {
     // This is a workaround to Java's infuriating restrictions regarding
-    // generic casting and inner throwables. Because we can't directly cast the
-    // value held by an AlterationException to an O, we have to use this stupid
-    // indirection technique, and cast the "holder" held by the exception
-    // instead. The compiler complains in the name of "type safety", but at
-    // least it lets it happen. I don't know why the compiler is so concerned
-    // about type safety in this case when there are already so many ways
-    // within the language to break type safety anyway. Maybe it should mind
-    // its own business, feh.
+    // throwables as inner classes and generic casting. Because we can't
+    // directly cast the value held by an AlterationException to an O, we have
+    // to use this stupid indirection technique, and cast the "holder" held by
+    // the exception instead. The compiler complains in the name of "type
+    // safety", but at least it lets it happen. I don't know why the compiler
+    // is so concerned about type safety in this case when there are already so
+    // many ways within the language to break type safety anyway. Maybe it
+    // should mind its own business, feh.
     class Holder { O value; }
 
     // Subclasses need to define the method for converting input objects into
@@ -396,14 +413,21 @@ public final class Bell {
 
   // A base class for all single-type bells.
   public static abstract class Basic<T> extends BasicTo<T,T> {
+    public Basic()            { }
+    public Basic(T t)         { ring(t); }
+    public Basic(Throwable t) { ring(t); }
+
     // These simply use the input as the output.
     public final T convert(T t) { return t; }
   }
 
   // A bell that, once rung, cannot be rung again (future rings will be
-  // ignored), and will not have its value reset when read. Calls to get() will
-  // block if the bell has not rung.
+  // ignored). Calls to get() will block if the bell has not rung.
   public static class Single<I> extends Basic<I> {
+    public Single()            { super(); }
+    public Single(I i)         { super(i); }
+    public Single(Throwable t) { super(t); }
+
     protected synchronized State ring(I i, Throwable t) {
       try {
         return super.ring(i, t);
@@ -414,21 +438,6 @@ public final class Bell {
     }
   }
 
-  // A bell that will reset (become unrung) after the value has been read.
-  /*
-  public static class Sync<T> extends Basic<T> {
-    protected synchronized State ring(I i, Throwable t) {
-      try {
-        super.ring(i, t);
-      } catch (Throwable t) {
-        // This will only happen if the bell was already rung. Single
-        // assignment bells just ignore it.
-        return state;
-      }
-    }
-  }
-  */
-
   // A base class for a bell which can be used to gather and act on the values
   // of its children as they ring. The reduction behavior can be defined by
   // subclasses by implementing reduce(). Subclasses may ring inside of either
@@ -437,6 +446,8 @@ public final class Bell {
   // with the result of defaultValue().
   public static abstract class Reduce<I,O> extends Single<O> {
     private Set<Out<? extends I>> set;
+    protected O defaultValue = null;
+    protected Throwable defaultError = null;
 
     protected Reduce(Out<? extends I>... bells) {
       this(Arrays.asList(bells));
@@ -475,8 +486,44 @@ public final class Bell {
     protected <T extends I> void reduce(T v) { }
     protected void reduce(Throwable t) { }
 
-    // The value to set the bell to if reduce() does not ring it.
-    protected O defaultValue() throws Throwable { return null; }
+    // The value to set the bell to if reduce() does not ring it. This can be
+    // overridden, or the variables defaultValue or defaultError can be set by
+    // subclasses.
+    protected O defaultValue() throws Throwable {
+      if (defaultError != null)
+        throw defaultError;
+      return defaultValue;
+    }
+  }
+
+  // A bell which will ring only when all the target bells have rung (in which
+  // case it will ring successfully with the value of the last ringing bell),
+  // or one of the bells fails (in which case it will ring with the exception
+  // the failed bell rung with).
+  public static class All extends Reduce<Object,Object> {
+    public All(Out<? extends Object>... bells)          { super(bells); }
+    public All(Collection<Out<? extends Object>> bells) { super(bells); }
+
+    protected void reduce(Object o) {
+      defaultValue = o;
+    } protected void reduce(Throwable t) {
+      ring(t);
+    }
+  }
+
+  // A bell which will ring when any of the target bells have rung (in which
+  // case it will ring successfully with the value of the bell that rung), or
+  // all of the bells fails (in which case it will ring with the exception of
+  // the last failed bell).
+  public static class Any extends Reduce<Object,Object> {
+    public Any(Out<? extends Object>... bells)          { super(bells); }
+    public Any(Collection<Out<? extends Object>> bells) { super(bells); }
+
+    protected void reduce(Object o) {
+      ring(o);
+    } protected void reduce(Throwable t) {
+      defaultError = t;
+    }
   }
 
   // A bell which will be rung only when all the target bells have rung. The
@@ -485,10 +532,10 @@ public final class Bell {
     public And(Out<? extends Object>... bells)          { super(bells); }
     public And(Collection<Out<? extends Object>> bells) { super(bells); }
 
+    { defaultValue = Boolean.TRUE; }
+
     protected void reduce(Throwable t) {
       ring(Boolean.FALSE);
-    } protected Boolean defaultValue() {
-      return Boolean.TRUE;
     }
   }
 
@@ -499,15 +546,29 @@ public final class Bell {
     public Or(Out<? extends Object>... bells)          { super(bells); }
     public Or(Collection<Out<? extends Object>> bells) { super(bells); }
 
+    { defaultValue = Boolean.FALSE; }
+
     protected <T extends Object> void reduce(T b) {
       ring(Boolean.TRUE);
-    } protected Boolean defaultValue() {
-      return Boolean.FALSE;
     }
   }
 
   // Utility Methods
   // ===============
+  // Convenience method for creating an "all bell".
+  public static All all(Out<? extends Object>... bells) {
+    return all(Arrays.asList(bells));
+  } public static All all(Collection<Out<? extends Object>> bells) {
+    return new All(bells);
+  }
+
+  // Convenience method for creating an "any bell".
+  public static Any any(Out<? extends Object>... bells) {
+    return any(Arrays.asList(bells));
+  } public static Any any(Collection<Out<? extends Object>> bells) {
+    return new Any(bells);
+  }
+
   // Convenience method for creating an "and bell".
   public static And and(Out<? extends Object>... bells) {
     return and(Arrays.asList(bells));

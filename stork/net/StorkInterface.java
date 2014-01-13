@@ -93,7 +93,7 @@ extends ChannelInitializer<Channel> {
   private class AdHandler extends ChannelInboundHandlerAdapter {
     public void channelRead(final ChannelHandlerContext ctx, Object o)
     throws Exception {
-      sched.putRequest(new RequestBell((Ad)o) {
+      sched.putRequest(new Request((Ad)o) {
         public void always(Ad ad, Throwable t) {
           if (t == null) {
             ctx.writeAndFlush(ad);

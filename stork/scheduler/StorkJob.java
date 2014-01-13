@@ -1,6 +1,7 @@
 package stork.scheduler;
 
 import java.net.URI;
+import java.util.*;
 import java.util.concurrent.*;
 
 import stork.*;
@@ -186,13 +187,12 @@ public class StorkJob {
     } catch (CancellationException e) {
       status(removed);
     } finally {
-      // Any time we're not running, the sessions should be closed.
       thread = null;
     }
   }
 
   // Do the transfer using the given sessions.
-  private void doTransfer(StorkSession ss, StorkSession ds) {
+  private void doTransfer(final StorkSession ss, final StorkSession ds) {
     // Create a pipe to process progress ads from the module.
     // TODO: Replace this with something better.
     Pipe<Ad> pipe = new Pipe<Ad>();
@@ -214,13 +214,18 @@ public class StorkJob {
 
     // For each source file tree, perform the transfer.
     Ad opts = new Ad("recursive", true);
-    List<Bell> xfer_bells = new LinkedList<Bell>();
-    for (URI su : src.uri()) {
-      final Bell<FileTree> sfb = ss.list(src.path(), opts);
-      final Bell<FileTree> dfb = ds.list(dest.path());
+    List<Bell.Out<?>> bells = new LinkedList<Bell.Out<?>>();
+    for (final URI su : src.uri()) {
+      final Bell.Out<FileTree> sfb = ss.list(src.path(), opts);
+      final Bell.Out<FileTree> dfb = ds.list(dest.path());
 
-      // Wait for both listings, then 
-      new Bells.And(sfb, dfb) {
+      // Create a bell to ring when the transfer is done, and add it to the
+      // bell list.
+      final Bell.Single bell = new Bell.Single();
+      bells.add(bell);
+
+      // Wait for both listings, then transfer the file trees.
+      new Bell.And(sfb, dfb) {
         public void done() {
           FileTree sft, dft;
 
@@ -229,9 +234,11 @@ public class StorkJob {
             sft = sfb.get();
           } catch (Exception e) {
             // Something went wrong listing the source. Abort!
-            status(
+            status(failed);
+            return;
           }
 
+          // Get the destination file tree.
           try {
             dft = dfb.get();
           } catch (Exception e) {
@@ -239,27 +246,27 @@ public class StorkJob {
             dft = new FileTree(sft.name);
             dft.copy(sft);
           }
+
+          if (sft.dir && dft.file)
+            throw new RuntimeException("Cannot transfer from directory to file");
+
+          // Open the files on the endpoints.
+          StorkChannel sc = ss.open(StorkUtil.dirname(su.getPath()), sft);
+          StorkChannel dc = (dft.dir) ? ds.open(dest.path(), sft)
+                                      : ds.open(StorkUtil.dirname(dest.path()), dft);
+
+          // If the destination exists and overwriting is not enabled, fail.
+          if (!ds.overwrite && dc.exists())
+            throw new RuntimeException("Destination file already exists.");
+
+          // Let the transfer module do the rest, and ring the bell we made.
+          sc.sendTo(dc).then(bell);
         }
       };
-
-      if (sft.dir && dft.file)
-        throw new RuntimeException("Cannot transfer from directory to file");
-
-      // Open the files on the endpoints.
-      StorkChannel sc = ss.open(StorkUtil.dirname(su.getPath()),  sft);
-      StorkChannel dc = (dft.dir) ? ds.open(dest.path(), sft)
-                                  : ds.open(StorkUtil.dirname(dest.path()), dft);
-
-      // If the destination exists and overwriting is not enabled, fail.
-      if (!ds.overwrite && dc.exists())
-        throw new RuntimeException("Destination file already exists.");
-
-      // Let the transfer module do the rest, and save the bell.
-      xfer_bells.add(sc.sendTo(dc));
     }
 
     // Collect all the transfer bells and make sure they succeeded.
-    new Bells.All(xfer_bells) {
+    new Bell.All(bells) {
       public void done() {
         status(complete);
       } public void fail() {

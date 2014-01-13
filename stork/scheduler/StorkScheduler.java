@@ -42,8 +42,8 @@ public class StorkScheduler {
   private transient Map<String, CommandHandler> cmd_handlers;
   public transient TransferModuleTable xfer_modules;
 
-  private transient LinkedBlockingQueue<RequestBell> req_queue =
-    new LinkedBlockingQueue<RequestBell>();
+  private transient LinkedBlockingQueue<Request> req_queue =
+    new LinkedBlockingQueue<Request>();
 
   private transient User anonymous = User.anonymous();
 
@@ -114,22 +114,22 @@ public class StorkScheduler {
   }
 
   // A thread which handles client requests.
-  private class StorkWorkerThread extends StorkThread<RequestBell> {
+  private class StorkWorkerThread extends StorkThread<Request> {
     StorkWorkerThread() {
       super("stork worker thread");
     }
 
-    public RequestBell getAJob() throws Exception {
+    public Request getAJob() throws Exception {
       return req_queue.take();
     }
 
     // Continually remove jobs from the queue and start them.
-    public void execute(RequestBell req) {
+    public void execute(Request req) {
       Log.fine("Worker pulled request from queue: ", req.cmd);
       Ad ad = null;
 
       // Try handling the command if it's not done already.
-      if (!req.isRung()) try {
+      if (!req.isDone()) try {
         if (req.cmd == null)
           throw new RuntimeException("No command specified.");
 
@@ -161,7 +161,7 @@ public class StorkScheduler {
 
   // Stork command handlers should implement this interface.
   public abstract class CommandHandler {
-    public abstract Ad handle(RequestBell req);
+    public abstract Ad handle(Request req);
 
     // Override this for commands that either don't require logging in or
     // always require logging in.
@@ -170,7 +170,7 @@ public class StorkScheduler {
     }
 
     // Override this is the action affects server state.
-    public boolean affectsState(RequestBell req) {
+    public boolean affectsState(Request req) {
       return affectsState();
     } public boolean affectsState() {
       return false;
@@ -178,7 +178,7 @@ public class StorkScheduler {
   }
 
   class StorkQHandler extends CommandHandler {
-    public Ad handle(RequestBell req) {
+    public Ad handle(Request req) {
       List l = new JobSearcher(req.user.jobs).query(req.ad);
 
       return req.ad.getBoolean("count") ?
@@ -187,7 +187,7 @@ public class StorkScheduler {
   }
 
   class StorkMkdirHandler extends CommandHandler {
-    public Ad handle(RequestBell req) {
+    public Ad handle(Request req) {
       StorkSession sess = null;
       try {
         EndPoint ep = req.ad.unmarshalAs(EndPoint.class);
@@ -205,7 +205,7 @@ public class StorkScheduler {
   }
 
   class StorkRmfHandler extends CommandHandler {
-    public Ad handle(RequestBell req) {
+    public Ad handle(Request req) {
       StorkSession sess = null;
       try {
         EndPoint ep = req.ad.unmarshalAs(EndPoint.class);
@@ -223,12 +223,12 @@ public class StorkScheduler {
   }
 
   class StorkLsHandler extends CommandHandler {
-    public Ad handle(RequestBell req) {
+    public Ad handle(Request req) {
       StorkSession sess = null;
       try {
         EndPoint ep = req.ad.unmarshalAs(EndPoint.class);
         sess = ep.session();
-        return Ad.marshal(sess.list(ep.path(), req.ad).waitFor());
+        return Ad.marshal(sess.list(ep.path(), req.ad).get());
       } finally {
         if (sess != null) sess.close();
       }
@@ -241,7 +241,7 @@ public class StorkScheduler {
 
   // Handle user registration.
   class StorkUserHandler extends CommandHandler {
-    public Ad handle(RequestBell req) {
+    public Ad handle(Request req) {
       if ("register".equals(req.ad.get("action"))) {
         User su = users.register(req.ad);
         Log.info("Registering user: ", su.email);
@@ -261,7 +261,7 @@ public class StorkScheduler {
       return false;
     }
 
-    public boolean affectsState(RequestBell req) {
+    public boolean affectsState(Request req) {
       return "register".equals(req.ad.get("action"));
     } public boolean affectsState() {
       return true;
@@ -269,7 +269,7 @@ public class StorkScheduler {
   }
 
   class StorkSubmitHandler extends CommandHandler {
-    public Ad handle(RequestBell req) {
+    public Ad handle(Request req) {
       StorkJob job = StorkJob.create(req.user, req.ad);
 
       // Schedule the job to execute and add the job to the user context.
@@ -289,7 +289,7 @@ public class StorkScheduler {
   }
 
   class StorkRmHandler extends CommandHandler {
-    public Ad handle(RequestBell req) {
+    public Ad handle(Request req) {
       Range r = new Range(req.ad.get("range"));
       Range sdr = new Range(), cdr = new Range();
 
@@ -322,13 +322,13 @@ public class StorkScheduler {
 
   class StorkInfoHandler extends CommandHandler {
     // Send transfer module information.
-    Ad sendModuleInfo(RequestBell req) {
+    Ad sendModuleInfo(Request req) {
       return Ad.marshal(xfer_modules.infoAds());
     }
 
     // Send server information. But for now, don't send anything until we
     // know what sort of information is good to send.
-    Ad sendServerInfo(RequestBell req) {
+    Ad sendServerInfo(Request req) {
       Ad ad = new Ad();
       ad.put("version", Stork.version());
       ad.put("commands", new Ad(cmd_handlers.keySet()));
@@ -336,7 +336,7 @@ public class StorkScheduler {
     }
 
     // Send information about a credential or about all credentials.
-    Ad sendCredInfo(RequestBell req) {
+    Ad sendCredInfo(Request req) {
       String uuid = req.ad.get("cred");
       if (uuid != null) try {
         return creds.getCred(uuid).getAd();
@@ -347,7 +347,7 @@ public class StorkScheduler {
       }
     }
 
-    public Ad handle(RequestBell req) {
+    public Ad handle(Request req) {
       String type = req.ad.get("type", "module");
 
       if (type.equals("module"))
@@ -366,7 +366,7 @@ public class StorkScheduler {
 
   // Handles creating credentials.
   class StorkCredHandler extends CommandHandler {
-    public Ad handle(RequestBell req) {
+    public Ad handle(Request req) {
       String action = req.ad.get("action");
 
       if (action == null) {
@@ -457,9 +457,9 @@ public class StorkScheduler {
 
   // Put a command in the server's request queue with an optional reply
   // bell and end bell.
-  public RequestBell putRequest(Ad ad) {
-    return putRequest(new RequestBell(ad));
-  } public RequestBell putRequest(RequestBell rb) {
+  public Request putRequest(Ad ad) {
+    return putRequest(new Request(ad));
+  } public Request putRequest(Request rb) {
     assert rb.ad != null;
     rb.handler = handler(rb.cmd);
     if (rb.handler == null) {

@@ -29,16 +29,16 @@ public abstract class StorkSession implements AutoCloseable {
   ////////////////////////////////////////////////////////////////
 
   // Get a directory listing of a path from the session.
-  protected abstract Future<FileTree> listImpl(String path, Ad opts);
+  protected abstract Bell.Out<FileTree> listImpl(String path, Ad opts);
 
   // Get the size of a file given by a path.
-  protected abstract Future<Long> sizeImpl(String path);
+  protected abstract Bell.Out<Long> sizeImpl(String path);
 
   // Create a directory at the end-point, as well as any parent directories.
-  protected abstract Future<?> mkdirImpl(String path);
+  protected abstract Bell.Out<?> mkdirImpl(String path);
 
   // Remove a file or directory.
-  protected abstract Future<?> rmImpl(String path);
+  protected abstract Bell.Out<?> rmImpl(String path);
 
   // Close the session and free any resources.
   protected abstract void closeImpl();
@@ -75,9 +75,9 @@ public abstract class StorkSession implements AutoCloseable {
   }
 
   // Public interfaces to abstract methods.
-  public final Future<FileTree> list(String path) {
+  public final Bell.Out<FileTree> list(String path) {
     return list(path, null);
-  } public final Future<FileTree> list(String path, Ad opts) {
+  } public final Bell.Out<FileTree> list(String path, Ad opts) {
     checkConnected();
     path = StorkUtil.normalizePath(path);
     if (opts == null)
@@ -88,19 +88,19 @@ public abstract class StorkSession implements AutoCloseable {
   public final long size(String path) {
     checkConnected();
     path = StorkUtil.normalizePath(path);
-    return sizeImpl(path).waitFor();
+    return sizeImpl(path).get();
   }
 
   public final void mkdir(String path) {
     checkConnected();
     path = StorkUtil.normalizePath(path);
-    mkdirImpl(path).waitFor();
+    mkdirImpl(path).get();
   }
 
   public final void rm(String path) {
     checkConnected();
     path = StorkUtil.normalizePath(path);
-    rmImpl(path).waitFor();
+    rmImpl(path).get();
   }
 
   // Check if the session hasn't been closed. Throws exception if so.

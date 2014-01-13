@@ -79,7 +79,7 @@ public class GridFTPSession extends StorkSession {
 
     // This bell will be rung when the listing has finished, and will
     // contain the root file tree.
-    ListBell bell = new RootListBell(path);
+    ListBell bell = new ListBell(path, new FileTree(path));
     bell.opts = opts;
     bell.cp   = pair;
 
@@ -93,7 +93,7 @@ public class GridFTPSession extends StorkSession {
 
     // This will handle choosing a listing command and ringing the bell
     // with the list when it's done.
-    pipeListing(bell);
+    pipeListing(path, bell);
     return bell;
   }
 
@@ -101,44 +101,39 @@ public class GridFTPSession extends StorkSession {
   // the list bell when it's done.
   private static String[] cc_list_cmds = { "MLST", "MLSC", "STAT" };
   private static String[] dc_list_cmds = { "MLSD", "LIST" };
-  private Bell<FileTree> pipeListing(String path, ListBell lb) {
+  private Bell.Single<FileTree> pipeListing(String path, final ListBell lb) {
     // Try all of the command channel-based alternatives.
-    for (String cmd : cc_list_cmds) if (lb.canListWith(cmd))
-      return cc.pipe(cmd+" "+path, new CCListBell(lb, cmd));
+    for (String cmd : cc_list_cmds) if (lb.canListWith(cmd)) {
+      CCListBell clb = new CCListBell(lb, cmd, path);
+      cc.pipe(cmd+" "+path, clb);
+      return lb;
+    }
 
     // Other alternatives require a data channel to list, so let's
     // pipe a passive command.
+    // FIXME: This is absolutely busted.
     for (String cmd : dc_list_cmds) if (cc.supports(cmd)) {
-      DCListBell dlb = new DCListBell(lb, cmd);
-      pipePassive(dlb.sink());
-      return cc.pipe(cmd+" "+path, dlb);
+      final TreeSink sink = new TreeSink();
+      sink.then(new Bell.Handler() {
+        public void done(FileTree tree) {
+          lb.ring(tree);
+        }
+      });
+      pipePassive(sink);
+      cc.pipe(cmd+" "+path).then(new Bell.Handler() {
+        public void fail(Throwable t) {
+          // Fail the sink if the listing fails.
+          sink.ring(t);
+        }
+      });
+      return sink;
     }
 
     throw abort("server does not support listing");
   }
 
-  // This is the main list bell that maintains the file tree.
-  private class RootListBell extends ListBell {
-    private List<String> paths = new LinkedList<String>();
-    private final String path;  // root path
-    private final FileTree tree;
-    
-    public RootListBell(String path) {
-      this.path = path;
-      tree = new FileTree(path);
-    }
-
-    public void done(FileTree ft) {
-      tree.copy(ft);
-      if (hasPendingSublists)
-        defer();
-      if (depth == 0)
-        get().setFiles((FileTree[]) null);
-    }
-  }
-
   // Ring this when the listing and all sublistings are complete.
-  private class ListBell extends Bell<FileTree> {
+  private class ListBell extends Bell.Single<FileTree> {
     String name;
     ListBell parent;  // This will be null if we're root.
     FileTree tree;    // This will be set for all sublists.
@@ -162,11 +157,6 @@ public class GridFTPSession extends StorkSession {
       return (parent == null) ? name : parent.path()+"/"+name;
     }
 
-    // Filter rings until we've been rung for every sublist.
-    public boolean filter(FileTree ft, Throwable t) {
-      return --sublists <= 0;
-    }
-
     // Return whether or not we can use a command to list this.
     boolean canListWith(String s) {
       return cc.supports(s) &&
@@ -177,8 +167,6 @@ public class GridFTPSession extends StorkSession {
     // list bell when it's done. This should only be called if this bell
     // hasn't been rung and if the passed file tree has been listed.
     void doSublisting(FileTree ft) {
-      assert !isRung();
-
       int fc = 0;
       tree = ft;
 
@@ -190,47 +178,42 @@ public class GridFTPSession extends StorkSession {
       if (fc == 0) {
         ring(ft);
       } else {
-        sublists = fc;
-        for (FileTree sft : ft.files)
-          if (sft.dir) pipeListing(new ListBell(sft.name, sft, this));
+        for (FileTree sft : ft.files) if (sft.dir)
+          pipeListing(sft.path(), new ListBell(sft.name, sft, this));
       }
     }
 
     // Once we've rung, close the channel pair.
-    protected void onRing() {
-      if (hasPendingSublists)
-        defer();
+    public void done(FileTree ft) {
       if (depth == 0)
-        get().setFiles((FileTree[]) null);
+        ft.setFiles((FileTree[]) null);
     }
   }
 
   // A handler for reading lists over the control channel.
-  private class CCListBell extends Bell<Reply> {
+  private class CCListBell extends Bell.Single<Reply> {
     ListBell lb;  // Ring me when we're done.
     int type;
-    String cmd;
+    String cmd, path;
     FTPListParser p;
 
-    CCListBell(ListBell lb, String cmd) {
+    CCListBell(ListBell lb, String cmd, String path) {
       this.lb = lb;
       this.cmd = cmd;
+      this.path = path;
       type = cmd.startsWith("M") ? 'M' : 0;
       p = new FTPListParser(null, (char)type);
     }
 
-    public boolean filter(Reply r, Throwable t) {
+    public void done(Reply r) {
+      // Make sure we're getting the final reply.
       if (r != null && r.getCode() < 200) {
         p.write(r.getMessage().getBytes());
-        return false;
-      } else return true;
-    }
+        discard();
+      }
 
-    protected void done(Reply r) {
       // Parse the list from the reply.
       FileTree ft = p.parseAll(r.getMessage().getBytes());
-
-      System.out.println(Ad.marshal(ft));
 
       if (ft.name == null) {
         // This can happen if "." was not found in the listing. This can
@@ -245,7 +228,7 @@ public class GridFTPSession extends StorkSession {
         if (lb.depth == 0 || !ft.dir)
           lb.ring(ft);
         else
-          pipeListing(lb);  // Pipe again using different command.
+          pipeListing(path, lb);  // Pipe again using different command.
       } else {
         // If listing worked, this satisfies depth 0 and 1. If depth is
         // anything else, we need to pipe more listing commands.
@@ -263,32 +246,26 @@ public class GridFTPSession extends StorkSession {
         else
           lb.doSublisting(ft);
       }
-    } protected void fail(Reply r, Throwable t) {
-      // Either we got a bad reply or a parse error.
-      lb.ring(null, t);
     }
   }
 
   // A handler for reading lists over a data channel.
   private class DCListBell extends TransferBell {
     ListBell lb;  // Ring me when we're done.
-    Bell<FileTree> sb;
+    Bell.Single<FileTree> sb;
+    String path;
     int type;
 
-    DCListBell(ListBell lb, String cmd) {
+    DCListBell(ListBell lb, String cmd, String path) {
       this.lb = lb;
-      sb = new Bell<FileTree>();
+      this.path = path;
+      sb = new Bell.Single<FileTree>();
       type = cmd.startsWith("M") ? 'M' : 0;
-    }
-
-    // Get a list sink for this thing.
-    public TreeSink sink() {
-      return new TreeSink(sb, lb.tree, type);
     }
 
     public void done(Reply r) {
       // Assumably, if we're here, passive mode worked. Now get the list.
-      FileTree ft = sb.waitFor();
+      FileTree ft = sb.get();
 
       // See if we need to do sublisting.
       if (lb.depth == 0 || lb.depth == 1) {
@@ -297,38 +274,36 @@ public class GridFTPSession extends StorkSession {
       } else {
         lb.doSublisting(ft);
       }
-    } public void fail(Reply r, Throwable t) {
+    } public void fail(Throwable t) {
       // Either we got a bad reply or a parse error.
-      lb.ring(null, t);
+      lb.ring(t);
     }
   }
 
   // Get the size of a file.
-  protected Bell<Long> sizeImpl(final String path) {
-    return cc.pipe("SIZE "+path).new Link<Long>() {
-      public Long transform(Reply r) {
+  protected Bell.Out<Long> sizeImpl(final String path) {
+    Bell.BasicTo<Reply,Long> cb = new Bell.BasicTo<Reply,Long>() {
+      public Long convert(Reply r) {
         return Long.parseLong(r.getMessage());
       }
     };
+    cc.pipe("SIZE "+path, cb);
+    return cb;
   }
 
   // Make a directory.
-  protected Bell<Reply> mkdirImpl(String path) {
+  protected Bell.Single<Reply> mkdirImpl(String path) {
     return cc.pipe("MKD "+path);
   }
 
   // Remove a file or directory.
-  protected Bell<Reply> rmImpl(final String path) {
-    final Bell<Reply> bell = new Bell<Reply>();
-    cc.pipe("RMD "+path, new Bell<Reply>() {
+  protected Bell.Single<Reply> rmImpl(final String path) {
+    final Bell.Single<Reply> bell = new Bell.Single<Reply>();
+    cc.pipe("RMD "+path, new Bell.Single<Reply>() {
       public void done(Reply r) {
         bell.ring(r);
-      } public void fail(Reply r, Throwable t) {
-        cc.pipe("DELE "+path, new Bell<Reply>() {
-          public void always(Reply r, Throwable t) {
-            bell.ring(r, t);
-          }
-        });
+      } public void fail(Throwable t) {
+        cc.pipe("DELE "+path, bell);
       }
     });
     return bell;
@@ -339,7 +314,7 @@ public class GridFTPSession extends StorkSession {
   }
 
   // Bell for doing file transfers.
-  class TransferBell extends Bell<Reply> {
+  class TransferBell extends Bell.Single<Reply> {
     long size = -1;
     ProgressListener pl = new ProgressListener();
     GridFTPSession sess;
@@ -391,7 +366,7 @@ public class GridFTPSession extends StorkSession {
     }
 
     // Abort the other transfer if this fails.
-    public void fail(Reply r, Throwable t) {
+    public void fail(Throwable t) {
       if (other != null)
         other.failed = (RuntimeException) t;
     }
@@ -433,7 +408,7 @@ public class GridFTPSession extends StorkSession {
     // with a length of -1 will cause data to be sent until the source is
     // out of data.
     // FIXME: This is a pretty hacky thing.
-    public Bell<?> sendTo(StorkChannel c, long off, long len) {
+    public Bell.Single<?> sendTo(StorkChannel c, long off, long len) {
       if (!(c instanceof GridFTPChannel))
         throw abort("can only send to other FTP channels");
       final GridFTPChannel gc = (GridFTPChannel) c;
@@ -448,7 +423,7 @@ public class GridFTPSession extends StorkSession {
                        .put("files_total", file.count()));
 
       return sendTo(c, null);
-    } private Bell<Reply> sendTo(StorkChannel c, final Bell<Reply> meta) {
+    } private Bell.Single<Reply> sendTo(StorkChannel c, final Bell.Single<Reply> meta) {
       if (!(c instanceof GridFTPChannel))
         throw abort("can only send to other FTP channels");
       final GridFTPChannel gc = (GridFTPChannel) c;
@@ -460,7 +435,7 @@ public class GridFTPSession extends StorkSession {
 
       // For directories, pipe all contained files.
       if (file.dir) {
-        final Bell<Reply> b = new Bell<Reply>() {
+        final Bell.Single<Reply> b = new Bell.Single<Reply>() {
           public int count = 1;
           public boolean first = true;
           public boolean filter(Reply r, Throwable t) {
@@ -477,7 +452,7 @@ public class GridFTPSession extends StorkSession {
               meta.ring();
           }
         };
-        dc.pipe("MKD "+gc.path(), new Bell<Reply>() {
+        dc.pipe("MKD "+gc.path(), new Bell.Single<Reply>() {
           public void always(Reply r, Throwable t) {
             b.ring();
           }
@@ -499,7 +474,7 @@ public class GridFTPSession extends StorkSession {
 
       // TODO: More robust third-party transfer checking.
       dc.pipe("PASV", gc.gs.new PassiveBell(
-        new ActiveBell(new Bell<Reply>() {
+        new ActiveBell(new Bell.Single<Reply>() {
           public void done(Reply r) {
             cc.pipe("RETR "+path(), db);
           }
@@ -526,22 +501,22 @@ public class GridFTPSession extends StorkSession {
 
   // Put this channel into passive mode and put the other channel into
   // active mode, or attach a local sink.
-  private Bell<Reply> pipePassive(GridFTPSession other) {
-    Bell<Reply> reply = new Bell<Reply>();
-    cc.pipe("PASV", new PassiveBell(other.new ActiveBell(reply)));
+  private Bell.Single<Reply> pipePassive(GridFTPSession other) {
+    Bell.Single<Reply> reply = new Bell.Single<Reply>();
+    cc.pipe("PASV").then(new PassiveBell(other.new ActiveBell(reply)));
     return reply;
-  } private Bell<Reply> pipePassive(DataSink sink) {
+  } private Bell.Single<Reply> pipePassive(DataSink sink) {
     return cc.pipe("PASV", new PassiveBell(sink));
   }
 
   // Ringing this with a PASV reply will parse the reply and ring the
   // associated bell with the HostPort.
-  private class PassiveBell extends Bell<Reply> {
-    Bell<HostPort> next;
+  private class PassiveBell extends Bell.Single<Reply> {
+    Bell.Single<HostPort> next;
     DataSink sink;
     public PassiveBell(DataSink sink) {
       this.sink = sink;
-    } public PassiveBell(Bell<HostPort> next) {
+    } public PassiveBell(Bell.Single<HostPort> next) {
       this.next = next;
     } public void done(Reply r) {
       Log.finer("Got passive reply: ", r);
@@ -559,7 +534,7 @@ public class GridFTPSession extends StorkSession {
       } else if (next != null) {
         next.ring(hp);
       }
-    } public void fail(Reply r, Throwable t) {
+    } public void fail(Throwable t) {
       if (next != null)
         next.ring(t);
     }
@@ -567,13 +542,13 @@ public class GridFTPSession extends StorkSession {
 
   // Ringing this bell with a HostPort will put the channel into
   // active mode.
-  private class ActiveBell extends Bell<HostPort> {
-    Bell<Reply> next;
-    public ActiveBell(Bell<Reply> next) {
+  private class ActiveBell extends Bell.Single<HostPort> {
+    Bell.Single<Reply> next;
+    public ActiveBell(Bell.Single<Reply> next) {
       this.next = next;
     } public void done(HostPort p) {
       Log.fine("Making active connection to: ", p.getHost());
-      cc.pipe("PORT "+p.toFtpCmdArgument(), next);
+      cc.pipe("PORT "+p.toFtpCmdArgument()).then(next);
     } public void fail(HostPort p, Throwable t) {
       if (next != null)
         next.ring(t);

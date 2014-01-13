@@ -134,9 +134,9 @@ public class ControlChannel extends Pipeline<String, Reply> {
         } else {
           String user = (u.user == null) ? "anonymous" : u.user;
           String pass = (u.pass == null) ? "none" : u.pass;
-          Reply r = pipe("USER "+user).waitFor();
+          Reply r = pipe("USER "+user).get();
           if (Reply.isPositiveIntermediate(r)) try {
-            pipe(("PASS "+pass).trim()).waitFor();
+            pipe(("PASS "+pass).trim()).get();
           } catch (Exception e) {
             throw abort("bad password", e);
           } else if (!Reply.isPositiveCompletion(r)) {
@@ -151,9 +151,9 @@ public class ControlChannel extends Pipeline<String, Reply> {
         cc = fc = new HackedControlChannel(u.host, u.port);
         fc.open();
 
-        Reply r = pipe("USER "+user).waitFor();
+        Reply r = pipe("USER "+user).get();
         if (Reply.isPositiveIntermediate(r)) try {
-          pipe(("PASS "+pass).trim()).waitFor();
+          pipe(("PASS "+pass).trim()).get();
         } catch (Exception e) {
           throw abort("bad password", e);
         } else if (!Reply.isPositiveCompletion(r)) {
@@ -211,13 +211,13 @@ public class ControlChannel extends Pipeline<String, Reply> {
     
     // If we haven't cached the features, do so.
     if (features == null) {
-      Bell<Reply> hb = pipe("HELP");
-      Bell<Reply> fb = pipe("FEAT");
+      Bell.Single<Reply> hb = pipe("HELP");
+      Bell.Single<Reply> fb = pipe("FEAT");
       features = new HashSet<String>();
 
       // Read the HELP response.
       try {
-        String r = hb.waitFor().getMessage();
+        String r = hb.get().getMessage();
         boolean first = true;
 
         for (String s : r.split("[\r\n]+")) if (!first) {
@@ -231,7 +231,7 @@ public class ControlChannel extends Pipeline<String, Reply> {
 
       // Read the FEAT response.
       try {
-        String r = fb.waitFor().getMessage();
+        String r = fb.get().getMessage();
         boolean first = true;
 
         for (String s : r.split("[\r\n]+")) if (!first) {
@@ -261,16 +261,16 @@ public class ControlChannel extends Pipeline<String, Reply> {
     try {
       fc.write(new Command(cmd));
     } catch (Exception e) {
-      kill();
+      interrupt();
       throw abort("write error", e);
     } return true;
   }
 
   // Read replies from the control channel.
-  public Reply handleReply(String cmd) {
+  public Reply handleReply() {
     try {
       Reply r = cc.read();
-      Log.fine("Reply: ", r); 
+      Log.fine("Reply: ", r);
       if (r.getCode() >= 500)
         throw abort(true, r.getMessage());
       if (r.getCode() >= 400)
@@ -286,7 +286,7 @@ public class ControlChannel extends Pipeline<String, Reply> {
   }
 
   // Special handler for doing file transfers.
-  class TransferBell extends Bell<Reply> {
+  class TransferBell extends Bell.Single<Reply> {
     ProgressListener pl = new ProgressListener();
     GridFTPSession sess;
 
@@ -321,14 +321,14 @@ public class ControlChannel extends Pipeline<String, Reply> {
   }
 
   // Close the control channel.
-  public Bell<Reply> close() {
-    Bell<Reply> rb;
+  public Bell.Single<Reply> close() {
+    Bell.Single<Reply> rb;
     if (local) try {
       facade.close();
     } catch (Exception e) {
       // Just ignore it.
     } finally {
-      rb = new Bell<Reply>(null);
+      rb = new Bell.Single<Reply>((Reply)null);
     } else {
       rb = pipe("QUIT");
     } return rb;
@@ -344,16 +344,16 @@ public class ControlChannel extends Pipeline<String, Reply> {
     } catch (Exception e) {
       // Who cares.
     } finally {
-      kill();
+      interrupt();
     } throw abort();
   }
 
   // Change the mode of this channel.
   // TODO: Detect unsupported modes.
-  public Bell<Reply> mode(char m) {
+  public Bell.Single<Reply> mode(char m) {
     if (local) {
       facade.setTransferMode(modeIntValue(m));
-      return new Bell<Reply>(null);
+      return new Bell.Single<Reply>((Reply)null);
     } else {
       return pipe("MODE "+m);
     }
@@ -361,10 +361,10 @@ public class ControlChannel extends Pipeline<String, Reply> {
 
   // Change the data type of this channel.
   // TODO: Detect unsupported types.
-  public Bell<Reply> type(char t) {
+  public Bell.Single<Reply> type(char t) {
     if (local) {
       facade.setTransferType(typeIntValue(t));
-      return new Bell<Reply>(null);
+      return new Bell.Single<Reply>((Reply)null);
     } else {
       return pipe("TYPE "+t);
     }

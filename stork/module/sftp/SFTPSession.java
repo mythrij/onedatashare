@@ -63,7 +63,7 @@ public class SFTPSession extends StorkSession {
   }
 
   // Get a directory listing of a path from the session.
-  protected Bell<FileTree> listImpl(String path, Ad opts) {
+  protected Bell.Single<FileTree> listImpl(String path, Ad opts) {
     FileTree ft = new FileTree(StorkUtil.basename(path));
     ft.dir = true;
     List<FileTree> sub = new LinkedList<FileTree>();
@@ -85,7 +85,7 @@ public class SFTPSession extends StorkSession {
       }
 
       ft.setFiles(sub);
-      Bell<FileTree> bell = new Bell<FileTree>();
+      Bell.Single<FileTree> bell = new Bell.Single<FileTree>();
       bell.ring(ft);
       return bell;
     } catch (Exception e) {
@@ -94,15 +94,15 @@ public class SFTPSession extends StorkSession {
   }
 
   // Get the size of a file given by a path.
-  protected Bell<Long> sizeImpl(String path) {
-    return new Bell<Long>(-1l);
+  protected Bell.Single<Long> sizeImpl(String path) {
+    return new Bell.Single<Long>(-1l);
   }
 
-  protected Bell<?> mkdirImpl(String path) {
+  protected Bell.Single<?> mkdirImpl(String path) {
     return null;
   }
 
-  protected Bell<?> rmImpl(String path) {
+  protected Bell.Single<?> rmImpl(String path) {
     return null;
   }
 
@@ -135,7 +135,7 @@ public class SFTPSession extends StorkSession {
   public static void main(String[] args) throws Exception {
     URI u = new URI(args[0]);
     SFTPSession sess = new SFTPSession(new EndPoint(u));
-    System.out.println(Ad.marshal(sess.list(u.getPath()).waitFor()));
+    System.out.println(Ad.marshal(sess.list(u.getPath()).get()));
     sess.close();
   }
 }

@@ -5,18 +5,18 @@ import stork.util.*;
 import java.io.*;
 import org.globus.ftp.*;
 
-// JGlobus DataSink implementation that feeds into FTP list parser.
+// JGlobus DataSink implementation that feeds into FTP list parser. This
+// can be attached to a GridFTP data channel as a sink, and will ring an
+// attached bell with the parsed file tree when the listing is complete.
 
-class TreeSink implements DataSink {
-  private Bell<FileTree> tb;
+class TreeSink extends Bell.Single<FileTree> implements DataSink {
   private FTPListParser parser;
 
   // Pass a bell to ring when close is called. Also accepts a listing
   // format, if one is known.
-  public TreeSink(Bell<FileTree> tb) {
-    this(tb, null, 0);
-  } public TreeSink(Bell<FileTree> tb, FileTree base, int t) {
-    this.tb = tb;
+  public TreeSink() {
+    this(null, 0);
+  } public TreeSink(FileTree base, int t) {
     parser = new FTPListParser(base, t);
   }
 
@@ -29,6 +29,6 @@ class TreeSink implements DataSink {
   }
 
   public synchronized void close() throws IOException {
-    tb.ring(parser.finish());
+    ring(parser.finish());
   }
 }

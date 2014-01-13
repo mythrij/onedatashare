@@ -33,20 +33,27 @@ public abstract class Pipeline<C,R> extends Thread {
   }
 
   // Internal representation of a command passed to the pipeliner.
-  private class PipeCommand extends Bell<R> {
+  private class PipeCommand extends Bell.Single<R> {
     C cmd;
 
-    PipeCommand(C c) {
-      cmd = c;
+    PipeCommand(C c) { cmd = c; }
+
+    // Return whether or not the command is ready to be written to the pipe.
+    // This is not actually implemented yet, so just return true.
+    public boolean ready() {
+      return true;
+    }
+
+    
+    public boolean isSync() {
+      return false;
     }
 
     // Read a reply and try to ring the bell with it. Returns true if the bell
     // rang, false otherwise. If the pipeline was interrupted while waiting for the reply,
     // throws an interrupted exception.
-    boolean handle() throws InterruptedException {
-      if (cmd == null) {
-        return ring().rang();
-      } try {
+    public boolean handle() throws InterruptedException {
+      try {
         return ring(handleReply()).rang();
       } catch (InterruptedException t) {
         throw t;
@@ -57,10 +64,28 @@ public abstract class Pipeline<C,R> extends Thread {
     }
   }
 
+  // A special command handler that simply waits until it is reached in the
+  // pipeline.
+  private class SyncCommand extends PipeCommand {
+    SyncCommand() { super(null); }
+
+    public boolean handle() {
+      return ring().rang();
+    }
+
+    public boolean isSync() {
+      return true;
+    }
+  }
+
   // Write a command to the queue to be piped.
-  public synchronized Bell pipe(C c) {
+  public synchronized Bell.Single<R> pipe(C c, Bell.In<R> then) {
+    Bell.Single<R> b = pipe(c);
+    b.then(then);
+    return b;
+  } public synchronized Bell.Single<R> pipe(C c) {
     return pipe(new PipeCommand(c));
-  } private synchronized Bell pipe(PipeCommand c) {
+  } private synchronized Bell.Single<R> pipe(PipeCommand c) {
     deferred.add(c);
     notifyAll();
     return c;
@@ -68,8 +93,8 @@ public abstract class Pipeline<C,R> extends Thread {
 
   // Return a synchronization future. I.e., a future that will be resolved once
   // the pipeline has reached the point where sync() was called.
-  public synchronized Bell sync() {
-    return pipe(null);
+  public synchronized Bell.Single<R> sync() {
+    return pipe(new SyncCommand());
   }
 
   // Subclasses should implement write behavior. Should return true if the
@@ -79,7 +104,7 @@ public abstract class Pipeline<C,R> extends Thread {
 
   // Subclasses should implement read behavior. This should block until a reply
   // is received.
-  protected abstract R handleReply(C c) throws InterruptedException;
+  protected abstract R handleReply() throws InterruptedException;
 
   // Set the number of commands that are allowed to be pending (i.e., waiting
   // for replies). A value less than 1 means an unlimited number of commands
@@ -105,8 +130,8 @@ public abstract class Pipeline<C,R> extends Thread {
           pending--;
       }
     } catch (InterruptedException e) {
-      for (PipeCommand p : sent)     p.cancel();
-      for (PipeCommand p : deferred) p.cancel();
+      for (PipeCommand p : sent)     p.cancel(false);
+      for (PipeCommand p : deferred) p.cancel(false);
       dead = true;
       notifyAll();
     }
@@ -120,13 +145,14 @@ public abstract class Pipeline<C,R> extends Thread {
   // Write a command and update the pending level.
   private synchronized boolean tryWrite(PipeCommand c) {
     try {
-      if (!c.bell.ready()) return false;
+      if (!c.ready()) return false;
     } catch (Throwable t) {
-      c.bell.ring(null, t);
+      c.ring(t);
       return true;
-    } if (c.cmd == null || handleWrite(c.cmd)) synchronized (sent) {
+    } if (c.isSync() || handleWrite(c.cmd)) synchronized (sent) {
+      c.cmd = null;  // For the sake of garbage collection...
       sent.add(c);
-      if (c.cmd != null) pending++;
+      if (!c.isSync()) pending++;
       return true;
     } return false;
   }
