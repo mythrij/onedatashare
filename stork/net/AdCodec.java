@@ -13,7 +13,7 @@ import java.util.*;
 
 // A codec bridging ads and byte streams.
 
-public class AdCodec extends CombinedChannelDuplexHandler {
+public class AdCodec extends ChannelHandlerAppender {
   AdPrinter printer;
 
   private void setPrinter(AdPrinter p) {
@@ -21,7 +21,7 @@ public class AdCodec extends CombinedChannelDuplexHandler {
   }
 
   public AdCodec() {
-    init(new ReplayingDecoder<Void>() {
+    add(new ReplayingDecoder<Void>() {
       // A decoder for reading serialized ads from a byte channel.
       // TODO: We should use a smarter method of finding message ends.
       protected void decode(
