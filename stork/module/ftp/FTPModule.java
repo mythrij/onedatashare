@@ -20,6 +20,6 @@ public class FTPModule extends TransferModule {
   // -----------------
   // Create a new connection to an FTP server.
   public StorkSession session(EndPoint e) {
-    return new FTPSession(e);
+    return FTPSession.connect(e).sync();
   }
 }

@@ -33,7 +33,7 @@ public abstract class Pipeline<C,R> extends Thread {
   }
 
   // Internal representation of a command passed to the pipeliner.
-  private class PipeCommand extends Bell.Single<R> {
+  private class PipeCommand extends Bell<R> {
     C cmd;
 
     PipeCommand(C c) { cmd = c; }
@@ -54,12 +54,12 @@ public abstract class Pipeline<C,R> extends Thread {
     // throws an interrupted exception.
     public boolean handle() throws InterruptedException {
       try {
-        return ring(handleReply()).rang();
+        return ring(handleReply()).isDone();
       } catch (InterruptedException t) {
         throw t;
       } catch (Throwable t) {
         // Otherwise, it was some other exception.
-        return ring(t).rang();
+        return ring(t).isDone();
       }
     }
   }
@@ -70,7 +70,7 @@ public abstract class Pipeline<C,R> extends Thread {
     SyncCommand() { super(null); }
 
     public boolean handle() {
-      return ring().rang();
+      return ring().isDone();
     }
 
     public boolean isSync() {
@@ -79,13 +79,13 @@ public abstract class Pipeline<C,R> extends Thread {
   }
 
   // Write a command to the queue to be piped.
-  public synchronized Bell.Single<R> pipe(C c, Bell.In<R> then) {
-    Bell.Single<R> b = pipe(c);
-    b.then(then);
+  public synchronized Bell<R> pipe(C c, Bell<R> then) {
+    Bell<R> b = pipe(c);
+    b.promise(then);
     return b;
-  } public synchronized Bell.Single<R> pipe(C c) {
+  } public synchronized Bell<R> pipe(C c) {
     return pipe(new PipeCommand(c));
-  } private synchronized Bell.Single<R> pipe(PipeCommand c) {
+  } private synchronized Bell<R> pipe(PipeCommand c) {
     deferred.add(c);
     notifyAll();
     return c;
@@ -93,7 +93,7 @@ public abstract class Pipeline<C,R> extends Thread {
 
   // Return a synchronization future. I.e., a future that will be resolved once
   // the pipeline has reached the point where sync() was called.
-  public synchronized Bell.Single<R> sync() {
+  public synchronized Bell<R> sync() {
     return pipe(new SyncCommand());
   }
 

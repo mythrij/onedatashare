@@ -34,9 +34,9 @@ public abstract class StorkChannel {
   // matching recvFrom should be called on the other channel. Sending
   // with a length of -1 will cause data to be sent until the source is
   // out of data.
-  public final Bell.Out<?> sendTo(StorkChannel c) {
+  public final Bell<?> sendTo(StorkChannel c) {
     return sendTo(c, 0, -1);
-  } public abstract Bell.Out<?> sendTo(StorkChannel c, long off, long len);
+  } public abstract Bell<?> sendTo(StorkChannel c, long off, long len);
 
   // Close the channel, finalizing any resources held by the channel,
   // and ending any ongoing transfers.

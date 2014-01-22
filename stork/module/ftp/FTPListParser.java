@@ -1,4 +1,4 @@
-package stork.module.gridftp;
+package stork.module.ftp;
 
 import stork.util.*;
 import stork.module.*;
@@ -17,6 +17,8 @@ import java.io.*;
 // This parser will return a tree root that has its name set if and only
 // if information about the listed directory was able to be retrieved from
 // the listing results.
+//
+// TODO: Check out <http://cr.yp.to/ftpparse/ftpparse.c>.
 
 public class FTPListParser {
   String data = null;
@@ -48,18 +50,21 @@ public class FTPListParser {
     Matcher m = line_pattern.matcher(data);
 
     // Keep finding lines.
-    while (m.find()) {
-      String line = m.group(1);
-      FileTree ft = parseEntry(line);
-      if (ft == null || ft.name == null)
-        continue;
-      ft.name = Intern.string(ft.name);
-      ft.perm = Intern.string(ft.perm);
-      if (ft.name.equals("."))
-        root.copy(ft);
-      else if (!ignoreName(ft.name))
-        files.add(ft);
-    }
+    while (m.find())
+      parseLine(m.group(1));
+  }
+
+  // Parse a single line.
+  public void parseLine(String line) {
+    FileTree ft = parseEntry(line);
+    if (ft == null || ft.name == null)
+      return;
+    ft.name = Intern.string(ft.name);
+    ft.perm = Intern.string(ft.perm);
+    if (ft.name.equals("."))
+      root.copy(ft);
+    else if (!ignoreName(ft.name))
+      files.add(ft);
   }
 
   // This allows the entire list to be read in one shot.

@@ -58,12 +58,12 @@ public class SFTPSession extends StorkSession {
     }
   }
 
-  protected StorkChannel openImpl(String base, FileTree ft) {
+  public StorkChannel open(String base, FileTree ft) {
     return null;
   }
 
   // Get a directory listing of a path from the session.
-  protected Bell.Single<FileTree> listImpl(String path, Ad opts) {
+  public Bell<FileTree> list(String path) {
     FileTree ft = new FileTree(StorkUtil.basename(path));
     ft.dir = true;
     List<FileTree> sub = new LinkedList<FileTree>();
@@ -85,7 +85,7 @@ public class SFTPSession extends StorkSession {
       }
 
       ft.setFiles(sub);
-      Bell.Single<FileTree> bell = new Bell.Single<FileTree>();
+      Bell<FileTree> bell = new Bell<FileTree>();
       bell.ring(ft);
       return bell;
     } catch (Exception e) {
@@ -94,29 +94,29 @@ public class SFTPSession extends StorkSession {
   }
 
   // Get the size of a file given by a path.
-  protected Bell.Single<Long> sizeImpl(String path) {
-    return new Bell.Single<Long>(-1l);
+  public Bell<Long> size(String path) {
+    return new Bell<Long>().ring(-1L);
   }
 
-  protected Bell.Single<?> mkdirImpl(String path) {
+  public Bell<Void> mkdir(String path) {
     return null;
   }
 
-  protected Bell.Single<?> rmImpl(String path) {
+  public Bell<Void> rm(String path) {
     return null;
   }
 
   // Create a directory at the end-point, as well as any parent directories.
   // Returns whether or not the command succeeded.
-  //protected abstract boolean mkdirImpl(String path);
+  //public abstract boolean mkdir(String path);
 
-  // Transfer from this session to a paired session. opts can be null.
-  protected void transferImpl(String src, String dest, Ad opts) {
+  // Transfer from this session to a paired session.
+  public void transfer(String src, String dest) {
     throw abort("sftp transfer is not supported");
   }
 
   // Close the session and free any resources.
-  protected void closeImpl() {
+  public void close() {
     channel.disconnect();
     session.disconnect();
   }

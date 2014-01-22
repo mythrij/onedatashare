@@ -16,7 +16,6 @@ public abstract class StorkSession implements AutoCloseable {
   public transient EndPoint ep = null;
 
   protected transient Pipe<Ad>.End pipe = null;
-  protected transient boolean closed = false;
 
   // Common transfer options.
   public boolean overwrite = true;
@@ -24,43 +23,35 @@ public abstract class StorkSession implements AutoCloseable {
   public boolean encrypt   = false;
   public boolean compress  = false;
 
-  ////////////////////////////////////////////////////////////////
-  // The following methods should be implemented by subclasses: //
-  ////////////////////////////////////////////////////////////////
+  // Create a session from a URL. Generally the path is ignored.
+  public StorkSession(String u) {
+    this(new EndPoint(u));
+  } public StorkSession(URI u) {
+    this(new EndPoint(u));
+  } public StorkSession(EndPoint e) {
+    ep = e;
+  }
 
   // Get a directory listing of a path from the session.
-  protected abstract Bell.Out<FileTree> listImpl(String path, Ad opts);
-
-  // Get the size of a file given by a path.
-  protected abstract Bell.Out<Long> sizeImpl(String path);
+  public abstract Bell<FileTree> list(String path);
 
   // Create a directory at the end-point, as well as any parent directories.
-  protected abstract Bell.Out<?> mkdirImpl(String path);
+  public abstract Bell<Void> mkdir(String path);
 
   // Remove a file or directory.
-  protected abstract Bell.Out<?> rmImpl(String path);
+  public abstract Bell<Void> rm(String path);
 
-  // Close the session and free any resources.
-  protected abstract void closeImpl();
+  // Close the session and free any resources. This should return immediately,
+  // disallowing any further interaction, and begin the closing procedure
+  // asynchronously. The cleanup should try to happen as quickly and quietly as
+  // possible.
+  public abstract void close();
 
   // Create an identical session with the same settings.
   //public abstract StorkSession duplicate();
 
   // Get a channel to a session resource.
-  protected abstract StorkChannel openImpl(String base, FileTree ft);
-
-  ////////////////////////////////////////////////////////////////////
-  // Everything below this point should be more or less left alone. //
-  ////////////////////////////////////////////////////////////////////
-
-  // Create a session from a URL. Generally the path is ignored.
-  public StorkSession(String u) {
-    this(new EndPoint(u));
-  } public StorkSession(URI u, Ad opts) {
-    this(new EndPoint(u));
-  } public StorkSession(EndPoint e) {
-    ep = e;
-  }
+  public abstract StorkChannel open(String base, FileTree ft);
 
   // Set an ad sink to write update ads into.
   // TODO: This is a temporary hack, remove me.
@@ -74,59 +65,9 @@ public abstract class StorkSession implements AutoCloseable {
     if (pipe != null) pipe.put(ad);
   }
 
-  // Public interfaces to abstract methods.
-  public final Bell.Out<FileTree> list(String path) {
-    return list(path, null);
-  } public final Bell.Out<FileTree> list(String path, Ad opts) {
-    checkConnected();
-    path = StorkUtil.normalizePath(path);
-    if (opts == null)
-      opts = new Ad();
-    return listImpl(path, opts);
-  }
-
-  public final long size(String path) {
-    checkConnected();
-    path = StorkUtil.normalizePath(path);
-    return sizeImpl(path).get();
-  }
-
-  public final void mkdir(String path) {
-    checkConnected();
-    path = StorkUtil.normalizePath(path);
-    mkdirImpl(path).get();
-  }
-
-  public final void rm(String path) {
-    checkConnected();
-    path = StorkUtil.normalizePath(path);
-    rmImpl(path).get();
-  }
-
-  // Check if the session hasn't been closed. Throws exception if so.
-  private final void checkConnected() {
-    if (!isConnected())
-      throw abort("session has been closed");
-  }
-
   public final StorkChannel open(String path) {
     String d = StorkUtil.dirname(path), b = StorkUtil.basename(path);
     return open(d, new FileTree(b));
-  } public final StorkChannel open(String base, FileTree ft) {
-    return openImpl(base, ft);
-  }
-
-  // Check if the session is connected or if it's closed.
-  public final synchronized boolean isConnected() {
-    return !closed;
-  } public final synchronized boolean isClosed() {
-    return closed;
-  }
-
-  // Close the session, cancel and transfers, free any resources.
-  public final synchronized void close() {
-    closeImpl();
-    closed = true;
   }
 
   // Get the protocol used by the session.

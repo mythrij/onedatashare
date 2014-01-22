@@ -4,7 +4,7 @@ import stork.*;
 import stork.ad.*;
 import stork.cred.*;
 import stork.module.*;
-import stork.module.gridftp.*;
+import stork.module.ftp.*;
 import stork.module.sftp.*;
 import stork.user.*;
 import stork.util.*;
@@ -228,7 +228,8 @@ public class StorkScheduler {
       try {
         EndPoint ep = req.ad.unmarshalAs(EndPoint.class);
         sess = ep.session();
-        return Ad.marshal(sess.list(ep.path(), req.ad).get());
+        //return Ad.marshal(sess.list(ep.path(), req.ad).get());
+        return Ad.marshal(sess.list(ep.path()).sync());
       } finally {
         if (sess != null) sess.close();
       }
@@ -388,8 +389,9 @@ public class StorkScheduler {
   public void populateModules() {
     // Load built-in modules.
     // TODO: Automatic discovery for built-in modules.
-    xfer_modules.register(new GridFTPModule());
-    xfer_modules.register(new SFTPModule());
+    //xfer_modules.register(new GridFTPModule());
+    //xfer_modules.register(new SFTPModule());
+    xfer_modules.register(new FTPModule());
     if (env.has("libexec"))
       xfer_modules.registerDirectory(new File(env.get("libexec")));
 

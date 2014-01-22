@@ -89,6 +89,16 @@ public class Bell<T> implements Future<T> {
     return done;
   }
 
+  // Return true if the bell rang successfully.
+  public synchronized boolean isSuccessful() {
+    return done && error == null;
+  }
+
+  // Return true if the bell failed.
+  public synchronized boolean isFailed() {
+    return done && error != null;
+  }
+
   // Wait for the bell to be rung, then return the value.
   public synchronized T get()
   throws InterruptedException, ExecutionException {
@@ -174,25 +184,55 @@ public class Bell<T> implements Future<T> {
     } return bell;
   }
 
-  // Convenience method for creating a bell which rings when any of the given
-  // bells rings successfully, or fails if they all fail.
-  public static <V> Bell<V> any(Bell<V>... bells) {
-    return any(Arrays.asList(bells));
-  } public static <V> Bell<V> any(Collection<Bell<V>> bells) {
-    final Set<Bell<V>> set = new HashSet<Bell<V>>(bells);
-    final Bell<V> bell = new Bell<V>();
+  // Utility Methods
+  // ===============
+  // Used by multi-bells to implement behavior regarding how to handle bells as
+  // they ring. The one bell passed to the handlers will always be rung.
+  private static abstract class Aggregator<I,O> {
+    // Check a value/error, ring the bell if so desired.
+    protected void done(Bell<I> one, Bell<O> all) { }
+    protected void fail(Bell<I> one, Bell<O> all) { }
+    protected void always(Bell<I> one, Bell<O> all) { }
+    // The default result if the bell is not rung by the above.
+    protected void end(Bell<I> last, Bell<O> all) { }
+  }
+
+  // Helper method used by the above methods to create "multi-bells". The
+  // returned bell will be rung whenever, as a result of a pass bell ringing,
+  // the aggregator causes the returned bell to ring. If all the passed bells
+  // ring and the aggregator hasn't rung the returned bell, the aggregator's
+  // end method will be called, which is expected to ring the bell. If it does
+  // not, the returned bell will be rung with null.
+  private static <I,O> Bell<O> multiBell(
+      Collection<Bell<I>> bells, final Aggregator<I,O> agg) {
+    final Set<Bell<I>> set = new HashSet<Bell<I>>(bells);
+    final Bell<O> bell = new Bell<O>();
     if (bells.isEmpty()) {
-      return bell.ring();
-    } for (final Bell<V> b : bells) {
-      b.promise(new Bell<V>() {
-        protected void done(V v) {
-          bell.ring(v);
-        } protected void fail(Throwable t) {
-          if (bell.isDone())
-            return;
-          set.remove(b);
-          if (set.isEmpty())
-            bell.ring(t);
+      agg.end(null, bell);
+      if (!bell.isDone())
+        bell.ring();
+      return bell;
+    } for (final Bell<I> b : bells) {
+      b.promise(new Bell<I>() {
+        protected void always() {
+          synchronized (bell) {
+            if (bell.isDone()) return;
+
+            // Check with the aggregator.
+            if (b.isSuccessful())
+              agg.done(b, bell);
+            else if (b.isFailed())
+              agg.fail(b, bell);
+            agg.always(b, bell);
+
+            // Remove from the set. If done, run end().
+            if (bell.isDone()) return;
+            set.remove(b);
+            if (set.isEmpty()) {
+              agg.end(b, bell);
+              if (!bell.isDone()) bell.ring();
+            }
+          }
         }
       });
       if (bell.isDone())
@@ -200,30 +240,32 @@ public class Bell<T> implements Future<T> {
     } return bell;
   }
 
+  // Convenience method for creating a bell which rings when any of the given
+  // bells rings successfully, or fails if they all fail.
+  public static <V> Bell<Bell<V>> any(Bell<V>... bells) {
+    return any(Arrays.asList(bells));
+  } public static <V> Bell<Bell<V>> any(Collection<Bell<V>> bells) {
+    return multiBell(bells, new Aggregator<V,Bell<V>>() {
+      protected void done(Bell<V> one, Bell<Bell<V>> all) {
+        all.ring(one);
+      } protected void end(Bell<V> one, Bell<Bell<V>> all) {
+        all.ring(one.error);
+      }
+    });
+  }
+
   // Convenience method for creating a bell which rings when all of the given
   // bells rings successfully, or fails if any fail.
-  public static <V> Bell<V> all(Bell<V>... bells) {
+  public static <V> Bell<Bell<V>> all(Bell<V>... bells) {
     return all(Arrays.asList(bells));
-  } public static <V> Bell<V> all(Collection<Bell<V>> bells) {
-    final Set<Bell<V>> set = new HashSet<Bell<V>>(bells);
-    final Bell<V> bell = new Bell<V>();
-    if (bells.isEmpty()) {
-      return bell.ring();
-    } for (final Bell<V> b : bells) {
-      b.promise(new Bell<V>() {
-        protected void done(V v) {
-          if (bell.isDone())
-            return;
-          set.remove(b);
-          if (set.isEmpty())
-            bell.ring(v);
-        } protected void fail(Throwable t) {
-          bell.ring(t);
-        }
-      });
-      if (bell.isDone())
-        break;
-    } return bell;
+  } public static <V> Bell<Bell<V>> all(Collection<Bell<V>> bells) {
+    return multiBell(bells, new Aggregator<V,Bell<V>>() {
+      protected void fail(Bell<V> one, Bell<Bell<V>> all) {
+        all.ring(one.error);
+      } protected void end(Bell<V> one, Bell<Bell<V>> all) {
+        all.ring(one);
+      }
+    });
   }
 
   // Convenience method for boolean bells that rings with true if any of them
@@ -232,26 +274,14 @@ public class Bell<T> implements Future<T> {
   public static Bell<Boolean> or(Bell<Boolean>... bells) {
     return or(Arrays.asList(bells));
   } public static Bell<Boolean> or(Collection<Bell<Boolean>> bells) {
-    final Set<Bell<Boolean>> set = new HashSet<Bell<Boolean>>(bells);
-    final Bell<Boolean> bell = new Bell<Boolean>();
-    if (bells.isEmpty()) {
-      return bell.ring(true);
-    } for (final Bell<Boolean> b : bells) {
-        b.promise(new Bell<Boolean>() {
-        protected void done(Boolean v) {
-          if (v)
-            bell.ring(true);
-        } protected void fail(Throwable t) {
-          if (bell.isDone())
-            return;
-          set.remove(b);
-          if (set.isEmpty())
-            bell.ring(false);
-        }
-      });
-      if (bell.isDone())
-        break;
-    } return bell;
+    return multiBell(bells, new Aggregator<Boolean,Boolean>() {
+      protected void done(Bell<Boolean> one, Bell<Boolean> all) {
+        if (one.sync())
+          all.ring(true);
+      } protected void end(Bell<Boolean> one, Bell<Boolean> all) {
+        all.ring(one == null);
+      }
+    });
   }
 
   // Convenience method for boolean bells that rings with true if all of them
@@ -260,56 +290,12 @@ public class Bell<T> implements Future<T> {
   public static Bell<Boolean> and(Bell<Boolean>... bells) {
     return and(Arrays.asList(bells));
   } public static Bell<Boolean> and(Collection<Bell<Boolean>> bells) {
-    if (bells.isEmpty())
-      return new Bell<Boolean>().ring(true);
-    final Set<Bell<Boolean>> set = new HashSet<Bell<Boolean>>(bells);
-    final Bell<Boolean> bell = new Bell<Boolean>();
-      return bell.ring(true);
-    } for (final Bell<Boolean> b : bells) {
-      b.promise(new Bell<Boolean>() {
-        protected void done(Boolean v) {
-          if (bell.isDone()) {
-            return;
-          } if (!v) {
-            bell.ring(false);
-          } else {
-            set.remove(b);
-            if (set.isEmpty())
-              bell.ring(true);
-          }
-        } protected void fail(Throwable t) {
-          bell.ring(false);
-        }
-      });
-      if (bell.isDone())
-        break;
-    } return bell;
-  }
-
-  // Helper method used by the above methods to create "multi-bells".
-  private static <V> multiBell(Class<Bell<V>> c, Collection<Bell<V>> bells) {
-    final Set<Bell<Boolean>> set = new HashSet<Bell<Boolean>>(bells);
-    final Bell<Boolean> bell = new Bell<Boolean>();
-    if (bells.isEmpty()) {
-      return bell.ring(true);
-    } for (final Bell<Boolean> b : bells) {
-      b.promise(new Bell<Boolean>() {
-        protected void done(Boolean v) {
-          if (bell.isDone()) {
-            return;
-          } if (!v) {
-            bell.ring(false);
-          } else {
-            set.remove(b);
-            if (set.isEmpty())
-              bell.ring(true);
-          }
-        } protected void fail(Throwable t) {
-          bell.ring(false);
-        }
-      });
-      if (bell.isDone())
-        break;
-    } return bell;
+    return multiBell(bells, new Aggregator<Boolean,Boolean>() {
+      protected void fail(Bell<Boolean> one, Bell<Boolean> all) {
+        all.ring(false);
+      } protected void end(Bell<Boolean> one, Bell<Boolean> all) {
+        all.ring(one == null);
+      }
+    });
   }
 }

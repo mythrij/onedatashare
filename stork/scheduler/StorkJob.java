@@ -213,19 +213,19 @@ public class StorkJob {
     ss.setPipe(pipe.new End());
 
     // For each source file tree, perform the transfer.
-    Ad opts = new Ad("recursive", true);
-    List<Bell.Out<?>> bells = new LinkedList<Bell.Out<?>>();
+    List<Bell<?>> bells = new LinkedList<Bell<?>>();
     for (final URI su : src.uri()) {
-      final Bell.Out<FileTree> sfb = ss.list(src.path(), opts);
-      final Bell.Out<FileTree> dfb = ds.list(dest.path());
+      final Bell<FileTree> sfb = ss.list(src.path());
+      final Bell<FileTree> dfb = ds.list(dest.path());
 
       // Create a bell to ring when the transfer is done, and add it to the
       // bell list.
-      final Bell.Single bell = new Bell.Single();
+      final Bell bell = new Bell();
       bells.add(bell);
 
       // Wait for both listings, then transfer the file trees.
-      new Bell.And(sfb, dfb) {
+      //new Bell.And(sfb, dfb) {
+      new Object() {
         public void done() {
           FileTree sft, dft;
 
@@ -260,13 +260,13 @@ public class StorkJob {
             throw new RuntimeException("Destination file already exists.");
 
           // Let the transfer module do the rest, and ring the bell we made.
-          sc.sendTo(dc).then(bell);
+          sc.sendTo(dc).promise(bell);
         }
       };
     }
 
     // Collect all the transfer bells and make sure they succeeded.
-    new Bell.All(bells) {
+    new Bell() {
       public void done() {
         status(complete);
       } public void fail() {
