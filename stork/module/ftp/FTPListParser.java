@@ -1,12 +1,14 @@
 package stork.module.ftp;
 
-import stork.util.*;
-import stork.module.*;
-
 import java.text.*;
 import java.util.*;
 import java.util.regex.*;
 import java.io.*;
+
+import io.netty.buffer.*;
+
+import stork.util.*;
+import stork.module.*;
 
 // A class for parsing FTP listings. Based heavily on Mozilla's own FTP
 // list parsing code, available in their mozilla-central repository,
@@ -83,10 +85,17 @@ public class FTPListParser {
     } return root.setFiles(files);
   }
 
-  // Write a byte buffer to the file, decode as string, scan for newlines,
-  // and feed lines through parser. Assumably we're reading data where
-  // newlines are one byte so just look for newline characters.
-  public void write(byte[] b) {
+  // Write a byte buffer to the file, decode as string, scan for newlines, and
+  // feed lines through parser. Assumably we're reading data where newlines are
+  // one byte so just look for newline characters.
+  public void write(ByteBuf b) {
+    byte[] bytes;
+    if (b.hasArray())
+      bytes = b.array();
+    else
+      b.getBytes(0, bytes = new byte[b.readableBytes()]);
+    write(bytes);
+  } public void write(byte[] b) {
     // Find last newline and chomp it, then buffer the rest.
     int o;
     out: for (o = b.length-1; o >= 0; o--) switch (b[0]) {

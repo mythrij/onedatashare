@@ -28,17 +28,8 @@ import org.gridforum.jgss.*;
 // commands at a time.
 
 public class FTPChannel {
-  private Type type;
-  private ChannelFuture future;
-  private SecurityContext security;
-  private Deque<Command> handlers;
-
-  private Reply welcome;
-  private FeatureSet features = new FeatureSet();
-
-  // Any FTP server that adheres to specifications will use UTF-8, but let's
-  // not preclude the possibility of being able to configure the encoding.
-  private Charset encoding = CharsetUtil.UTF_8;
+  // The maximum amount of time (in ms) to wait for a connection.
+  private static final int timeout = 2000;
 
   // FIXME: We should use something system-wide.
   private static EventLoopGroup group = new NioEventLoopGroup();
@@ -52,6 +43,28 @@ public class FTPChannel {
     Type(int def_port) {
       port = def_port;
     }
+  }
+
+  // Doing this allows state to more easily be shared between views of the same
+  // channel.
+  FTPSharedChannelState data;
+
+  class FTPSharedChannelState {
+    Type type;
+    ChannelFuture future;
+    SecurityContext security;
+    Deque<Command> handlers = new ArrayDeque<Command>();
+
+    Deque<Bell<FTPChannel>> lockQueue = new ArrayDeque<Bell<FTPChannel>>();
+    FTPChannel ownerView;  // The view that owns the underlying channel.
+    Deque<Bell> deferred = new ArrayDeque<Bell>();
+
+    // Any FTP server that adheres to specifications will use UTF-8, but let's
+    // not preclude the possibility of being able to configure the encoding.
+    Charset encoding = CharsetUtil.UTF_8;
+
+    Reply welcome;
+    FeatureSet features = new FeatureSet();
   }
 
   public FTPChannel(String uri) {
@@ -68,21 +81,34 @@ public class FTPChannel {
     this(proto, null, addr, port);
   }
 
-  // All the constructors delegate to this.
+  // The above constructors delegate to this.
   private FTPChannel(String proto, String host, InetAddress addr, int port) {
-    type = (proto == null) ? Type.ftp : Type.valueOf(proto.toLowerCase());
-    if (port <= 0) port = type.port;
+    data = new FTPSharedChannelState();
+    data.ownerView = this;
+
+    data.type = (proto == null) ? Type.ftp : Type.valueOf(proto.toLowerCase());
+    if (port <= 0) port = data.type.port;
 
     Bootstrap b = new Bootstrap();
     b.group(group).channel(NioSocketChannel.class).handler(new Initializer());
-    future = (host != null) ? b.connect(host, port) : b.connect(addr, port);
 
-    handlers = new ArrayDeque<Command>();
+    if (host != null)
+      data.future = b.connect(host, port);
+    else
+      data.future = b.connect(addr, port);
   }
 
-  // Handles attaching the necessary codecs.
+  // This special constructor is used internally to create channel views.
+  private FTPChannel(FTPChannel other) {
+    data = other.data;
+  }
+
+  // Handles initializing the control channel connection and attaching the
+  // necessary codecs.
   class Initializer extends ChannelInitializer<SocketChannel> {
     public void initChannel(SocketChannel ch) throws Exception {
+      ch.config().setConnectTimeoutMillis(timeout);
+
       ChannelPipeline p = ch.pipeline();
 
       p.addLast("reply_decoder", new ReplyDecoder(20480));
@@ -112,7 +138,7 @@ public class FTPChannel {
 
     // Get a line by number.
     public String line(int i) {
-      return lines[i].toString(encoding);
+      return lines[i].toString(data.encoding);
     }
 
     // Get an array of all the lines as strings.
@@ -212,12 +238,12 @@ public class FTPChannel {
       // Do nothing if the security context has not been initialized. Really
       // this is an error on the part of the server, but there's a chance the
       // client code will know what to do.
-      if (security == null)
+      if (data.security == null)
         return reply;
 
       ReplyDecoder rd = new ReplyDecoder(20480);
       for (ByteBuf eb : reply.lines) {
-        ByteBuf db = security.unprotect(Base64.decode(eb));
+        ByteBuf db = data.security.unprotect(Base64.decode(eb));
         Reply r = rd.decode(null, db);
         if (r != null)
           return r;
@@ -258,12 +284,12 @@ public class FTPChannel {
 
       // Extract the reply code and separator.
       if (lines.isEmpty()) {
-        codestr = msg.toString(0, 3, encoding);
+        codestr = msg.toString(0, 3, data.encoding);
         code = Integer.parseInt(codestr);
         msg.skipBytes(3);
         sep = (char) msg.readByte();
       } else if (msg.readableBytes() >= 4) {
-        String s = msg.toString(0, 4, encoding);
+        String s = msg.toString(0, 4, data.encoding);
         sep = s.charAt(3);
         if (s.startsWith(codestr) && (sep == '-' || sep == ' '))
           msg.skipBytes(4);
@@ -288,13 +314,18 @@ public class FTPChannel {
 
   // Handles replies as they are received.
   class ReplyHandler extends SimpleChannelInboundHandler<Reply> {
-    public void messageReceived(ChannelHandlerContext ctx, Reply reply)
-    throws Exception {
-      System.out.println(reply);
-      if (welcome == null && reply.code == 220)
-        welcome = reply;
-      else
-        feedHandler(reply);
+    public void messageReceived(ChannelHandlerContext ctx, Reply reply) {
+      switch (reply.code) {
+        case 220:
+          if (data.welcome == null)
+            data.welcome = reply;
+          break;
+        case 421:
+          channel().close();
+          break;
+        default:
+          feedHandler(reply);
+      }
     }
 
     // TODO: How should we handle exceptions? Which exceptions can this thing
@@ -380,21 +411,22 @@ public class FTPChannel {
       (ChannelHandlerContext ctx, Object msg, List<Object> out)
     throws Exception {
       System.out.println(msg);
-      ByteBuf b = Unpooled.wrappedBuffer(msg.toString().getBytes(encoding));
+      ByteBuf b =
+        Unpooled.wrappedBuffer(msg.toString().getBytes(data.encoding));
 
-      if (security != null) {
-        b = Base64.encode(security.protect(b), false);
-        out.add(Unpooled.wrappedBuffer("ENC ".getBytes(encoding)));
+      if (data.security != null) {
+        b = Base64.encode(data.security.protect(b), false);
+        out.add(Unpooled.wrappedBuffer("ENC ".getBytes(data.encoding)));
       } 
 
       out.add(b);
-      out.add(Unpooled.wrappedBuffer("\r\n".getBytes(encoding)));
+      out.add(Unpooled.wrappedBuffer("\r\n".getBytes(data.encoding)));
     }
   }
 
   // Used internally to extract the channel from the future.
   private Channel channel() {
-    return future.syncUninterruptibly().channel();
+    return data.future.syncUninterruptibly().channel();
   }
 
   // Try to authenticate using a username and password.
@@ -424,7 +456,7 @@ public class FTPChannel {
     final Bell<Reply> bell = new Bell<Reply>() {
       protected void done(Reply r) {
         if (r.isComplete())
-          security = sec;
+          data.security = sec;
       }
     };
 
@@ -450,7 +482,7 @@ public class FTPChannel {
     try {
       ByteBuf ot = Base64.encode(sec.handshake(it), false);
 
-      new Command("ADAT", ot.toString(encoding)) {
+      new Command("ADAT", ot.toString(data.encoding)) {
         public void handle(Reply r) throws Exception {
           switch (r.code/100) {
             case 3:
@@ -590,7 +622,7 @@ public class FTPChannel {
 
   // Checks if a command is supported by the server.
   public Bell<Boolean> supports(String cmd) {
-    return features.supports(cmd);
+    return data.features.supports(cmd);
   } private List<Bell<Boolean>> supportsMulti(String... cmd) {
     List<Bell<Boolean>> bs = new ArrayList<Bell<Boolean>>(cmd.length);
     for (String c : cmd)
@@ -607,9 +639,9 @@ public class FTPChannel {
   // immediately and don't put it in the queue. This will return whether the
   // command handler was appended or not (currently, it is always true).
   private boolean appendHandler(Command c) {
-    synchronized (handlers) {
-      if (!c.isSync() || !handlers.isEmpty())
-        return handlers.add(c);
+    synchronized (data.handlers) {
+      if (!c.isSync() || !data.handlers.isEmpty())
+        return data.handlers.add(c);
     }
 
     // If we didn't return, it's a sync. Handling a sync is fast, but we should
@@ -629,22 +661,22 @@ public class FTPChannel {
 
     // We should try to release this as soon as possibile, so don't do anything
     // that might take a long time in here.
-    synchronized (handlers) {
-      assert !handlers.isEmpty();
+    synchronized (data.handlers) {
+      assert !data.handlers.isEmpty();
 
       if (reply.isPreliminary()) {
-        handler = handlers.peek();
+        handler = data.handlers.peek();
       } else {
-        handler = handlers.pop();
+        handler = data.handlers.pop();
 
         // Remove all the syncs.
-        Command peek = handlers.peek();
+        Command peek = data.handlers.peek();
         if (peek != null && peek.isSync()) {
           syncs = new LinkedList<Command>();
           do {
             syncs.add(peek);
-            handlers.pop();
-            peek = handlers.peek();
+            data.handlers.pop();
+            peek = data.handlers.peek();
           } while (peek != null && peek.isSync());
         }
       }
@@ -656,28 +688,110 @@ public class FTPChannel {
       sync.internalHandle(null);
   }
 
-  // Used internally to write commands to the channel.
-  private synchronized void writeCmd(final Object cmd, final Object... more) {
-    // Write a small object which will flatten the passed objects when it's
-    // ready to be written.
-    channel().writeAndFlush(new Object() {
-      public String toString() {
-        StringBuilder sb = new StringBuilder(cmd.toString());
-        for (Object o : more)
-          sb.append(" ").append(o);
-        return sb.toString();
+  // If the channel is locked, and we are not the owning 
+  private synchronized void issueCommand(
+      final Command c, final Object c1, final Object[] cm) {
+    // This bell should be rung to write the command.
+    Bell bell = new Bell() {
+      protected void done() {
+        appendHandler(c);
+        if (c1 == null) return;
+
+        // Write a small object which will flatten the passed objects into a
+        // single string when it's written by Netty.
+        channel().writeAndFlush(new Object() {
+          public String toString() {
+            StringBuilder sb = new StringBuilder(c1.toString());
+            for (Object o : cm)
+              sb.append(" ").append(o);
+            return sb.toString();
+          }
+        });
+      } protected void fail(Throwable t) {
+        c.fail(t);
       }
-    });
+    };
+
+    // If we're not the owner, defer the command. Otherwise, send it.
+    if (data.ownerView != this)
+      data.deferred.add(bell);
+    else
+      bell.ring();
   }
 
-  public synchronized void printCommandStack() {
-    int i = 0;
-    System.out.println("<COMMAND STACK DUMP>");
-    for (Command c : handlers) {
-      i++;
-      System.out.println("    "+i+": "+c.cmd);
-    }
-    System.out.println("</COMMAND STACK DUMP>");
+  // Negotiate a passive mode data channel.
+  public synchronized Bell<FTPHostPort> passive() {
+    final Bell<FTPHostPort> bell = new Bell<FTPHostPort>();
+
+    new Command("PASV") {
+      public void handle(Reply r) {
+        if (!r.isComplete()) {
+          bell.ring(r.asError());
+        } try {
+          String s = r.message().split("[()]")[1];
+          bell.ring(new FTPHostPort(s));
+        } catch (Exception e) {
+          bell.ring(e);
+        }
+      }
+    };
+    
+    return bell;
+  }
+
+  // This method requests a lock on the channel and returns a special view of
+  // the channel once the lock request is satisfied. The special channel view
+  // will have exclusive use of the channel until unlocked (after which the
+  // channel lock will become unusable) or garbage collected. The channel
+  // should be unlocked as soon as the command sequence requiring synchronicity
+  // has been issued. Commands written to any other channels during this time
+  // will have their commands deferred and sent after the channel has been
+  // unlocked.
+  public synchronized Bell<FTPChannel> lock() {
+    Bell<FTPChannel> bell = new Bell<FTPChannel>();
+
+    // If there's already an existing view, append to lock queue.
+    if (data.ownerView != this)
+      data.lockQueue.add(bell);
+    else
+      bell.ring(createLockedView());
+
+    return bell;
+  }
+
+  // Creates a locked view of the channel for lock(). This should only be
+  // called if the returned view will become the new owning view.
+  private synchronized FTPChannel createLockedView() {
+    return data.ownerView = new FTPChannel(this) {
+      private boolean unlocked = false;
+      public Bell<FTPChannel> lock() {
+        throw new IllegalStateException("cannot lock from view");
+      } public synchronized void unlock() {
+        doUnlock(this);
+        unlocked = true;
+      } protected void finalize() {
+        if (!unlocked) doUnlock(this);
+      }
+    };
+  }
+
+  // Release the lock, if this channel is a locked view. If it's not (and the
+  // base channel never is), this throws an exception.
+  public void unlock() {
+    throw new IllegalStateException("channel is not locked");
+  }
+
+  // This is called by a locked channel view's unlock() method after it has
+  // been used to write all of the commands it was needed for. It will also
+  // handle writing all the deferred commands.
+  private final synchronized void doUnlock(FTPChannel ch) {
+    if (data.ownerView != ch)
+      throw new IllegalStateException("channel is not locked");
+    data.ownerView = this;
+    while (!data.deferred.isEmpty())
+      data.deferred.pop().ring();
+    if (!data.lockQueue.isEmpty())
+      data.lockQueue.pop().ring(createLockedView());
   }
 
   // This is sort of the workhorse of the channel. Instantiate one of these to
@@ -698,7 +812,6 @@ public class FTPChannel {
   // subclassed to write command handlers inline, or can be subclassed normally
   // for repeat issue of the command.
   public class Command {
-    private String cmd;
     private Bell<Reply> bell = new Bell<Reply>();
     private final boolean isSync;
 
@@ -710,17 +823,12 @@ public class FTPChannel {
     // "sync" for client code. Calling sync() on it will block until it has
     // been reached in the pipeline.
     public Command(Object cmd, Object... more) {
-      this.cmd = cmd + StorkUtil.join(more);
       synchronized (FTPChannel.this) {
         isSync = (cmd == null);
-        appendHandler(this);
-        if (cmd != null)
-          writeCmd(cmd, (Object[]) more);
+        issueCommand(this, cmd, more);
       }
     }
 
-    // See the comment at the top of the class definition for why these are
-    // implemented the way they are.
     public synchronized final boolean isSync() {
       return isSync;
     } public synchronized final boolean isDone() {
@@ -761,12 +869,106 @@ public class FTPChannel {
       handle();
     }
 
+    // This may be called if the command has been deferred and cancelled
+    // without ever being written, of if the caller stops caring about the
+    // command.
+    public void fail(Throwable t) {
+      bell.ring(t);
+    }
+
     // This is used to wait until the future has been resolved. The ultimate
     // reply will be returned, unless this was a sync command, in which case
     // null will be returned.
     public synchronized Reply sync() {
       return bell.sync();
     }
+  }
+
+  // Instantiating one of these establishes a data channel associated with this
+  // control channel.
+  public class DataChannel<M> {
+    private ChannelFuture future;
+    private Throwable error;
+
+    // This bell should be rung when the channel is ready to be initialized,
+    // then unset when it is.
+    private Bell<FTPHostPort> initBell = new Bell<FTPHostPort>() {
+      protected void done(FTPHostPort hp) {
+        // Attempt to establish a channel connection to the given host/port.
+        Bootstrap b = new Bootstrap();
+        b.group(group).channel(NioSocketChannel.class);
+        b.handler(new ChannelInitializer<SocketChannel>() {
+          public void initChannel(SocketChannel ch) throws Exception {
+            ch.config().setConnectTimeoutMillis(timeout);
+            ChannelPipeline p = ch.pipeline();
+
+            // TODO: Allow this to attach things to the pipeline.
+            try {
+              init();
+            } catch (Exception e) {
+              // Don't let subclass handlers ruin the threadpool.
+            }
+
+            p.addLast("handler", new SimpleChannelInboundHandler<M>() {
+              public void messageReceived(ChannelHandlerContext ctx, M m) {
+                try {
+                  handle(m);
+                } catch (Exception e) {
+                  // Don't let subclass handlers ruin the threadpool.
+                }
+              } public void exceptionCaught(
+                  ChannelHandlerContext ctx, Throwable t) {
+                t.printStackTrace();
+              } public void channelInactive(ChannelHandlerContext ctx) {
+                try {
+                  DataChannel.this.done();
+                } catch (Exception e) {
+                  // Don't let subclass handlers ruin the threadpool.
+                }
+              }
+            });
+          }
+        });
+
+        future = b.connect(hp.getAddr());
+      } protected void fail(Throwable t) {
+        synchronized (DataChannel.this) {
+          error = t;
+        }
+      } protected void always() {
+        initBell = null;
+      }
+    };
+
+    // Negotiate a new data channel connection.
+    public DataChannel() {
+      this(passive());
+    } public DataChannel(Bell<FTPHostPort> hp) {
+      hp.promise(initBell);
+    } public DataChannel(FTPHostPort hp) {
+      initBell.ring(hp);
+    }
+
+    // Used internally to extract the channel from the future.
+    private synchronized Channel channel() {
+      if (error != null)
+        throw new RuntimeException(error);
+      return future.syncUninterruptibly().channel();
+    }
+
+    // Subclasses can override this to attach handlers and do other
+    // initialization stuff. If the message type is anything but a ByteBuf,
+    // this method is expected to attach codec for converting between ByteBufs
+    // and the message type. This method should also be used to send commands
+    // that should come after the PASV commands.
+    protected void init() throws Exception { }
+
+    // Subclasses should implement this to handle incoming messages from the
+    // channel.
+    protected void handle(M message) throws Exception { }
+
+    // Subclasses can implement this to do something when the channel closes.
+    protected void done() throws Exception { }
   }
 
   public static void main(String[] args) throws Exception {

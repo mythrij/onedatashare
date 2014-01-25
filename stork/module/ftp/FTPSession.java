@@ -1,5 +1,7 @@
 package stork.module.ftp;
 
+import io.netty.buffer.*;
+
 import stork.cred.*;
 import stork.module.*;
 import stork.scheduler.*;
@@ -50,61 +52,66 @@ public class FTPSession extends StorkSession {
     return bell;
   }
 
-  
-
-  // Perform a listing of the given path relative to the root directory.
-  // Listing in FTP is definitive proof that evil truly exists in this world,
-  // and you will see it reflected in this function. Different implementations
-  // not only present listing in different formats, but have different
-  // semantics for different list command arguments. We will make an attempt to
-  // sort out the mess as efficiently as possible, but it will not be pretty.
-  // Beware, all ye who enter, for here be dragons.
+  // Perform a listing of the given path relative to the root directory.  There
+  // are the supported listing commands in terms of preference:
+  //   MLSC STAT MLSD LIST
   public synchronized Bell<FileTree> list(final String path) {
+    if (path.startsWith("/~"))
+      return list("~"+path.substring(2));
     if (!path.startsWith("/") && !path.startsWith("~"))
       return list("/"+path);
-    final Bell<FileTree> bell = new Bell<FileTree>();
-
-    // First, test if the server supports the MLSx family of listing commands.
-    // If so, we can also control the format of the resulting list and reduce
-    // the response size.
-    if (!mlstOptsAreSet) ch.supportsAny("MLST", "MLSD", "MLSC").promise(
-      new Bell<Boolean>() {
-        protected void handle(Boolean b) {
-          if (!b) return;
-          if (!mlstOptsAreSet)
-            ch.new Command("OPTS MLST Type*;Size*;Modify*;UNIX.mode*");
-          mlstOptsAreSet = true;
-        }
-      }
-    );
-
     if (ch.supports("MLSC").sync())
       return goList(true, "MLSC", path);
     if (ch.supports("STAT").sync())
       return goList(true, "STAT", path);
-    bell.ring(new Exception("Listing is unsupported."));
-
-    return bell;
+    if (ch.supports("MLSD").sync())
+      return goList(false, "MLSD", path);
+    if (ch.supports("LIST").sync())
+      return goList(false, "LIST", path);
+    return new Bell<FileTree>().ring(
+      new Exception("Listing is unsupported."));
   }
 
   // This method will initiate a listing using the given command.
-  private Bell<FileTree> goList(boolean cc, final String cmd, String path) {
+  private Bell<FileTree> goList(
+      boolean cc, final String cmd, final String path) {
     final Bell<FileTree> bell = new Bell<FileTree>();
     final char hint = cmd.startsWith("M") ? 'M' : 0;
+    final FTPListParser parser = new FTPListParser(null, hint);
+
+    // When doing MLSx listings, we can reduce the response size with this.
+    if (hint == 'M' && !mlstOptsAreSet) {
+      ch.new Command("OPTS MLST Type*;Size*;Modify*;UNIX.mode*");
+      mlstOptsAreSet = true;
+    }
 
     // Do a control channel listing, if specified.
     if (cc) ch.new Command(cmd, path) {
-      FTPListParser p = new FTPListParser(null, hint);
       public void handle(FTPChannel.Reply r) {
         if (r.code/100 > 2)
           bell.ring(r.asError());
-        p.write(r.message().getBytes());
+        parser.write(r.message().getBytes());
         if (r.isComplete())
-          bell.ring(p.finish());
+          bell.ring(parser.finish());
       }
     };
 
-    else;  // DC listing.
+    // Otherwise we're doing a data channel listing. This requires a command
+    // sequence, so we need a locked channel.
+    else ch.lock().promise(new Bell<FTPChannel>() {
+      protected void done(final FTPChannel ch) {
+        ch.new DataChannel<ByteBuf>() {
+          public void handle(ByteBuf b) {
+            System.out.println("GOT: "+b.toString(ch.data.encoding));
+            parser.write(b);
+          } public void done() {
+            bell.ring(parser.finish());
+          }
+        };
+        ch.new Command(cmd, path);
+        ch.unlock();
+      }
+    });
 
     return bell;
   }
@@ -134,14 +141,16 @@ public class FTPSession extends StorkSession {
   }
 
   public static void main(String[] args) {
-    //String u = (args.length == 0) ? "ftp://didclab-ws8/" : args[1];
-    String u = (args.length == 0) ? "ftp://ftp.cse.buffalo.edu/" : args[1];
+    String u = (args.length == 0) ? "ftp://didclab-ws8/" : args[1];
+    //String u = (args.length == 0) ? "ftp://ftp.cse.buffalo.edu/" : args[1];
     FTPSession sess = connect(new EndPoint(u)).sync();
     String[] paths = { "/", "~", "/etc", "/tmp", "/var/run", "/bad/path" };
     for (final String p : paths) {
       sess.list(p).promise(new Bell<FileTree>() {
         protected void done(FileTree t) {
           System.out.println(stork.ad.Ad.marshal(t));
+        } protected void fail(Throwable t) {
+          System.out.println("Failed to list: "+p+"  "+t);
         }
       });
     }

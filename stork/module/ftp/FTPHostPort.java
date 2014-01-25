@@ -6,11 +6,12 @@ import java.io.*;
 
 import stork.util.*;
 
-// A utility for parsing PASV and EPSV replies as 
+// A utility for parsing PASV and EPSV replies.
 
 public class FTPHostPort {
   public byte[] bytes;  // Only the first four bytes of this are used.
   public int port;
+
   public FTPHostPort(String csv) {
     try {
       bytes = new byte[6];
@@ -18,23 +19,45 @@ public class FTPHostPort {
       for (String s : csv.split(","))
         bytes[i++] = (byte) Short.parseShort(s);
       if (i != 6)
-        throw new Exception(""+i);
+        throw null;
       port = ((bytes[4]&0xFF)<<8) + (bytes[5]&0xFF);
     } catch (Exception e) {
-      throw new RuntimeException("malformed PASV reply", e);
+      throw new RuntimeException("Malformed PASV reply.", e);
     }
-  } public int getPort() {
+  }
+
+  // Get the host/port as a socket address.
+  public SocketAddress getAddr() {
+    try {
+      byte[] b = { bytes[0], bytes[1], bytes[2], bytes[3] };
+      InetAddress ia = InetAddress.getByAddress(b);
+      return new InetSocketAddress(ia, port & 0xFFFF);
+    } catch (UnknownHostException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  // Get the IP as a string.
+  public String getHost() {
+    return (bytes[0]&0xFF)+"."+(bytes[1]&0xFF)+"."+
+           (bytes[2]&0xFF)+"."+(bytes[3]&0xFF);
+  }
+
+  // Get the port.
+  public int getPort() {
     return port & 0xFFFF;
-  } public String getHost() {
-    return (bytes[0]&0xFF)+"."+(bytes[1]&0xFF)+
-      "."+(bytes[2]&0xFF)+"."+(bytes[3]&0xFF);
-  } public String toString() {
+  }
+
+  // Return a comma-separated byte representation.
+  public String toString() {
     return (bytes[0]&0xFF)+","+(bytes[1]&0xFF)+
       ","+(bytes[2]&0xFF)+","+(bytes[3]&0xFF)+
       ","+((port&0xFF00)>>8)+","+(port&0xFF);
-  } public void subnetHack(byte[] b) {
+  }
+
+  private void subnetHack(byte[] b) {
     // Make sure the first three octets are the same as the control channel IP.
-    // If they're different, assume the server is a LIAR.  We should try
+    // If they're different, assume the server is a LIAR. We should try
     // connecting to the control channel IP. If only the last octet is
     // different, then don't worry, it probably knows what it's talking about.
     // This is to fix issues with servers telling us their local IPs and then
