@@ -4,8 +4,6 @@ import java.net.*;
 import java.util.*;
 import java.nio.charset.*;
 
-import stork.util.*;
-
 import io.netty.bootstrap.*;
 import io.netty.channel.*;
 import io.netty.buffer.*;
@@ -20,12 +18,17 @@ import io.netty.util.*;
 import org.ietf.jgss.*;
 import org.gridforum.jgss.*;
 
+import stork.feather.*;
+import stork.util.*;
+
 // An abstraction of an FTP control channel. This class takes care of command
 // pipelining, extracting replies, and maintaining channel state. Right now,
 // the channel is mostly concurrency-safe, though issues could arise if
-// arbitrary commands entered the pipeline during a command sequence.
-// Therefore, it is ill-advised to have more than one subsystem issuing
-// commands at a time.
+// arbitrary commands entered the pipeline during a command sequence. A
+// simplisitic channel locking mechanism exists which can be used for
+// synchronized access to the channel, but it is still ill-advised to have more
+// than one subsystem issuing commands through the same channel at the same
+// time.
 
 public class FTPChannel {
   // The maximum amount of time (in ms) to wait for a connection.
@@ -65,6 +68,11 @@ public class FTPChannel {
 
     Reply welcome;
     FeatureSet features = new FeatureSet();
+
+    // Transfer type and mode. See the explanation above mode() and type() for
+    // why these are bells.
+    Bell<Character> mode = new Bell<Character>().ring('S');
+    Bell<Character> type = new Bell<Character>().ring('A');
   }
 
   public FTPChannel(String uri) {
@@ -719,6 +727,43 @@ public class FTPChannel {
       bell.ring();
   }
 
+  // Negotiate a type or change. Admittedly, this is a little unnecessarily
+  // complex, and designed to defeat an edge case that will probably never be
+  // encountered. Nevertheless, doing it like this ensures data channel
+  // creation can be pipelined and properly handle failures to change the data
+  // channel mode or type without needing to lock the channel until we're sure
+  // of the mode or type change. Returns a bell that will ring with the channel
+  // mode or type when the command completes.
+  public synchronized Bell<Character> type(char t) {
+    Bell<Character> ntb = new Bell<Character>();  // Ring with result.
+    Bell<Character> otb = typeModeHelper("TYPE", t, ntb);
+    data.type.promise(otb);  // Ring helper bell.
+    return data.type = ntb;  // Replace current type bell.
+  } public synchronized Bell<Character> mode(char m) {
+    Bell<Character> nmb = new Bell<Character>();  // Ring with result.
+    Bell<Character> omb = typeModeHelper("MODE", m, nmb);
+    data.type.promise(omb);  // Ring helper bell.
+    return data.mode = nmb;  // Replace current mode bell.
+  } private Bell<Character> typeModeHelper(
+      final String cmd, final char c, final Bell<Character> cb) {
+    // This bell should be rung when the current mode or type is known. Ringing
+    // it will send the command which will later ring the passed bell.
+    return new Bell<Character>() {
+      protected void done(final char old) {
+        new Command(cmd, c).promise(new Bell<Reply>() {
+          protected void ring(Reply r) {
+            if (r.isSuccessful())
+              cb.ring(c);
+            else if (r.isNegative())
+              cb.ring(old);
+          } protected void ring(Throwable e) {
+            cb.ring(old);
+          }
+        });
+      }
+    };
+  }
+
   // Negotiate a passive mode data channel.
   public synchronized Bell<FTPHostPort> passive() {
     final Bell<FTPHostPort> bell = new Bell<FTPHostPort>();
@@ -884,33 +929,53 @@ public class FTPChannel {
     }
   }
 
-  // Instantiating one of these establishes a data channel associated with this
-  // control channel.
-  public class DataChannel<M> {
+  // A data channel connection to a remote server.
+  public class DataTap implements Tap {
     private ChannelFuture future;
     private Throwable error;
+    private Bell<FTPHostPort> hpb;
+    private Sink sink;
+
+    // Negotiate a new data channel connection.
+    public DataChannel() {
+      hpb = passive();
+    } public DataChannel(Bell<FTPHostPort> hp) {
+      hpb = hp;
+    } public DataChannel(FTPHostPort hp) {
+      hpb = new Bell<FTPHostPort>().ring(hp);
+    }
+
+    // A handler which passes data to the sink.
+    SimpleChannelInboundHandler<ByteBuf> handler =
+      new SimpleChannelInboundHandler<ByteBuf>() {
+      public void messageReceived(ChannelHandlerContext ctx, ByteBuf m) {
+        try {
+          handle(m);
+        } catch (Exception e) {
+          // Don't let subclass handlers ruin the threadpool.
+        }
+      } public void exceptionCaught(
+          ChannelHandlerContext ctx, Throwable t) {
+        t.printStackTrace();
+      } public void channelInactive(ChannelHandlerContext ctx) {
+        sink.write(Slice.EMPTY);
+      }
+    };
 
     // This bell should be rung when the channel is ready to be initialized,
     // then unset when it is.
     private Bell<FTPHostPort> initBell = new Bell<FTPHostPort>() {
       protected void done(FTPHostPort hp) {
         // Attempt to establish a channel connection to the given host/port.
-        Bootstrap b = new Bootstrap();
-        b.group(group).channel(NioSocketChannel.class);
-        b.handler(new ChannelInitializer<SocketChannel>() {
+        Bootstrap boot = new Bootstrap();
+        boot.group(group).channel(NioSocketChannel.class);
+        boot.handler(new ChannelInitializer<SocketChannel>() {
           public void initChannel(SocketChannel ch) throws Exception {
             ch.config().setConnectTimeoutMillis(timeout);
             ChannelPipeline p = ch.pipeline();
 
-            // TODO: Allow this to attach things to the pipeline.
-            try {
-              init();
-            } catch (Exception e) {
-              // Don't let subclass handlers ruin the threadpool.
-            }
-
-            p.addLast("handler", new SimpleChannelInboundHandler<M>() {
-              public void messageReceived(ChannelHandlerContext ctx, M m) {
+            p.addLast("handler", new SimpleChannelInboundHandler<ByteBuf>() {
+              public void messageReceived(ChannelHandlerContext ctx, ByteBuf m) {
                 try {
                   handle(m);
                 } catch (Exception e) {
@@ -940,13 +1005,12 @@ public class FTPChannel {
       }
     };
 
-    // Negotiate a new data channel connection.
-    public DataChannel() {
-      this(passive());
-    } public DataChannel(Bell<FTPHostPort> hp) {
-      hp.promise(initBell);
-    } public DataChannel(FTPHostPort hp) {
-      initBell.ring(hp);
+    // Attach a sink.
+    public void attach(Sink s) {
+      if (sink != null)
+        return;
+      sink = s;
+      hpb.promise(initBell);
     }
 
     // Used internally to extract the channel from the future.
@@ -955,20 +1019,6 @@ public class FTPChannel {
         throw new RuntimeException(error);
       return future.syncUninterruptibly().channel();
     }
-
-    // Subclasses can override this to attach handlers and do other
-    // initialization stuff. If the message type is anything but a ByteBuf,
-    // this method is expected to attach codec for converting between ByteBufs
-    // and the message type. This method should also be used to send commands
-    // that should come after the PASV commands.
-    protected void init() throws Exception { }
-
-    // Subclasses should implement this to handle incoming messages from the
-    // channel.
-    protected void handle(M message) throws Exception { }
-
-    // Subclasses can implement this to do something when the channel closes.
-    protected void done() throws Exception { }
   }
 
   public static void main(String[] args) throws Exception {

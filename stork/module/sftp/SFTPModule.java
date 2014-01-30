@@ -17,7 +17,7 @@ public class SFTPModule extends TransferModule {
   }
 
   // Create a new connection to an FTP server.
-  public StorkSession session(EndPoint e) {
+  public Session session(EndPoint e) {
     return new SFTPSession(e);
   }
 }

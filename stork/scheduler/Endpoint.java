@@ -7,22 +7,19 @@ import stork.util.*;
 
 import java.net.URI;
 
-// A descriptor of an end-point from a job ad. Automatically handles
-// lookup of cred token and transfer module.
-// TODO: Support for multiple end-points?
-// TODO: Delegate lookups to job ad.
+// A description of an endpoint in a client request.
 
-public class EndPoint {
+public class Endpoint {
   public URI[] uri;
   public StorkCred cred;
   public String module;
 
   // Create an endpoint from a set of URI strings or URI objects.
-  private EndPoint() {
+  private Endpoint() {
     // Used for unmarshalling.
-  } public EndPoint(String... s) {
+  } public Endpoint(String... s) {
     new Ad("uri", s).unmarshal(this);
-  } public EndPoint(URI... u) {
+  } public Endpoint(URI... u) {
     new Ad("uri", u).unmarshal(this);
   }
 

@@ -1,10 +1,10 @@
-package stork.util;
+package stork.feather;
 
 import java.util.*;
 import java.util.concurrent.*;
 
-// A minimalistic promise primitive used for synchronization. It can be
-// extended to implement callbacks to execute upon resolution.
+// A minimalistic promise primitive used for stringing together the results of
+// asynchronous operations and executing asynchronous handlers.
 
 public class Bell<T> implements Future<T> {
   private T object;

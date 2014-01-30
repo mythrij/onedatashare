@@ -7,7 +7,7 @@ import stork.module.*;
 import stork.scheduler.*;
 import stork.util.*;
 
-public class FTPSession extends StorkSession {
+public class FTPSession extends Session {
   private transient FTPChannel ch;
 
   // Transient state related to the channel configuration.
@@ -55,11 +55,11 @@ public class FTPSession extends StorkSession {
   // Perform a listing of the given path relative to the root directory.  There
   // are the supported listing commands in terms of preference:
   //   MLSC STAT MLSD LIST
-  public synchronized Bell<FileTree> list(final String path) {
+  public synchronized Bell<Stat> stat(final String path) {
     if (path.startsWith("/~"))
-      return list("~"+path.substring(2));
+      return stat("~"+path.substring(2));
     if (!path.startsWith("/") && !path.startsWith("~"))
-      return list("/"+path);
+      return stat("/"+path);
     if (ch.supports("MLSC").sync())
       return goList(true, "MLSC", path);
     if (ch.supports("STAT").sync())
@@ -68,14 +68,14 @@ public class FTPSession extends StorkSession {
       return goList(false, "MLSD", path);
     if (ch.supports("LIST").sync())
       return goList(false, "LIST", path);
-    return new Bell<FileTree>().ring(
+    return new Bell<Stat>().ring(
       new Exception("Listing is unsupported."));
   }
 
   // This method will initiate a listing using the given command.
-  private Bell<FileTree> goList(
+  private Bell<Stat> goList(
       boolean cc, final String cmd, final String path) {
-    final Bell<FileTree> bell = new Bell<FileTree>();
+    final Bell<Stat> bell = new Bell<Stat>();
     final char hint = cmd.startsWith("M") ? 'M' : 0;
     final FTPListParser parser = new FTPListParser(null, hint);
 
@@ -131,9 +131,29 @@ public class FTPSession extends StorkSession {
     //ch.close();
   }
 
-  // Get a channel to a session resource.
-  public StorkChannel open(String base, FileTree ft) {
-    return null;
+  // Select a resource given the path part of the URI.
+  public Resource select(URI uri) {
+    return new Resource() {
+      public FTPSession session() {
+        return FTPSession.this;
+      }
+
+      // Detect if we're able to do a third-party transfer. If not, just do a
+      // proxy transfer.
+      public void transferTo(Resource r) {
+        if (r.session() instanceof FTPSession)
+          /* Try a third party transfer. */;
+        else
+          proxyTransferTo(r);
+      }
+
+      public Sink sink() {
+        
+      }
+
+      public Source source() {
+      }
+    };
   }
 
   // Throws an error if the session is closed.
@@ -146,8 +166,8 @@ public class FTPSession extends StorkSession {
     FTPSession sess = connect(new EndPoint(u)).sync();
     String[] paths = { "/", "~", "/etc", "/tmp", "/var/run", "/bad/path" };
     for (final String p : paths) {
-      sess.list(p).promise(new Bell<FileTree>() {
-        protected void done(FileTree t) {
+      sess.stat(p).promise(new Bell<Stat>() {
+        protected void done(Stat t) {
           System.out.println(stork.ad.Ad.marshal(t));
         } protected void fail(Throwable t) {
           System.out.println("Failed to list: "+p+"  "+t);

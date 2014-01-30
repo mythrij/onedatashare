@@ -126,7 +126,7 @@ public class ExternalModule extends TransferModule {
   }
 
   // Just to satisfy the interface for now.
-  public StorkSession session(EndPoint e) {
+  public Session session(EndPoint e) {
     return null;
   }
 

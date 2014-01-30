@@ -1,31 +1,27 @@
-package stork.module;
+package stork.feather;
 
-import stork.util.*;
-import stork.ad.*;
 import java.util.*;
 
-// This represents a file listing tree to be used by transfer modules. It
-// can safely be marshalled as an ad and used to serialize and recover the
-// state of a transfer in progress.
-// TODO: Progress tracking.
+import stork.util.*;
 
-public class FileTree {
-  public transient FileTree parent;
+// Metadata about a resource, including subresources if the resource is a
+// directory.
 
+public class Stat {
   public String     name;
   public long       size;
   public long       time;
   public boolean    dir;
   public boolean    file;
   public String     perm;
-  public FileTree[] files;
+  public Stat[]     files;
 
   private transient long total_size = -1;
   private transient long total_num  =  0;
 
-  public FileTree() {
+  public Stat() {
     this(null);
-  } public FileTree(CharSequence s) {
+  } public Stat(CharSequence s) {
     if (s != null)
       name = Intern.string(s.toString());
   }
@@ -36,14 +32,14 @@ public class FileTree {
       return total_size;
     } if (dir) {
       long s = size;
-      if (files != null) for (FileTree f : files)
+      if (files != null) for (Stat f : files)
         s += f.dir ? 0 : f.size();
       return total_size = s;
     } return total_size = size;
   }
 
   // Copy the data from the passed file tree into this one.
-  public FileTree copy(FileTree ft) {
+  public Stat copy(Stat ft) {
     if (name == null)
       name = ft.name;
     size = ft.size;
@@ -60,7 +56,7 @@ public class FileTree {
       return total_num;
     } if (dir) {
       long n = 1;
-      if (files != null) for (FileTree f : files)
+      if (files != null) for (Stat f : files)
         n += f.count();
       return total_num = n;
     } return total_num = 1;
@@ -68,20 +64,18 @@ public class FileTree {
 
   // Return a path up to the parent.
   public String path() {
-    if (parent == null)
-      return name;
-    return parent.path()+"/"+name;
+    return name;
   }
 
   // Set the files underneath this tree and reset cached values.
-  public FileTree setFiles(Collection<FileTree> fs) {
-    return setFiles(fs.toArray(new FileTree[fs.size()]));
-  } public FileTree setFiles(FileTree[] fs) {
+  public Stat setFiles(Collection<Stat> fs) {
+    return setFiles(fs.toArray(new Stat[fs.size()]));
+  } public Stat setFiles(Stat[] fs) {
     files = fs;
     total_size = -1;
     total_num  =  0;
 
-    if (fs != null) for (FileTree t : fs)
+    if (fs != null) for (Stat t : fs)
       t.parent = this;
 
     return this;

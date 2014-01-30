@@ -1,5 +1,10 @@
 package stork.module.sftp;
 
+import java.util.*;
+import java.net.URI;
+
+import com.jcraft.jsch.*;
+
 import stork.ad.*;
 import stork.util.*;
 import stork.cred.*;
@@ -7,15 +12,14 @@ import stork.module.*;
 import stork.scheduler.*;
 import static stork.module.ModuleException.*;
 
-import java.util.*;
-import java.net.URI;
-import com.jcraft.jsch.*;
+import stork.module.Channel;
+import stork.module.Session;
 
 // Represents a connection to a remote end-point. A session should
 // provide methods for starting a transfer, listing directories, and
 // performing other operations on the end-point.
 
-public class SFTPSession extends StorkSession {
+public class SFTPSession extends Session {
   public static int DEFAULT_PORT = 22;
 
   private JSch jsch;
@@ -58,7 +62,7 @@ public class SFTPSession extends StorkSession {
     }
   }
 
-  public StorkChannel open(String base, FileTree ft) {
+  public Channel open(String base, FileTree ft) {
     return null;
   }
 
@@ -123,11 +127,11 @@ public class SFTPSession extends StorkSession {
 
   // Create an identical session with the same settings. Can optionally
   // duplicate its pair as well and pair the duplicates.
-  //public abstract StorkSession duplicate(boolean both);
+  //public abstract Session duplicate(boolean both);
 
   // Check if this session can be paired with another session. Override
   // this in subclasses.
-  public boolean pairCheck(StorkSession other) {
+  public boolean pairCheck(Session other) {
     return (other instanceof SFTPSession);
   }
 

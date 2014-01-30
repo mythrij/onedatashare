@@ -188,7 +188,7 @@ public class StorkScheduler {
 
   class StorkMkdirHandler extends CommandHandler {
     public Ad handle(Request req) {
-      StorkSession sess = null;
+      Session sess = null;
       try {
         EndPoint ep = req.ad.unmarshalAs(EndPoint.class);
         sess = ep.session();
@@ -206,7 +206,7 @@ public class StorkScheduler {
 
   class StorkRmfHandler extends CommandHandler {
     public Ad handle(Request req) {
-      StorkSession sess = null;
+      Session sess = null;
       try {
         EndPoint ep = req.ad.unmarshalAs(EndPoint.class);
         sess = ep.session();
@@ -224,7 +224,7 @@ public class StorkScheduler {
 
   class StorkLsHandler extends CommandHandler {
     public Ad handle(Request req) {
-      StorkSession sess = null;
+      Session sess = null;
       try {
         EndPoint ep = req.ad.unmarshalAs(EndPoint.class);
         sess = ep.session();
