@@ -3,6 +3,7 @@ package stork.module.ftp;
 import io.netty.buffer.*;
 
 import stork.cred.*;
+import stork.feather.*;
 import stork.module.*;
 import stork.scheduler.*;
 import stork.util.*;
@@ -14,13 +15,13 @@ public class FTPSession extends Session {
   private transient boolean mlstOptsAreSet = false;
 
   // Create an FTP session given the passed endpoint.
-  private FTPSession(EndPoint e) {
+  private FTPSession(Endpoint e) {
     super(e);
     ch = new FTPChannel(e.uri[0]);
   }
 
   // Asynchronously establish the session.
-  public static Bell<FTPSession> connect(EndPoint e) {
+  public static Bell<FTPSession> connect(Endpoint e) {
     final Bell<FTPSession> bell = new Bell<FTPSession>();
     final FTPSession sess = new FTPSession(e);
     String user = "anonymous";
@@ -30,7 +31,7 @@ public class FTPSession extends Session {
       // Do nothing.
     } else if (e.cred instanceof StorkGSSCred) try {
       StorkGSSCred cred = (StorkGSSCred) e.cred;
-      sess.ch.authenticate(cred.credential()).sync();
+      sess.ch.authenticate(cred.data()).sync();
       user = ":globus-mapping:";  // FIXME: This is GridFTP-specific.
     } catch (Exception ex) {
       // Couldn't authenticate with the given credentials...
@@ -100,7 +101,7 @@ public class FTPSession extends Session {
     // sequence, so we need a locked channel.
     else ch.lock().promise(new Bell<FTPChannel>() {
       protected void done(final FTPChannel ch) {
-        ch.new DataChannel<ByteBuf>() {
+        ch.new DataChannel() {
           public void handle(ByteBuf b) {
             System.out.println("GOT: "+b.toString(ch.data.encoding));
             parser.write(b);
@@ -132,7 +133,7 @@ public class FTPSession extends Session {
   }
 
   // Select a resource given the path part of the URI.
-  public Resource select(URI uri) {
+  public Resource select(final URI uri) {
     return new Resource() {
       public FTPSession session() {
         return FTPSession.this;
@@ -140,18 +141,20 @@ public class FTPSession extends Session {
 
       // Detect if we're able to do a third-party transfer. If not, just do a
       // proxy transfer.
-      public void transferTo(Resource r) {
-        if (r.session() instanceof FTPSession)
-          /* Try a third party transfer. */;
-        else
-          proxyTransferTo(r);
+      public Transfer transferTo(Resource r) {
+        return super.transferTo(r);
+      }
+
+      public URI uri() {
+        return uri;
       }
 
       public Sink sink() {
-        
+        return ch.new DataChannel();
       }
 
-      public Source source() {
+      public Tap tap() {
+        return ch.new DataChannel();
       }
     };
   }
@@ -163,7 +166,7 @@ public class FTPSession extends Session {
   public static void main(String[] args) {
     String u = (args.length == 0) ? "ftp://didclab-ws8/" : args[1];
     //String u = (args.length == 0) ? "ftp://ftp.cse.buffalo.edu/" : args[1];
-    FTPSession sess = connect(new EndPoint(u)).sync();
+    FTPSession sess = connect(new Endpoint(u)).sync();
     String[] paths = { "/", "~", "/etc", "/tmp", "/var/run", "/bad/path" };
     for (final String p : paths) {
       sess.stat(p).promise(new Bell<Stat>() {

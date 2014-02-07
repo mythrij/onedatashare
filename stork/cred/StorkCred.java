@@ -1,45 +1,27 @@
 package stork.cred;
 
 import stork.ad.*;
+import stork.feather.*;
 import stork.scheduler.*;
 import stork.util.*;
 
-// An interface for credentials.
+// An extended Feather credential with additional metadata.
 
-public abstract class StorkCred<O> {
-  public String name;
+public abstract class StorkCred<O> extends Credential<O> {
   public final String type;
+  public String name;
   public Watch time = new Watch();
 
   public StorkCred(String type) {
+    this(null, type);
+  } public StorkCred(String name, String type) {
+    this.name = name;
     this.type = type;
   }
 
   // Retrieve a credential by UUID.
   public static StorkCred unmarshal(String uuid) {
     return StorkScheduler.instance().creds.getCred(uuid);
-  }
-
-  // Create an anonymous credential.
-  public static StorkCred unmarshal(Ad ad) {
-    return create(ad);
-  }
-
-  // Create a credential from an ad.
-  public static StorkCred<?> create(Ad ad) {
-    String type = ad.get("type", "").toLowerCase();
-    String name = ad.get("name");
-    if (type.isEmpty()) {
-      throw new RuntimeException("no credential type provided");
-    } if (type.equals("gss-cert")) {
-      return new StorkGSSCred(ad).name(name);
-    } if (type.equals("userinfo")) {
-      return new StorkUserinfo(ad).name(name);
-    } throw new RuntimeException("invalid credential type: "+type);
-  }
-
-  public String type() {
-    return type;
   }
 
   // Get or set the name.
@@ -52,19 +34,11 @@ public abstract class StorkCred<O> {
     return this;
   }
 
-  // Get the raw credential object.
-  public abstract O credential();
-
-  // Get the duration of the credential in milliseconds.
-  public long duration() {
-    return time.elapsed();
-  }
-
-  // Get an ad suitable for showing to users. It should not include
-  // sensitive information.
+  // Get an ad suitable for showing to users. It should not include sensitive
+  // information.
   public Ad getAd() {
     return new Ad("name", name)
              .put("type", type)
-             .put("timer", time);
+             .put("time", time);
   }
 }

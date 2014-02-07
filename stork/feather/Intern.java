@@ -1,4 +1,4 @@
-package stork.util;
+package stork.feather;
 
 import java.lang.ref.*;
 import java.util.*;
@@ -12,10 +12,9 @@ public class Intern<O> {
   private Map<O, SoftReference<O>> map =
     new WeakHashMap<O, SoftReference<O>>();
 
-  // Some common interning types.
-  private static Intern<String> STRING_INTERN = new Intern<String>();
 
   // Globally intern a string.
+  private static Intern<String> STRING_INTERN = new Intern<String>();
   public static String string(String s) {
     return STRING_INTERN.intern(s);
   }

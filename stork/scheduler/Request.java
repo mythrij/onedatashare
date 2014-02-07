@@ -1,8 +1,8 @@
 package stork.scheduler;
 
 import stork.ad.*;
+import stork.feather.*;
 import stork.user.*;
-import stork.util.*;
 import java.util.*;
 
 // Represents a client request to be handled.

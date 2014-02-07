@@ -2,10 +2,9 @@ package stork.scheduler;
 
 import stork.ad.*;
 import stork.cred.*;
+import stork.feather.*;
 import stork.module.*;
 import stork.util.*;
-
-import java.net.URI;
 
 // A description of an endpoint in a client request.
 
@@ -27,21 +26,21 @@ public class Endpoint {
   public URI[] uri() {
     if (uri == null || uri.length < 1)
       throw new RuntimeException("No URI specified");
-    if (uri[0].getScheme() == null)
+    if (uri[0].uri.getScheme() == null)
       throw new RuntimeException("No scheme specified");
-    if (!uri[0].isAbsolute() && uri.length > 1)
+    if (!uri[0].uri.isAbsolute() && uri.length > 1)
       throw new RuntimeException("First URI must be absolute");
-    if (!uri[0].isAbsolute() && uri.length == 1)
+    if (!uri[0].uri.isAbsolute() && uri.length == 1)
       throw new RuntimeException("URI must be absolute");
-    uri[0] = uri[0].normalize();
+    uri[0].uri = uri[0].uri.normalize();
 
-    URI root = StorkUtil.rootURI(uri[0]);
+    java.net.URI root = StorkUtil.rootURI(uri[0].uri);
 
     // Make sure the rest of the URIs, if any, are relative.
     for (int i = 1; i < uri.length; i++) {
-      if (root.relativize(uri[i]).isAbsolute())
+      if (root.relativize(uri[i].uri).isAbsolute())
         throw new RuntimeException("Additional URIs must be relative");
-      uri[i] = uri[i].normalize();
+      uri[i].uri = uri[i].uri.normalize();
     }
 
     return uri;
@@ -56,15 +55,15 @@ public class Endpoint {
   }
 
   public String proto() {
-    return uri()[0].getScheme();
+    return uri()[0].uri.getScheme();
   }
 
   public String path() {
-    return uri()[0].getPath();
+    return uri()[0].uri.getPath();
   }
 
   // Create a session for this endpoint.
-  public StorkSession session() {
+  public Session session() {
     return module().session(this);
   }
 }

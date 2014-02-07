@@ -12,8 +12,6 @@ public class TransferProgress {
   public final Progress files = new Progress();
   public final Throughput bytes = new Throughput();
 
-  private transient Pipe<Ad>.End pipe = null;
-
   // Called when a transfer starts.
   public synchronized void transferStarted(long b, int f) {
     watch.start();

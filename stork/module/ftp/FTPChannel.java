@@ -38,12 +38,12 @@ public class FTPChannel {
   private static EventLoopGroup group = new NioEventLoopGroup();
 
   // Internal representation of the remote server type.
-  private static enum Type {
+  private static enum Protocol {
     ftp(21), gridftp(2811);
 
     int port;
 
-    Type(int def_port) {
+    Protocol(int def_port) {
       port = def_port;
     }
   }
@@ -53,7 +53,7 @@ public class FTPChannel {
   FTPSharedChannelState data;
 
   class FTPSharedChannelState {
-    Type type;
+    Protocol protocol;
     ChannelFuture future;
     SecurityContext security;
     Deque<Command> handlers = new ArrayDeque<Command>();
@@ -76,13 +76,13 @@ public class FTPChannel {
   }
 
   public FTPChannel(String uri) {
-    this(URI.create(uri));
-  } public FTPChannel(URI uri) {
-    this(uri.getScheme(), uri.getHost(), uri.getPort());
+    this(new stork.feather.URI(uri));
+  } public FTPChannel(stork.feather.URI uri) {
+    this(uri.uri.getScheme(), uri.uri.getHost(), null, uri.uri.getPort());
   } public FTPChannel(String host, int port) {
-    this(null, host, port);
+    this(null, host, null, port);
   } public FTPChannel(InetAddress addr, int port) {
-    this(null, addr, port);
+    this(null, null, addr, port);
   } public FTPChannel(String proto, String host, int port) {
     this(proto, host, null, port);
   } public FTPChannel(String proto, InetAddress addr, int port) {
@@ -94,8 +94,9 @@ public class FTPChannel {
     data = new FTPSharedChannelState();
     data.ownerView = this;
 
-    data.type = (proto == null) ? Type.ftp : Type.valueOf(proto.toLowerCase());
-    if (port <= 0) port = data.type.port;
+    data.protocol = (proto == null) ?
+      Protocol.ftp : Protocol.valueOf(proto.toLowerCase());
+    if (port <= 0) port = data.protocol.port;
 
     Bootstrap b = new Bootstrap();
     b.group(group).channel(NioSocketChannel.class).handler(new Initializer());
@@ -742,7 +743,7 @@ public class FTPChannel {
   } public synchronized Bell<Character> mode(char m) {
     Bell<Character> nmb = new Bell<Character>();  // Ring with result.
     Bell<Character> omb = typeModeHelper("MODE", m, nmb);
-    data.type.promise(omb);  // Ring helper bell.
+    data.mode.promise(omb);  // Ring helper bell.
     return data.mode = nmb;  // Replace current mode bell.
   } private Bell<Character> typeModeHelper(
       final String cmd, final char c, final Bell<Character> cb) {
@@ -751,12 +752,12 @@ public class FTPChannel {
     return new Bell<Character>() {
       protected void done(final char old) {
         new Command(cmd, c).promise(new Bell<Reply>() {
-          protected void ring(Reply r) {
-            if (r.isSuccessful())
+          protected void done(Reply r) {
+            if (r.isComplete())
               cb.ring(c);
-            else if (r.isNegative())
+            else
               cb.ring(old);
-          } protected void ring(Throwable e) {
+          } protected void fail(Throwable e) {
             cb.ring(old);
           }
         });
@@ -929,36 +930,35 @@ public class FTPChannel {
     }
   }
 
-  // A data channel connection to a remote server.
-  public class DataTap implements Tap {
+  // Base class for a data channel connection to a remote server.
+  public class DataChannel implements Tap, Sink {
     private ChannelFuture future;
     private Throwable error;
     private Bell<FTPHostPort> hpb;
-    private Sink sink;
+
+    private volatile Sink sink;
+    private volatile boolean corked = false;
 
     // Negotiate a new data channel connection.
     public DataChannel() {
-      hpb = passive();
+      passive().promise(initBell);
     } public DataChannel(Bell<FTPHostPort> hp) {
-      hpb = hp;
+      hp.promise(initBell);
     } public DataChannel(FTPHostPort hp) {
-      hpb = new Bell<FTPHostPort>().ring(hp);
+      initBell.ring(hp);
     }
 
     // A handler which passes data to the sink.
     SimpleChannelInboundHandler<ByteBuf> handler =
       new SimpleChannelInboundHandler<ByteBuf>() {
       public void messageReceived(ChannelHandlerContext ctx, ByteBuf m) {
-        try {
-          handle(m);
-        } catch (Exception e) {
-          // Don't let subclass handlers ruin the threadpool.
-        }
-      } public void exceptionCaught(
-          ChannelHandlerContext ctx, Throwable t) {
-        t.printStackTrace();
+        if (sink != null) sink.write(new Slice(m));
+      } public void exceptionCaught(ChannelHandlerContext ctx, Throwable t) {
+        // TODO: We should write a resource error.
       } public void channelInactive(ChannelHandlerContext ctx) {
-        sink.write(Slice.EMPTY);
+        if (sink != null) sink.write(new Slice());
+      } public void read(ChannelHandlerContext ctx) {
+        if (!corked && sink != null) ctx.read();
       }
     };
 
@@ -972,30 +972,11 @@ public class FTPChannel {
         boot.handler(new ChannelInitializer<SocketChannel>() {
           public void initChannel(SocketChannel ch) throws Exception {
             ch.config().setConnectTimeoutMillis(timeout);
-            ChannelPipeline p = ch.pipeline();
-
-            p.addLast("handler", new SimpleChannelInboundHandler<ByteBuf>() {
-              public void messageReceived(ChannelHandlerContext ctx, ByteBuf m) {
-                try {
-                  handle(m);
-                } catch (Exception e) {
-                  // Don't let subclass handlers ruin the threadpool.
-                }
-              } public void exceptionCaught(
-                  ChannelHandlerContext ctx, Throwable t) {
-                t.printStackTrace();
-              } public void channelInactive(ChannelHandlerContext ctx) {
-                try {
-                  DataChannel.this.done();
-                } catch (Exception e) {
-                  // Don't let subclass handlers ruin the threadpool.
-                }
-              }
-            });
+            ch.pipeline().addLast("handler", handler);
           }
         });
 
-        future = b.connect(hp.getAddr());
+        future = boot.connect(hp.getAddr());
       } protected void fail(Throwable t) {
         synchronized (DataChannel.this) {
           error = t;
@@ -1005,12 +986,23 @@ public class FTPChannel {
       }
     };
 
-    // Attach a sink.
-    public void attach(Sink s) {
-      if (sink != null)
-        return;
+    // Attach a sink to the tap.
+    public synchronized void attach(Sink s) {
       sink = s;
-      hpb.promise(initBell);
+    }
+
+    // Cork or uncork the tap.
+    public synchronized void cork() {
+      corked = true;
+    } public synchronized void uncork() {
+      corked = false;
+    }
+
+    // Write a passed slice to the channel.
+    public synchronized void write(Slice s) {
+      channel().write(s.plain().raw());
+    } public synchronized void write(ResourceError e) {
+      // TODO
     }
 
     // Used internally to extract the channel from the future.

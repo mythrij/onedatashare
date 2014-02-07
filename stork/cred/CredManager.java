@@ -33,7 +33,7 @@ public class CredManager extends LinkedHashMap<UUID, StorkCred<?>> {
   }
 
   private void putFromAd(String uuid, Ad ad) {
-    put(UUID.fromString(uuid), StorkCred.create(ad));
+    //put(UUID.fromString(uuid), StorkCred.create(ad));
   }
 
   // Put a credential into the map and return an automatically

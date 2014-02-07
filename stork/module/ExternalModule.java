@@ -1,6 +1,7 @@
 package stork.module;
 
 import stork.ad.*;
+import stork.feather.*;
 import stork.util.*;
 import stork.scheduler.*;
 
@@ -126,7 +127,7 @@ public class ExternalModule extends TransferModule {
   }
 
   // Just to satisfy the interface for now.
-  public Session session(EndPoint e) {
+  public Session session(Endpoint e) {
     return null;
   }
 

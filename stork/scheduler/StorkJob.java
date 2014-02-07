@@ -8,6 +8,7 @@ import stork.*;
 import stork.ad.*;
 import stork.util.*;
 import stork.module.*;
+import stork.feather.*;
 import stork.user.*;
 import static stork.scheduler.JobStatus.*;
 
@@ -27,7 +28,7 @@ import static stork.scheduler.JobStatus.*;
 public class StorkJob {
   private int job_id = 0;
   private JobStatus status;
-  private EndPoint src, dest;
+  private Endpoint src, dest;
   private TransferProgress progress = new TransferProgress();
 
   private int attempts = 0, max_attempts = 10;
@@ -181,12 +182,6 @@ public class StorkJob {
       }
 
       doTransfer(ss, ds);
-    } catch (ModuleException e) {
-      if (e.isFatal() || !shouldReschedule())
-        status(failed);
-      else
-        reschedule();
-      message = e.getMessage();
     } catch (CancellationException e) {
       status(removed);
     } finally {

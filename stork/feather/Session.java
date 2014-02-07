@@ -1,14 +1,14 @@
 package stork.feather;
 
 import java.util.concurrent.*;
-import java.net.URI;
 
 import stork.scheduler.*;
 
 // Represents a connection to a remote endpoint and all associated
-// configuration and state. A session should provide methods for starting a
-// transfer, listing directories, and performing other operations on the
-// endpoint asynchronously.
+// configuration and state. A session, in a sense, can be thought of as the
+// entity that resolves URIs of certain schemes into concrete resources.
+// Sessions should provide methods for starting a transfer, listing
+// directories, and performing other operations on the endpoint asynchronously.
 
 public abstract class Session {
   public transient Endpoint ep = null;
@@ -58,6 +58,6 @@ public abstract class Session {
 
   // Get the authority for the session.
   public final String authority() {
-    return ep.uri()[0].getAuthority();
+    return ep.uri()[0].uri.getAuthority();
   }
 }

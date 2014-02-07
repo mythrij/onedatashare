@@ -3,9 +3,9 @@ package stork.scheduler;
 import stork.*;
 import stork.ad.*;
 import stork.cred.*;
-import stork.module.*;
+import stork.util.*;
+import stork.feather.*;
 import stork.module.ftp.*;
-import stork.module.sftp.*;
 import stork.user.*;
 import stork.util.*;
 
@@ -190,7 +190,7 @@ public class StorkScheduler {
     public Ad handle(Request req) {
       Session sess = null;
       try {
-        EndPoint ep = req.ad.unmarshalAs(EndPoint.class);
+        Endpoint ep = req.ad.unmarshalAs(Endpoint.class);
         sess = ep.session();
         sess.mkdir(ep.path());
         return new Ad("message", "Success!");
@@ -208,7 +208,7 @@ public class StorkScheduler {
     public Ad handle(Request req) {
       Session sess = null;
       try {
-        EndPoint ep = req.ad.unmarshalAs(EndPoint.class);
+        Endpoint ep = req.ad.unmarshalAs(Endpoint.class);
         sess = ep.session();
         sess.rm(ep.path());
         return new Ad("message", "Success!");
@@ -226,10 +226,10 @@ public class StorkScheduler {
     public Ad handle(Request req) {
       Session sess = null;
       try {
-        EndPoint ep = req.ad.unmarshalAs(EndPoint.class);
+        Endpoint ep = req.ad.unmarshalAs(Endpoint.class);
         sess = ep.session();
         //return Ad.marshal(sess.list(ep.path(), req.ad).get());
-        return Ad.marshal(sess.list(ep.path()).sync());
+        return Ad.marshal(sess.stat(ep.path()).sync());
       } finally {
         if (sess != null) sess.close();
       }

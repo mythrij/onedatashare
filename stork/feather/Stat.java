@@ -75,9 +75,6 @@ public class Stat {
     total_size = -1;
     total_num  =  0;
 
-    if (fs != null) for (Stat t : fs)
-      t.parent = this;
-
     return this;
   }
 }

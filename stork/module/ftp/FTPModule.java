@@ -1,6 +1,7 @@
 package stork.module.ftp;
 
 import stork.ad.*;
+import stork.feather.*;
 import stork.module.*;
 import stork.scheduler.*;
 
@@ -19,7 +20,7 @@ public class FTPModule extends TransferModule {
   // Interface methods
   // -----------------
   // Create a new connection to an FTP server.
-  public Session session(EndPoint e) {
+  public Session session(Endpoint e) {
     return FTPSession.connect(e).sync();
   }
 }

@@ -27,16 +27,16 @@ public class FTPListParser implements Sink {
   String data = null;
   int list_type;
   StringBuilder sb = new StringBuilder();
-  FileTree root = new FileTree();
-  List<FileTree> files = new LinkedList<FileTree>();
+  Stat root = new Stat();
+  List<Stat> files = new LinkedList<Stat>();
 
   // Create a parser with an optional known type suggestion.
   public FTPListParser() {
     this(null, 0);
   } public FTPListParser(int type) {
     this(null, type);
-  } public FTPListParser(FileTree r, int type) {
-    root = (r != null) ? r : new FileTree();
+  } public FTPListParser(Stat r, int type) {
+    root = (r != null) ? r : new Stat();
     list_type = type;
   }
 
@@ -59,7 +59,7 @@ public class FTPListParser implements Sink {
 
   // Parse a single line.
   public void parseLine(String line) {
-    FileTree ft = parseEntry(line);
+    Stat ft = parseEntry(line);
     if (ft == null || ft.name == null)
       return;
     ft.name = Intern.string(ft.name);
@@ -71,20 +71,23 @@ public class FTPListParser implements Sink {
   }
 
   // This allows the entire list to be read in one shot.
-  public FileTree parseAll(byte[] b) {
+  public Stat parseAll(byte[] b) {
     write(b);
     return finish();
   }
 
   // Finalize the parser and get the sorted ads. Any more calls to this
   // thing will exhibit undefined behavior.
-  public FileTree finish() {
+  public Stat finish() {
     // Parse any buffered data.
     if (sb.length() > 0) {
       parseData(sb);
       sb = null;
     } return root.setFiles(files);
   }
+
+  // TODO
+  public void write(ResourceError err) { }
 
   // Write a byte buffer to the file, decode as string, scan for newlines, and
   // feed lines through parser. Assumably we're reading data where newlines are
@@ -115,9 +118,9 @@ public class FTPListParser implements Sink {
   }
 
   // Parse a line from the listing, return as an ad.
-  public FileTree parseEntry(String line) {
+  public Stat parseEntry(String line) {
     String[] tokens;
-    FileTree ft = new FileTree();
+    Stat ft = new Stat();
 
     if (line.isEmpty())
       return null;

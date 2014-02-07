@@ -1,6 +1,7 @@
 package stork.module;
 
 import stork.ad.*;
+import stork.feather.*;
 import stork.util.*;
 import stork.scheduler.*;
 
@@ -67,10 +68,10 @@ public abstract class TransferModule {
 
   // Create a new session capable of interacting with a URI.
   public Session session(String... uri) {
-    return session(new EndPoint(uri));
+    return session(new Endpoint(uri));
   } public Session session(URI... uri) {
-    return session(new EndPoint(uri));
-  } public abstract Session session(EndPoint e);
+    return session(new Endpoint(uri));
+  } public abstract Session session(Endpoint e);
 
   public String toString() {
     return handle;

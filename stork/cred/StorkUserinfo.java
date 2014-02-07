@@ -24,7 +24,7 @@ public class StorkUserinfo extends StorkCred<String[]> {
     return "userinfo";
   }
 
-  public String[] credential() {
+  public String[] data() {
     return userpass;
   }
 

@@ -20,8 +20,11 @@ public class Slice {
   public Slice(ByteBuf bytes, long offset) {
     this.offset = offset;
     this.bytes = bytes;
+  } public Slice(ByteBuf bytes) {
+    this(bytes, -1);
   } public Slice(long offset) {
     // Create an empty slice at the given offset.
+    this.offset = offset;
   } public Slice() {
     // Create an empty slice with an unspecified offset.
     this(-1);
@@ -34,12 +37,14 @@ public class Slice {
     return this;
   }
 
-  // Return the length of the payload, or -1 if unknown.
+  // Return the length of the payload in bytes, or -1 if unknown.
   public long length() {
     return bytes.readableBytes();
   }
 
-  // Return the offset of the payload, or -1 if unknown.
+  // Return the byte offset of the payload relative to the 0th byte of the
+  // resource, or -1 if unspecified, in which case it should be assumed to come
+  // after the last slice.
   public long offset() {
     return offset;
   }
@@ -52,6 +57,12 @@ public class Slice {
   // An empty slice indicates the associated resource is finished transferring
   // and no further slices will be emitted for that resource.
   public boolean isEmpty() {
-    return 
+    return length() == 0;
+  }
+
+  // Get the resource this slice came from. Can be null if the slice is
+  // anonymous.
+  public Resource resource() {
+    return null;
   }
 }

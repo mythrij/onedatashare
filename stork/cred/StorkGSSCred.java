@@ -57,7 +57,7 @@ public class StorkGSSCred extends StorkCred<GSSCredential> {
   }
 
   // Lazily instantiate this credential.
-  public GSSCredential credential() {
+  public GSSCredential data() {
     return (credential != null) ? credential : initialize();
   }
 
