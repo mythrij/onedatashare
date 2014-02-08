@@ -23,7 +23,7 @@ import stork.util.*;
 //
 // TODO: Check out <http://cr.yp.to/ftpparse/ftpparse.c>.
 
-public class FTPListParser implements Sink {
+public class FTPListParser extends Bell<Stat> implements Sink {
   String data = null;
   int list_type;
   StringBuilder sb = new StringBuilder();
@@ -71,29 +71,33 @@ public class FTPListParser implements Sink {
   }
 
   // This allows the entire list to be read in one shot.
-  public Stat parseAll(byte[] b) {
+  public void parseAll(byte[] b) {
     write(b);
-    return finish();
+    finish();
   }
 
   // Finalize the parser and get the sorted ads. Any more calls to this
   // thing will exhibit undefined behavior.
-  public Stat finish() {
+  public void finish() {
     // Parse any buffered data.
     if (sb.length() > 0) {
       parseData(sb);
       sb = null;
-    } return root.setFiles(files);
+    } ring(root.setFiles(files));
   }
 
-  // TODO
-  public void write(ResourceError err) { }
+  public void write(ResourceError err) {
+    ring(err.error);
+  }
 
   // Write a byte buffer to the file, decode as string, scan for newlines, and
   // feed lines through parser. Assumably we're reading data where newlines are
   // one byte so just look for newline characters.
   public void write(Slice s) {
-    write(s.plain().raw());
+    if (s.isEmpty())
+      finish();
+    else
+      write(s.plain().raw());
   } public void write(ByteBuf b) {
     byte[] bytes;
     if (b.hasArray())

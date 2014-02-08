@@ -6,7 +6,7 @@ import stork.util.*;
 import stork.scheduler.*;
 
 import java.util.*;
-import java.net.URI;
+//import java.net.URI;
 
 // Abstract base class for a Stork transfer module.
 

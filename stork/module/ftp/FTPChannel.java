@@ -58,9 +58,7 @@ public class FTPChannel {
     SecurityContext security;
     Deque<Command> handlers = new ArrayDeque<Command>();
 
-    Deque<Bell<FTPChannel>> lockQueue = new ArrayDeque<Bell<FTPChannel>>();
-    FTPChannel ownerView;  // The view that owns the underlying channel.
-    Deque<Bell> deferred = new ArrayDeque<Bell>();
+    FTPChannel owner;  // The view that owns the underlying channel.
 
     // Any FTP server that adheres to specifications will use UTF-8, but let's
     // not preclude the possibility of being able to configure the encoding.
@@ -74,6 +72,9 @@ public class FTPChannel {
     Bell<Character> mode = new Bell<Character>().ring('S');
     Bell<Character> type = new Bell<Character>().ring('A');
   }
+
+  // Deferred commands
+  Deque<Deferred> deferred = new ArrayDeque<Deferred>();
 
   public FTPChannel(String uri) {
     this(new stork.feather.URI(uri));
@@ -92,7 +93,7 @@ public class FTPChannel {
   // The above constructors delegate to this.
   private FTPChannel(String proto, String host, InetAddress addr, int port) {
     data = new FTPSharedChannelState();
-    data.ownerView = this;
+    data.owner = this;
 
     data.protocol = (proto == null) ?
       Protocol.ftp : Protocol.valueOf(proto.toLowerCase());
@@ -108,8 +109,10 @@ public class FTPChannel {
   }
 
   // This special constructor is used internally to create channel views.
-  private FTPChannel(FTPChannel other) {
-    data = other.data;
+  // Calling this constructor will enqueue a synchronization command that will
+  // allow the channel to assume control when it is reached.
+  private FTPChannel(FTPChannel parent) {
+    data = parent.data;
   }
 
   // Handles initializing the control channel connection and attaching the
@@ -419,7 +422,7 @@ public class FTPChannel {
     protected void encode
       (ChannelHandlerContext ctx, Object msg, List<Object> out)
     throws Exception {
-      System.out.println(msg);
+      //System.out.println("Writing "+msg);
       ByteBuf b =
         Unpooled.wrappedBuffer(msg.toString().getBytes(data.encoding));
 
@@ -697,37 +700,6 @@ public class FTPChannel {
       sync.internalHandle(null);
   }
 
-  // If the channel is locked, and we are not the owning 
-  private synchronized void issueCommand(
-      final Command c, final Object c1, final Object[] cm) {
-    // This bell should be rung to write the command.
-    Bell bell = new Bell() {
-      protected void done() {
-        appendHandler(c);
-        if (c1 == null) return;
-
-        // Write a small object which will flatten the passed objects into a
-        // single string when it's written by Netty.
-        channel().writeAndFlush(new Object() {
-          public String toString() {
-            StringBuilder sb = new StringBuilder(c1.toString());
-            for (Object o : cm)
-              sb.append(" ").append(o);
-            return sb.toString();
-          }
-        });
-      } protected void fail(Throwable t) {
-        c.fail(t);
-      }
-    };
-
-    // If we're not the owner, defer the command. Otherwise, send it.
-    if (data.ownerView != this)
-      data.deferred.add(bell);
-    else
-      bell.ring();
-  }
-
   // Negotiate a type or change. Admittedly, this is a little unnecessarily
   // complex, and designed to defeat an edge case that will probably never be
   // encountered. Nevertheless, doing it like this ensures data channel
@@ -793,32 +765,41 @@ public class FTPChannel {
   // has been issued. Commands written to any other channels during this time
   // will have their commands deferred and sent after the channel has been
   // unlocked.
-  public synchronized Bell<FTPChannel> lock() {
-    Bell<FTPChannel> bell = new Bell<FTPChannel>();
-
-    // If there's already an existing view, append to lock queue.
-    if (data.ownerView != this)
-      data.lockQueue.add(bell);
-    else
-      bell.ring(createLockedView());
-
-    return bell;
+  public class Lock extends FTPChannel {
+    public Lock() {
+      super(FTPChannel.this);
+      FTPChannel.this.new Command(null) {
+        public void handle() { Lock.this.assumeControl(); }
+      };
+    } public Bell<FTPChannel> lock() {
+      throw new IllegalStateException("cannot lock from a view");
+    } public void unlock() {
+      new Command(null) {
+        public void handle() { FTPChannel.this.assumeControl(); }
+      };
+    } protected void finalize() {
+      if (data.owner == this)
+        FTPChannel.this.assumeControl();
+    }
   }
 
-  // Creates a locked view of the channel for lock(). This should only be
-  // called if the returned view will become the new owning view.
-  private synchronized FTPChannel createLockedView() {
-    return data.ownerView = new FTPChannel(this) {
-      private boolean unlocked = false;
-      public Bell<FTPChannel> lock() {
-        throw new IllegalStateException("cannot lock from view");
-      } public synchronized void unlock() {
-        doUnlock(this);
-        unlocked = true;
-      } protected void finalize() {
-        if (!unlocked) doUnlock(this);
+  // This is called whenever it's the the channel's turn to become the channel
+  // owner.
+  protected synchronized void assumeControl() {
+    synchronized (data) {
+      System.out.println(data.owner.hashCode()+" -> "+hashCode());
+      data.owner = this;
+      if (!deferred.isEmpty()) {
+        Deque<Deferred> realDeferred = deferred;
+        deferred = new LinkedList<Deferred>();
+
+        for (Deferred d : realDeferred) d.send();
+
+        realDeferred.clear();
+        realDeferred.addAll(deferred);
+        deferred = realDeferred;
       }
-    };
+    }
   }
 
   // Release the lock, if this channel is a locked view. If it's not (and the
@@ -827,17 +808,34 @@ public class FTPChannel {
     throw new IllegalStateException("channel is not locked");
   }
 
-  // This is called by a locked channel view's unlock() method after it has
-  // been used to write all of the commands it was needed for. It will also
-  // handle writing all the deferred commands.
-  private final synchronized void doUnlock(FTPChannel ch) {
-    if (data.ownerView != ch)
-      throw new IllegalStateException("channel is not locked");
-    data.ownerView = this;
-    while (!data.deferred.isEmpty())
-      data.deferred.pop().ring();
-    if (!data.lockQueue.isEmpty())
-      data.lockQueue.pop().ring(createLockedView());
+  // A deferred command which hold onto its arguments until it is ready to be
+  // written. Once it's ready to be written, call send(). If the view is not
+  // the owner when send() is called, the command will once again be deferred.
+  private class Deferred {
+    final Command cmd;
+    final Object verb;
+    final Object[] args;
+
+    Deferred(Command c, Object v, Object[] a) {
+      cmd = c; verb = v; args = a;
+    } void send() {
+      // If we're not the owner, defer the command. Otherwise, send it.
+      if (data.owner != FTPChannel.this) {
+        deferred.add(this);
+        System.out.println(FTPChannel.this.hashCode()+": Deferring "+this);
+      } else {
+        appendHandler(cmd);
+        if (verb != null) channel().writeAndFlush(this);
+        System.out.println(FTPChannel.this.hashCode()+": Sending "+this);
+      }
+    } public String toString() {
+      if (verb == null)
+        return "(sync)";
+      StringBuilder sb = new StringBuilder(verb.toString());
+      for (Object o : args)
+        sb.append(" ").append(o);
+      return sb.toString();
+    }
   }
 
   // This is sort of the workhorse of the channel. Instantiate one of these to
@@ -868,12 +866,12 @@ public class FTPChannel {
     // actually written to the server and the command serves as a sort of
     // "sync" for client code. Calling sync() on it will block until it has
     // been reached in the pipeline.
-    public Command(Object cmd, Object... more) {
-      synchronized (FTPChannel.this) {
-        isSync = (cmd == null);
-        issueCommand(this, cmd, more);
+    public Command(Object verb, Object... args) {
+      synchronized (data) {
+        isSync = (verb == null);
+        new Deferred(this, verb, args).send();
       }
-    }
+    } 
 
     public synchronized final boolean isSync() {
       return isSync;
@@ -949,12 +947,11 @@ public class FTPChannel {
     }
 
     // A handler which passes data to the sink.
-    SimpleChannelInboundHandler<ByteBuf> handler =
-      new SimpleChannelInboundHandler<ByteBuf>() {
+    ChannelHandler handler = new SimpleChannelInboundHandler<ByteBuf>() {
       public void messageReceived(ChannelHandlerContext ctx, ByteBuf m) {
         if (sink != null) sink.write(new Slice(m));
       } public void exceptionCaught(ChannelHandlerContext ctx, Throwable t) {
-        // TODO: We should write a resource error.
+        if (sink != null) sink.write(new ResourceError(null, t));
       } public void channelInactive(ChannelHandlerContext ctx) {
         if (sink != null) sink.write(new Slice());
       } public void read(ChannelHandlerContext ctx) {

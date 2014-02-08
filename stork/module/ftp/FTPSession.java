@@ -53,30 +53,25 @@ public class FTPSession extends Session {
     return bell;
   }
 
-  // Perform a listing of the given path relative to the root directory.  There
-  // are the supported listing commands in terms of preference:
-  //   MLSC STAT MLSD LIST
+  // Perform a listing of the given path relative to the root directory.
   public synchronized Bell<Stat> stat(final String path) {
     if (path.startsWith("/~"))
-      return stat("~"+path.substring(2));
+      return stat(path.substring(1));
     if (!path.startsWith("/") && !path.startsWith("~"))
       return stat("/"+path);
+
     if (ch.supports("MLSC").sync())
       return goList(true, "MLSC", path);
     if (ch.supports("STAT").sync())
       return goList(true, "STAT", path);
     if (ch.supports("MLSD").sync())
       return goList(false, "MLSD", path);
-    if (ch.supports("LIST").sync())
-      return goList(false, "LIST", path);
-    return new Bell<Stat>().ring(
-      new Exception("Listing is unsupported."));
+    return goList(false, "LIST", path);
   }
 
   // This method will initiate a listing using the given command.
   private Bell<Stat> goList(
       boolean cc, final String cmd, final String path) {
-    final Bell<Stat> bell = new Bell<Stat>();
     final char hint = cmd.startsWith("M") ? 'M' : 0;
     final FTPListParser parser = new FTPListParser(null, hint);
 
@@ -90,31 +85,22 @@ public class FTPSession extends Session {
     if (cc) ch.new Command(cmd, path) {
       public void handle(FTPChannel.Reply r) {
         if (r.code/100 > 2)
-          bell.ring(r.asError());
+          parser.ring(r.asError());
         parser.write(r.message().getBytes());
         if (r.isComplete())
-          bell.ring(parser.finish());
+          parser.finish();
       }
     };
 
     // Otherwise we're doing a data channel listing. This requires a command
     // sequence, so we need a locked channel.
-    else ch.lock().promise(new Bell<FTPChannel>() {
-      protected void done(final FTPChannel ch) {
-        ch.new DataChannel() {
-          public void handle(ByteBuf b) {
-            System.out.println("GOT: "+b.toString(ch.data.encoding));
-            parser.write(b);
-          } public void done() {
-            bell.ring(parser.finish());
-          }
-        };
-        ch.new Command(cmd, path);
-        ch.unlock();
-      }
-    });
+    else ch.new Lock() {{
+      new DataChannel().attach(parser);
+      new Command(cmd, path);
+      unlock();
+    }};
 
-    return bell;
+    return parser;
   }
 
   // Create a directory at the end-point, as well as any parent directories.
@@ -173,7 +159,8 @@ public class FTPSession extends Session {
         protected void done(Stat t) {
           System.out.println(stork.ad.Ad.marshal(t));
         } protected void fail(Throwable t) {
-          System.out.println("Failed to list: "+p+"  "+t);
+          System.out.println("Failed to list: "+p);
+          t.printStackTrace();
         }
       });
     }

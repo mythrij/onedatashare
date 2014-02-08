@@ -24,10 +24,10 @@ public class Slice {
     this(bytes, -1);
   } public Slice(long offset) {
     // Create an empty slice at the given offset.
-    this.offset = offset;
+    this(Unpooled.EMPTY_BUFFER, offset);
   } public Slice() {
     // Create an empty slice with an unspecified offset.
-    this(-1);
+    this(Unpooled.EMPTY_BUFFER, -1);
   }
 
   // Return a plaintext slice, or throw an OperationUnsupportedException if the

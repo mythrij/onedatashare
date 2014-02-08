@@ -191,8 +191,8 @@ public class StorkJob {
 
   // Do the transfer using the given sessions.
   private void doTransfer(final Session ss, final Session ds) {
-    URI su = src.uri()[0];
-    URI du = dest.uri()[0];
+    URI su = src.uri()[0].uri;
+    URI du = dest.uri()[0].uri;
 
     //ss.select(su).sendTo(ds.select(du));
   }
