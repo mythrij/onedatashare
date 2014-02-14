@@ -11,6 +11,11 @@ public class URI {
     return new URI(uri);
   }
 
+  // Return the path part identified by this URI.
+  public String path() {
+    return uri.getPath();
+  }
+
   // Return an escaped version of the given string.
   public static String escape(String string) {
     return string;

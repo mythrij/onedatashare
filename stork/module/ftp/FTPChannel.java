@@ -928,8 +928,11 @@ public class FTPChannel {
     }
   }
 
-  // Base class for a data channel connection to a remote server.
-  public class DataChannel implements Tap, Sink {
+  // Base class for a data channel connection to a remote server. This object
+  // is itself a control channel lock, so commands can be pipelined in an
+  // initializer. It is imperative to call unlock after initialization, even if
+  // no commands are pipelined.
+  public class DataChannel extends Lock implements Tap, Sink {
     private ChannelFuture future;
     private Throwable error;
     private Bell<FTPHostPort> hpb;

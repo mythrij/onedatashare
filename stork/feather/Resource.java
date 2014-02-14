@@ -3,11 +3,17 @@ package stork.feather;
 // A handle on a remote resource, such as a file or directory.
 
 public abstract class Resource {
-  // Return the session associated with this resource.
-  public abstract Session session();
+  public final URI uri;
 
-  // Get the URI used to refer to the resource.
-  public abstract URI uri();
+  protected Bell<Stat> stat;
+
+  // Create a resource identified by the given session and URI.
+  protected Resource(URI uri) {
+    this.uri = uri;
+  }
+
+  // Get the session associated with a resource.
+  public abstract Session session();
 
   // Called by client code to initiate a transfer using whatever method is
   // deemed most appropriate by the session implementation. Subclasses may want

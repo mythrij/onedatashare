@@ -2,17 +2,12 @@ package stork.feather;
 
 import java.util.concurrent.*;
 
-import stork.scheduler.*;
+// A session represents a connection to a remote endpoint and all associated
+// configuration and state. It also represents a root resource from which
+// subresources may be extracted. All session operations should be performed
+// asynchronously and return immediately.
 
-// Represents a connection to a remote endpoint and all associated
-// configuration and state. A session, in a sense, can be thought of as the
-// entity that resolves URIs of certain schemes into concrete resources.
-// Sessions should provide methods for starting a transfer, listing
-// directories, and performing other operations on the endpoint asynchronously.
-
-public abstract class Session {
-  public transient Endpoint ep = null;
-
+public abstract class Session extends Resource {
   // Common transfer options.
   public boolean overwrite = true;
   public boolean verify    = false;
@@ -21,11 +16,14 @@ public abstract class Session {
 
   // Create a session from a URL. Generally the path is ignored.
   public Session(String u) {
-    this(new Endpoint(u));
+    this(URI.create(u));
   } public Session(URI u) {
-    this(new Endpoint(u));
-  } public Session(Endpoint e) {
-    ep = e;
+    super(u);
+  }
+
+  // Of course the session of the root resource is this session.
+  public Session session() {
+    return this;
   }
 
   // Get a directory listing of a path from the session.
@@ -50,14 +48,4 @@ public abstract class Session {
   public final Resource select(String path) {
     return select(URI.create(path));
   } public abstract Resource select(URI uri);
-
-  // Get the protocol used by the session.
-  public final String protocol() {
-    return ep.proto();
-  }
-
-  // Get the authority for the session.
-  public final String authority() {
-    return ep.uri()[0].uri.getAuthority();
-  }
 }

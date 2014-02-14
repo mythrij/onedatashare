@@ -1,8 +1,9 @@
 package stork.feather;
 
 import io.netty.buffer.*;
+import io.netty.util.*;
 
-// A slice represents a "piece" of a data resource emitted by a source and are
+// A slice represents a "piece" of a data resource emitted by a tap and are
 // Feather's fundamental message unit. Slices contain information about which
 // resource they came from, their offset within the resource, and length.
 //
@@ -64,5 +65,17 @@ public class Slice {
   // anonymous.
   public Resource resource() {
     return null;
+  }
+
+  // Return a string representation of the slice that can be useful for
+  // debugging.
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("[\n")
+    .append("  utf_8 = \"")
+      .append(raw().toString(CharsetUtil.UTF_8))
+    .append("\"\n")
+    .append("]");
+    return sb.toString();
   }
 }

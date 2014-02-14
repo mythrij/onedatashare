@@ -16,7 +16,7 @@ public class FTPSession extends Session {
 
   // Create an FTP session given the passed endpoint.
   private FTPSession(Endpoint e) {
-    super(e);
+    super(e.uri[0]);
     ch = new FTPChannel(e.uri[0]);
   }
 
@@ -92,10 +92,9 @@ public class FTPSession extends Session {
       }
     };
 
-    // Otherwise we're doing a data channel listing. This requires a command
-    // sequence, so we need a locked channel.
-    else ch.new Lock() {{
-      new DataChannel().attach(parser);
+    // Otherwise we're doing a data channel listing.
+    else ch.new DataChannel() {{
+      attach(parser);
       new Command(cmd, path);
       unlock();
     }};
@@ -120,8 +119,8 @@ public class FTPSession extends Session {
 
   // Select a resource given the path part of the URI.
   public Resource select(final URI uri) {
-    return new Resource() {
-      public FTPSession session() {
+    return new Resource(uri) {
+      public Session session() {
         return FTPSession.this;
       }
 
@@ -131,18 +130,30 @@ public class FTPSession extends Session {
         return super.transferTo(r);
       }
 
-      public URI uri() {
-        return uri;
-      }
-
       public Sink sink() {
-        return ch.new DataChannel();
+        return ch.new DataChannel() {{
+          new Command("STOR", uri.path());
+          unlock();
+        }};
       }
 
       public Tap tap() {
-        return ch.new DataChannel();
+        return ch.new DataChannel() {{
+          new Command("RETR", uri.path());
+          unlock();
+        }};
       }
     };
+  }
+
+  // Open a tap to the session root.
+  public Tap tap() {
+    return select(uri).tap();
+  }
+
+  // Open a sink to the session root.
+  public Sink sink() {
+    return select(uri).sink();
   }
 
   // Throws an error if the session is closed.
@@ -150,19 +161,14 @@ public class FTPSession extends Session {
   }
 
   public static void main(String[] args) {
-    String u = (args.length == 0) ? "ftp://didclab-ws8/" : args[1];
-    //String u = (args.length == 0) ? "ftp://ftp.cse.buffalo.edu/" : args[1];
+    String u = "ftp://didclab-ws8/dev/urandom";
     FTPSession sess = connect(new Endpoint(u)).sync();
-    String[] paths = { "/", "~", "/etc", "/tmp", "/var/run", "/bad/path" };
-    for (final String p : paths) {
-      sess.stat(p).promise(new Bell<Stat>() {
-        protected void done(Stat t) {
-          System.out.println(stork.ad.Ad.marshal(t));
-        } protected void fail(Throwable t) {
-          System.out.println("Failed to list: "+p);
-          t.printStackTrace();
-        }
-      });
-    }
+    sess.tap().attach(new Sink() {
+      public void write(Slice s) {
+        System.out.println(s);
+      } public void write(ResourceError e) {
+        System.out.println(e);
+      }
+    });
   }
 }
