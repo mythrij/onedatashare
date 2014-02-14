@@ -70,6 +70,11 @@ public class FTPListParser extends Bell<Stat> implements Sink {
       files.add(ft);
   }
 
+  // Set the name of the root.
+  public void name(String name) {
+    root.name = name;
+  }
+
   // This allows the entire list to be read in one shot.
   public void parseAll(byte[] b) {
     write(b);

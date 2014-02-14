@@ -75,6 +75,8 @@ public class FTPSession extends Session {
     final char hint = cmd.startsWith("M") ? 'M' : 0;
     final FTPListParser parser = new FTPListParser(null, hint);
 
+    parser.name(StorkUtil.basename(path));
+
     // When doing MLSx listings, we can reduce the response size with this.
     if (hint == 'M' && !mlstOptsAreSet) {
       ch.new Command("OPTS MLST Type*;Size*;Modify*;UNIX.mode*");
