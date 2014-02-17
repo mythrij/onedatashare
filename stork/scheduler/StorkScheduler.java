@@ -508,8 +508,8 @@ public class StorkScheduler {
         int delay = env.getInt("state_save_interval", 120);
         if (delay < 1) delay = 1;
 
-        // Wait for the delay, then dump the state. Can be interrupted
-        // to dump the state early.
+        // Wait for the delay, then dump the state. Can be interrupted to dump
+        // the state early.
         try {
           sleep(delay*1000);
         } catch (Exception e) {
@@ -541,7 +541,7 @@ public class StorkScheduler {
           ".stork_state", "tmp", state_file.getParentFile());
         pw = new PrintWriter(temp_file, "UTF-8");
 
-        pw.print(Ad.marshal(StorkScheduler.this));
+        pw.print(Ad.marshal(StorkScheduler.this).toJSON());
         pw.close();
         pw = null;
 

@@ -14,7 +14,7 @@ public abstract class Session extends Resource {
   public boolean encrypt   = false;
   public boolean compress  = false;
 
-  // Create a session from a URL. Generally the path is ignored.
+  // Create a session from a URL.
   public Session(String u) {
     this(URI.create(u));
   } public Session(URI u) {
@@ -43,6 +43,16 @@ public abstract class Session extends Resource {
 
   // Create an identical session with the same settings.
   //public abstract Session duplicate();
+
+  // Return a tap to the resource returned by selecting the root URI.
+  public Tap tap() {
+    return select(uri).tap();
+  }
+
+  // Return a sink to the resource returned by selecting the root URI.
+  public Sink sink() {
+    return select(uri).sink();
+  }
 
   // Return a resource object representing the referent of the given URI.
   public final Resource select(String path) {
