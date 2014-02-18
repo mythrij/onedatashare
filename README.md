@@ -48,6 +48,13 @@ The following libraries are required as well:
 * Netty 4.0.0
 * JSch 0.1.50
 
+Running Stork using the startup script in `bin` currently requires Bash.  In a
+future release, this script will be cleaned up a bit to be more portable
+between shells. If you do not have Bash installed, running the following
+command after building effectively does what the script does:
+
+    java -cp 'lib/*' stork.Stork <command> [args]
+
 This section will be formalized bit later. For now, the necessary libraries are
 included in the repository.
 
@@ -78,15 +85,15 @@ Commands
 
 * `stork server` — Used to start a Stork server. Right now it just outputs
   everything to the command line until proper daemonization and automatic
-process killing with a PID file is supported. For now, you can daemonize it
-using, e.g.: `nohup stork server > /dev/null &`
+  process killing with a PID file is supported. The server may be run in the
+  background by passing the `-d` option, e.g.: `stork server -d`
 * `stork q` — List all the jobs in the Stork queue along with information about
   them, such as their status and progress. Can be used to find information
-about specific jobs by passing a job ID. Can also be used to filter jobs by
-their status.
+  about specific jobs by passing a job ID. Can also be used to filter jobs by
+  their status.
 * `stork submit` — Submit a job to a Stork server. Can be passed a source and
   destination URL, a text file containing one or more jobs, or no arguments to
-read jobs from standard input.
+  read jobs from standard input.
 * `stork rm` — Cancel or terminate a submitted job or set of jobs.
 * `stork info` — Display configuration information about the server.  Can also
   be used to find information about transfer modules.
