@@ -47,9 +47,6 @@ all: $(CLASSES) | build
 	@$(MAKE) --no-print-directory $(JARFILE)
 	@$(MAKE) --no-print-directory $(PROJECT)_cmds
 
-test:
-	@echo $(CLASSPATH)
-
 build:
 	@mkdir -p build
 
