@@ -126,10 +126,24 @@ public class FTPSession extends Session {
         return FTPSession.this;
       }
 
-      // Detect if we're able to do a third-party transfer. If not, just do a
-      // proxy transfer.
+      // Transfer this resource to another resource, doing third-party
+      // connectivity detection first.
       public Transfer transferTo(Resource r) {
-        return super.transferTo(r);
+        // If we know for sure we can't do third-party with the given session,
+        // do a proxy transfer.
+        if (cannotDoThirdParty(r.session())
+          return super.transferTo(r);
+
+        // Otherwise, try to establish a third-party connection and transfer
+        // like that.
+        final FTPSession other = r.session();
+        return ch.new ThirdPartyTransfer(other) {
+          public void done() {
+            ch.new Command("STOR");
+          } public void fail() {
+            assume(Transfer.from(tap()).to(sink()));
+          }
+        };
       }
 
       public Sink sink() {
@@ -146,6 +160,13 @@ public class FTPSession extends Session {
         }};
       }
     };
+  }
+
+  // Return true if we know we definitely can't do a third-party transfer to
+  // the given session. Currently we can only do third-party transfers with
+  // another FTPSession.
+  private boolean cannotDoThirdParty(Session s) {
+    return s instanceof FTPSession;
   }
 
   // Open a tap to the session root.

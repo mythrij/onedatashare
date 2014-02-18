@@ -13,7 +13,7 @@ public abstract class Resource {
   }
 
   // Get the session associated with a resource.
-  public abstract Session session();
+  public abstract <S extends Session> S session();
 
   // Called by client code to initiate a transfer using whatever method is
   // deemed most appropriate by the session implementation. Subclasses may want
