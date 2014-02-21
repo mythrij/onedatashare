@@ -11,7 +11,7 @@ public abstract class LocalSession extends Session {
   private final File root;
 
   /** Create a local session with a root relative to the given path. */
-  public Session(String u) {
+  public LocalSession(String u) {
     super(URI.create("file:"+u));
     root = new File(u);
   }
@@ -19,7 +19,7 @@ public abstract class LocalSession extends Session {
   /** Get a directory listing of a path from the session. */
   public Bell<Stat> stat(String path) {
     File f = new File(root, path);
-    
+    return null;
   }
 
   // Create a directory at the end-point, as well as any parent directories.
@@ -48,7 +48,5 @@ public abstract class LocalSession extends Session {
   }
 
   // Return a resource object representing the referent of the given URI.
-  public final Resource select(String path) {
-    return select(URI.create(path));
-  } public abstract Resource select(URI uri);
+  public abstract Resource select(URI uri);
 }

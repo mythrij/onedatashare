@@ -3,31 +3,57 @@ package stork.feather;
 import java.util.*;
 import java.util.concurrent.*;
 
-// A minimalistic promise primitive used for stringing together the results of
-// asynchronous operations and executing asynchronous handlers.
-
+/**
+ * A promise primitive used for stringing together the results of asynchronous
+ * operations and executing asynchronous handlers. It supports callbacks
+ * defined in subclasses, chaining of results, and deadlines.
+ */
 public class Bell<T> implements Future<T> {
   private T object;
   private Throwable error;
   private boolean done = false;
   private Set<Bell<? super T>> promises = Collections.emptySet();
 
-  // Ring the bell with the given object and wake up any waiting threads.
+  // This is used to schedule bell deadlines.
+  private static ScheduledExecutorService deadlineTimerPool =
+    new ScheduledThreadPoolExecutor(1);
+
+  /**
+   * Ring the bell with the given object and wake up any waiting threads.
+   *
+   * @param object The object to ring the bell with.
+   * @return This bell.
+   */
   public final Bell<T> ring(T object) {
     return ring(object, null);
   }
 
-  // Ring the bell with null and wake up any waiting threads.
+  /**
+   * Ring the bell with null and wake up any waiting threads.
+   *
+   * @return This bell.
+   */
   public final Bell<T> ring() {
     return ring(null, null);
   }
 
-  // Ring the bell with the given error and wake up any waiting threads.
+  /**
+   * Ring the bell with the given error and wake up any waiting threads.
+   *
+   * @param error The error to ring the bell with.
+   * @return This bell.
+   */
   public final Bell<T> ring(Throwable error) {
     return ring(null, (error != null) ? error : new NullPointerException());
   }
 
-  // Used by the other ring methods.
+  /**
+   * Used by the other ring methods. If error is not null, assume failure.
+   *
+   * @param object The object to ring the bell with.
+   * @param error The error to ring the bell with.
+   * @return This bell.
+   */
   private Bell<T> ring(T object, Throwable error) {
     Set<Bell<? super T>> proms;
 
@@ -68,8 +94,14 @@ public class Bell<T> implements Future<T> {
     return this;
   }
 
-  // Cancel the bell, resolving it with a cancellation error. Returns true if
-  // the bell was cancelled as a result of this call, false otherwise.
+  /**
+   * Cancel the bell, resolving it with a cancellation error.
+   *
+   * @param mayInterruptIfRunning Ignored in this implementation.
+   * @return <code>true</code> if the bell was cancelled as a result of this
+   * call, <code>false</code> otherwise.
+   * @see Future#cancel(boolean)
+   */
   public synchronized boolean cancel(boolean mayInterruptIfRunning) {
     if (done)
       return false;
@@ -77,29 +109,33 @@ public class Bell<T> implements Future<T> {
     return true;
   }
 
-  // Return true if this bell was rung with a cancellation exception.
+  /**
+   * @return <code>true</code> if this bell was rung with a cancellation
+   * exception.
+   * @see Future#isCancelled
+   */
   public synchronized boolean isCancelled() {
     if (!done)
       return false;
     return error != null && error instanceof CancellationException;
   }
 
-  // Return true if the bell has been rung.
+  /** Return true if the bell has been rung. */
   public synchronized boolean isDone() {
     return done;
   }
 
-  // Return true if the bell rang successfully.
+  /** Return true if the bell rang successfully. */
   public synchronized boolean isSuccessful() {
     return done && error == null;
   }
 
-  // Return true if the bell failed.
+  /** Return true if the bell failed. */
   public synchronized boolean isFailed() {
     return done && error != null;
   }
 
-  // Wait for the bell to be rung, then return the value.
+  // Wait for the bell to be rung, then return the value. */
   public synchronized T get()
   throws InterruptedException, ExecutionException {
     while (!done)
@@ -107,8 +143,10 @@ public class Bell<T> implements Future<T> {
     return getOrThrow();
   }
 
-  // Wait for the bell to be rung up to the specified time, then return the
-  // value.
+  /**
+   * Wait for the bell to be rung up to the specified time, then return the
+   * value.
+   */
   public synchronized T get(long timeout, TimeUnit unit)
   throws InterruptedException, ExecutionException, TimeoutException {
     if (!done)
@@ -118,7 +156,7 @@ public class Bell<T> implements Future<T> {
     return getOrThrow();
   }
 
-  // Either get the object or throw the wrapped error. Only call if done.
+  /** Either get the object or throw the wrapped error. Only call if done. */
   private T getOrThrow() throws ExecutionException {
     if (error == null)
       return object;
@@ -129,9 +167,11 @@ public class Bell<T> implements Future<T> {
     throw new ExecutionException(error);
   }
 
-  // This is an alternative way of getting the wrapped value that is more
-  // convenient for the caller. It blocks uninterruptably and throws unchecked
-  // exceptions.
+  /**
+   * This is an alternative way of getting the wrapped value that is more
+   * convenient for the caller. It blocks uninterruptably and throws unchecked
+   * exceptions.
+   */
   public synchronized T sync() {
     while (!done) try {
       wait();
@@ -144,26 +184,54 @@ public class Bell<T> implements Future<T> {
     } throw new RuntimeException(error);
   }
 
-  // Subclasses can override these to do something when the bell has been rung.
-  // These will be run before waiting threads are notified. Any exceptions
-  // thrown will be discarded.
-  protected void done() throws Throwable {
-    // Implement this if you don't care about the value.
-  } protected void done(T object) throws Throwable {
-    // Implement this if you want to see the value.
-    done();
-  } protected void fail() throws Throwable {
-    // Implement this if you don't care about the error.
-  } protected void fail(Throwable error) throws Throwable {
-    // Implement this if you want to see the error.
-    fail();
-  } protected void always() throws Throwable {
-    // This will always be run after either done() or fail().
-  }
+  /**
+   * This handler is called when the bell has rung. Subclasses can override
+   * this to do something when the bell has been rung. These will be run before
+   * waiting threads are notified. Any exceptions thrown will be discarded.
+   * Implement this if you don't care about the value.
+   */
+  protected void done() throws Throwable { }
 
-  // Promise to ring another bell when this bell rings. The order promised
-  // bells will be rung is not specified. However, promised bells are
-  // guaranteed to be rung after this bell's handlers have been called.
+  /**
+   * This handler is called when the bell has rung and is passed the rung
+   * value. Subclasses can override this to do something when the bell has been
+   * rung. These will be run before waiting threads are notified. Any
+   * exceptions thrown will be discarded. Implement this if you want to see the
+   * value.
+   */
+  protected void done(T object) throws Throwable { done(); }
+
+  /**
+   * This handler is called when the bell has rung with an exception.
+   * Subclasses can override this to do something when the bell has been rung.
+   * These will be run before waiting threads are notified. Any exceptions
+   * thrown will be discarded. Implement this if you don't care about the
+   * error.
+   */
+  protected void fail() throws Throwable { }
+
+  /**
+   * This handler is called when the bell has rung with an exception, and is
+   * passed the exception. Subclasses can override this to do something
+   * when the bell has been rung. These will be run before waiting threads are
+   * notified. Any exceptions thrown will be discarded. Implement this if you
+   * want to see the error.
+   */
+  protected void fail(Throwable error) throws Throwable { fail(); }
+
+  /**
+   * Subclasses can override this to do something when the bell has been rung.
+   * These will be run before waiting threads are notified. Any exceptions
+   * thrown will be discarded. This will always be run after either {@link
+   * #done(Object)} or {@link #fail(Throwable)}.
+   */
+  protected void always() throws Throwable { }
+
+  /**
+   * Promise to ring another bell when this bell rings. The order promised
+   * bells will be rung is not specified. However, promised bells are
+   * guaranteed to be rung after this bell's handlers have been called.
+   */
   public synchronized Bell<? super T> promise(Bell<? super T> bell) {
     if (bell.isDone()) {
       return bell;  // Don't be silly...
@@ -184,10 +252,28 @@ public class Bell<T> implements Future<T> {
     } return bell;
   }
 
+  /**
+   * Set the deadline of the bell in seconds. The deadline is relative to the
+   * time this method is called. If the bell is not rung in this time, it will
+   * be resolved with a {@link TimeoutException}.
+   *
+   * @param deadline time in seconds after call time that the bell may remain
+   * unresolved
+   */
+  public synchronized void deadline(double deadline) {
+    if (!isDone()) deadlineTimerPool.schedule(new Runnable() {
+      public void run() {
+        ring(new TimeoutException());
+      }
+    }, deadline, TimeUnit.SECONDS);
+  }
+
   // Utility Methods
   // ===============
-  // Used by multi-bells to implement behavior regarding how to handle bells as
-  // they ring. The one bell passed to the handlers will always be rung.
+  /**
+   * Used by multi-bells to implement behavior regarding how to handle bells as
+   * they ring. The one bell passed to the handlers will always be rung.
+   */
   private static abstract class Aggregator<I,O> {
     // Check a value/error, ring the bell if so desired.
     protected void done(Bell<I> one, Bell<O> all) { }
@@ -197,12 +283,14 @@ public class Bell<T> implements Future<T> {
     protected void end(Bell<I> last, Bell<O> all) { }
   }
 
-  // Helper method used by the above methods to create "multi-bells". The
-  // returned bell will be rung whenever, as a result of a pass bell ringing,
-  // the aggregator causes the returned bell to ring. If all the passed bells
-  // ring and the aggregator hasn't rung the returned bell, the aggregator's
-  // end method will be called, which is expected to ring the bell. If it does
-  // not, the returned bell will be rung with null.
+  /**
+   * Helper method used by the above methods to create "multi-bells". The
+   * returned bell will be rung whenever, as a result of a pass bell ringing,
+   * the aggregator causes the returned bell to ring. If all the passed bells
+   * ring and the aggregator hasn't rung the returned bell, the aggregator's
+   * end method will be called, which is expected to ring the bell. If it does
+   * not, the returned bell will be rung with null.
+   */
   private static <I,O> Bell<O> multiBell(
       Collection<Bell<I>> bells, final Aggregator<I,O> agg) {
     final Set<Bell<I>> set = new HashSet<Bell<I>>(bells);
@@ -240,11 +328,19 @@ public class Bell<T> implements Future<T> {
     } return bell;
   }
 
-  // Convenience method for creating a bell which rings when any of the given
-  // bells rings successfully, or fails if they all fail.
+  /**
+   * Convenience method for creating a bell which rings when any of the given
+   * bells rings successfully, or fails if they all fail.
+   */
   public static <V> Bell<Bell<V>> any(Bell<V>... bells) {
     return any(Arrays.asList(bells));
-  } public static <V> Bell<Bell<V>> any(Collection<Bell<V>> bells) {
+  }
+
+  /**
+   * Convenience method for creating a bell which rings when any of the given
+   * bells rings successfully, or fails if they all fail.
+   */
+  public static <V> Bell<Bell<V>> any(Collection<Bell<V>> bells) {
     return multiBell(bells, new Aggregator<V,Bell<V>>() {
       protected void done(Bell<V> one, Bell<Bell<V>> all) {
         all.ring(one);
@@ -254,11 +350,19 @@ public class Bell<T> implements Future<T> {
     });
   }
 
-  // Convenience method for creating a bell which rings when all of the given
-  // bells rings successfully, or fails if any fail.
+  /**
+   * Convenience method for creating a bell which rings when all of the given
+   * bells rings successfully, or fails if any fail.
+   */
   public static <V> Bell<Bell<V>> all(Bell<V>... bells) {
     return all(Arrays.asList(bells));
-  } public static <V> Bell<Bell<V>> all(Collection<Bell<V>> bells) {
+  }
+
+  /**
+   * Convenience method for creating a bell which rings when all of the given
+   * bells rings successfully, or fails if any fail.
+   */
+  public static <V> Bell<Bell<V>> all(Collection<Bell<V>> bells) {
     return multiBell(bells, new Aggregator<V,Bell<V>>() {
       protected void fail(Bell<V> one, Bell<Bell<V>> all) {
         all.ring(one.error);
@@ -268,12 +372,21 @@ public class Bell<T> implements Future<T> {
     });
   }
 
-  // Convenience method for boolean bells that rings with true if any of them
-  // ring with true, or false if all of them ring with false. A failed bell
-  // is considered to have rung with false.
+  /**
+   * Convenience method for boolean bells that rings with true if any of them
+   * ring with true, or false if all of them ring with false. A failed bell
+   * is considered to have rung with false.
+   */
   public static Bell<Boolean> or(Bell<Boolean>... bells) {
     return or(Arrays.asList(bells));
-  } public static Bell<Boolean> or(Collection<Bell<Boolean>> bells) {
+  }
+
+  /**
+   * Convenience method for boolean bells that rings with true if any of them
+   * ring with true, or false if all of them ring with false. A failed bell
+   * is considered to have rung with false.
+   */
+  public static Bell<Boolean> or(Collection<Bell<Boolean>> bells) {
     return multiBell(bells, new Aggregator<Boolean,Boolean>() {
       protected void done(Bell<Boolean> one, Bell<Boolean> all) {
         if (one.sync())
@@ -284,12 +397,21 @@ public class Bell<T> implements Future<T> {
     });
   }
 
-  // Convenience method for boolean bells that rings with true if all of them
-  // ring with true, or false if any of them ring with false. A failed bell
-  // is considered to have rung with false.
+  /**
+   * Convenience method for boolean bells that rings with true if all of them
+   * ring with true, or false if any of them ring with false. A failed bell
+   * is considered to have rung with false.
+   */
   public static Bell<Boolean> and(Bell<Boolean>... bells) {
     return and(Arrays.asList(bells));
-  } public static Bell<Boolean> and(Collection<Bell<Boolean>> bells) {
+  }
+
+  /**
+   * Convenience method for boolean bells that rings with true if any of them
+   * ring with true, or false if all of them ring with false. A failed bell
+   * is considered to have rung with false.
+   */
+  public static Bell<Boolean> and(Collection<Bell<Boolean>> bells) {
     return multiBell(bells, new Aggregator<Boolean,Boolean>() {
       protected void fail(Bell<Boolean> one, Bell<Boolean> all) {
         all.ring(false);

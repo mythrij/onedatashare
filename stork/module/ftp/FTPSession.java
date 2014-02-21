@@ -8,7 +8,7 @@ import stork.module.*;
 import stork.scheduler.*;
 import stork.util.*;
 
-public class FTPSession extends Session {
+public class FTPSession extends FTPResource {
   private transient FTPChannel ch;
 
   // Transient state related to the channel configuration.
@@ -168,7 +168,7 @@ public class FTPSession extends Session {
     sess.tap().attach(new Sink() {
       public void write(Slice s) {
         System.out.println(s);
-      } public void write(ResourceError e) {
+      } public void write(ResourceException e) {
         System.out.println(e);
       }
     });

@@ -1,18 +1,36 @@
 package stork.feather;
 
-// A tap emits data slices to an attached sink.
-
+/**
+ * A tap emits {@link Slice}s to an attached {@link Sink}. The tap should
+ * provide methods for regulating the flow of data (see {@link #cork()} and
+ * {@link #uncork()}) to allow attached sinks to prevent themselves from being
+ * overwhelmed.
+ *
+ * @see Resource
+ * @see Sink
+ * @see Slice
+ */
 public interface Tap {
-  // Attach a sink to the tap. The tap should not begin reading from the
-  // upstream channel until a sink is attached.
-  void attach(Sink s);
+  /**
+   * Attach this tap to a {@link Sink}. One this method is called, the tap may
+   * begin reading data from the upstream channel and emitting {@link Slice}s
+   * to the sink. Until then, the tap should act as though it is corked.
+   *
+   * @param sink a {@link Sink} to attach
+   */
+  void attach(Sink sink);
 
-  // Cork the tap, preventing slices from being emitted until uncork is called.
-  // While corked, the tap should avoid reading from the upstream channel
-  // unless it buffers the data. Calling cork() on a corked tap does nothing.
+  /**
+   * Cork the tap, preventing slices from being emitted until {@link #uncork()}
+   * is called. While corked, the tap should avoid reading from the upstream
+   * channel, unless it buffers the data (which generally not advised). Calling
+   * this method on a corked tap does nothing.
+   */
   void cork();
 
-  // Uncork the tap, resuming emission of slices and reading from the upstream
-  // channel. Calling uncork() on an uncorked tap does nothing.
+  /**
+   * Uncork the tap, resuming emission of slices and reading from the upstream
+   * channel. Calling this method on an uncorked tap does nothing.
+   */
   void uncork();
 }
