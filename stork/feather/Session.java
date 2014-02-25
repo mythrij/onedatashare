@@ -6,7 +6,8 @@ package stork.feather;
  * may be selected. Unlike a {@link Resource}, a {@code Session} is assumed to
  * be stateful and its instantiation represents the establishment of a
  * connection to an endpoint. Generally implementations should implement this
- * interface by extending their own {@link Resource} implementation.
+ * interface by extending their own {@link Resource} implementation and then
+ * implementing this interface's methods.
  */
 public interface Session extends Resource {
   /**

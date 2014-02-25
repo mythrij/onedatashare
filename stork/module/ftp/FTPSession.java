@@ -20,6 +20,10 @@ public class FTPSession extends FTPResource implements Session {
     ch = new FTPChannel(e.uri[0]);
   }
 
+  public static Bell<FTPSession> connect(String uri) {
+    return connect(new Endpoint(uri));
+  }
+
   // Asynchronously establish the session.
   public static Bell<FTPSession> connect(Endpoint e) {
     final Bell<FTPSession> bell = new Bell<FTPSession>();
@@ -120,17 +124,8 @@ public class FTPSession extends FTPResource implements Session {
   }
 
   public static void main(String[] args) {
-    String u = "ftp://didclab-ws8/dev/zero";
-    FTPSession sess = connect(new Endpoint(u)).sync();
-    Transfer.proxy(sess.tap(), new Sink() {
-      public void write(Slice s) {
-        try {
-          System.out.write(s.asBytes());
-        } catch (Exception e) {
-        }
-      } public void write(ResourceException e) {
-        System.out.println(e);
-      }
-    });
+    FTPSession src  = connect("ftp://didclab-ws8/home/globus/.bash_history").sync();
+    FTPSession dest = connect("ftp://didclab-ws8/home/globus/small2.txt").sync();
+    src.transferTo(dest);
   }
 }

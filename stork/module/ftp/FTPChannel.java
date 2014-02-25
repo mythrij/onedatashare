@@ -327,6 +327,7 @@ public class FTPChannel {
   // Handles replies as they are received.
   class ReplyHandler extends SimpleChannelInboundHandler<Reply> {
     public void messageReceived(ChannelHandlerContext ctx, Reply reply) {
+      System.out.println(this+": Got: "+reply);
       switch (reply.code) {
         case 220:
           if (data.welcome == null)
@@ -937,6 +938,9 @@ public class FTPChannel {
     private Throwable error;
     private Bell<FTPHostPort> hpb;
 
+    //private char mode = data.mode.sync();
+    //private char type = data.type.sync();
+
     private volatile Sink sink;
     private volatile boolean corked = false;
 
@@ -950,7 +954,7 @@ public class FTPChannel {
     }
 
     // A handler which passes data to the sink.
-    ChannelHandler handler = new SimpleChannelInboundHandler<ByteBuf>() {
+    ChannelHandler reader = new SimpleChannelInboundHandler<ByteBuf>() {
       public void messageReceived(ChannelHandlerContext ctx, ByteBuf m) {
         if (sink != null) sink.write(new Slice(m));
       } public void exceptionCaught(ChannelHandlerContext ctx, Throwable t) {
@@ -959,6 +963,13 @@ public class FTPChannel {
         if (sink != null) sink.write(new Slice());
       } public void read(ChannelHandlerContext ctx) {
         if (!corked && sink != null) ctx.read();
+      }
+    };
+
+    // A handler which writes slices passed to the sink.
+    ChannelHandler writer = new MessageToMessageEncoder<Slice>() {
+      public void encode(ChannelHandlerContext ctx, Slice msg, List out) {
+        out.add(msg.plain().raw());
       }
     };
 
@@ -972,7 +983,8 @@ public class FTPChannel {
         boot.handler(new ChannelInitializer<SocketChannel>() {
           public void initChannel(SocketChannel ch) throws Exception {
             ch.config().setConnectTimeoutMillis(timeout);
-            ch.pipeline().addLast("handler", handler);
+            ch.pipeline().addLast("reader", reader);
+            ch.pipeline().addLast("writer", writer);
           }
         });
 
@@ -1007,7 +1019,11 @@ public class FTPChannel {
 
     // Write a passed slice to the channel.
     public synchronized void write(Slice s) {
-      channel().write(s.plain().raw());
+      if (s.isEmpty())
+        channel().close();
+      else
+        channel().writeAndFlush(s);
+      System.out.println("Writing: "+s);
     } public synchronized void write(ResourceException e) {
       // TODO
     }
@@ -1018,14 +1034,5 @@ public class FTPChannel {
         throw new RuntimeException(error);
       return future.syncUninterruptibly().channel();
     }
-  }
-
-  public static void main(String[] args) throws Exception {
-    FTPChannel ch = new FTPChannel("ftp://didclab-ws8/");
-    ch.authorize().sync();
-    //GSSCredential cred =
-      //StorkGSSCred.fromFile("/tmp/x509up_u1000").credential();
-    //ch.authenticate(cred);
-    ch.new Command("MLSC /").sync();
   }
 }
