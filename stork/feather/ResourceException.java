@@ -18,7 +18,7 @@ public class ResourceException extends RuntimeException {
    */
   public ResourceException(Resource resource, Throwable error) {
     super(error);
-    resource = r;
+    this.resource = resource;
   }
 
   /**

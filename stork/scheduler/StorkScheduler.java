@@ -192,7 +192,7 @@ public class StorkScheduler {
       try {
         Endpoint ep = req.ad.unmarshalAs(Endpoint.class);
         sess = ep.session();
-        sess.mkdir(ep.path());
+        sess.mkdir();
         return new Ad("message", "Success!");
       } finally {
         if (sess != null) sess.close();
@@ -210,7 +210,7 @@ public class StorkScheduler {
       try {
         Endpoint ep = req.ad.unmarshalAs(Endpoint.class);
         sess = ep.session();
-        sess.rm(ep.path());
+        sess.rm();
         return new Ad("message", "Success!");
       } finally {
         if (sess != null) sess.close();
@@ -229,7 +229,7 @@ public class StorkScheduler {
         Endpoint ep = req.ad.unmarshalAs(Endpoint.class);
         sess = ep.session();
         //return Ad.marshal(sess.list(ep.path(), req.ad).get());
-        return Ad.marshal(sess.stat(ep.path()).sync());
+        return Ad.marshal(sess.stat().sync());
       } finally {
         if (sess != null) sess.close();
       }

@@ -55,6 +55,21 @@ public class Slice {
     return bytes;
   }
 
+  /**
+   * Return the raw data wrapped by the slice as a byte array.
+   *
+   * @return the raw data as a byte array
+   */
+  public final byte[] asBytes() {
+    ByteBuf raw = raw();
+    byte[] bytes;
+    if (raw.hasArray())
+      bytes = raw.array();
+    else
+      raw.getBytes(0, bytes = new byte[raw.readableBytes()]);
+    return bytes;
+  }
+
   // An empty slice indicates the associated resource is finished transferring
   // and no further slices will be emitted for that resource.
   public boolean isEmpty() {

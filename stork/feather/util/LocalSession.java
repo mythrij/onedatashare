@@ -7,17 +7,16 @@ import stork.feather.*;
  * A "connection" to the local file system, used for testing Feather
  * implementations.
  */
-public abstract class LocalSession extends Session {
+/*
+public abstract class LocalSession extends LocalResource {
   private final File root;
 
-  /** Create a local session with a root relative to the given path. */
   public LocalSession(String u) {
     super(URI.create("file:"+u));
     root = new File(u);
   }
 
-  /** Get a directory listing of a path from the session. */
-  public Bell<Stat> stat(String path) {
+  public abstract Bell<Stat> stat(String path) {
     File f = new File(root, path);
     return null;
   }
@@ -32,21 +31,17 @@ public abstract class LocalSession extends Session {
   // disallowing any further interaction, and begin the closing procedure
   // asynchronously. The cleanup should try to happen as quickly and quietly as
   // possible.
-  public abstract void close();
+  public abstract Bell<Void> close();
 
   // Create an identical session with the same settings.
   //public abstract Session duplicate();
 
   // Return a tap to the resource returned by selecting the root URI.
-  public Tap tap() {
-    return select(uri).tap();
-  }
+  public abstract Bell<Tap> tap();
 
   // Return a sink to the resource returned by selecting the root URI.
-  public Sink sink() {
+  public abstract Bell<Sink> sink() {
     return select(uri).sink();
   }
-
-  // Return a resource object representing the referent of the given URI.
-  public abstract Resource select(URI uri);
 }
+*/

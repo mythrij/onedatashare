@@ -91,8 +91,8 @@ public class FTPListParser extends Bell<Stat> implements Sink {
     } ring(root.setFiles(files));
   }
 
-  public void write(ResourceError err) {
-    ring(err.error);
+  public void write(ResourceException err) {
+    ring(err.getCause());
   }
 
   // Write a byte buffer to the file, decode as string, scan for newlines, and

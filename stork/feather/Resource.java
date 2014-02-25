@@ -70,12 +70,17 @@ public interface Resource {
   /**
    * Select a subresource relative to this resource.
    */
+  //Resource select(Path path);
 
   /**
-   * Called by client code to initiate a transfer using whatever method is
-   * deemed most appropriate by the implementation. The implementation should
-   * try to transfer the resource as efficiently as possible, as so should 
+   * Called by client code to initiate a transfer to the named {@link Resource}
+   * using whatever method is deemed most appropriate by the implementation.
+   * The implementation should try to transfer the resource as efficiently as
+   * possible, as so should inspect the destination resource to determine if
+   * more efficient alternatives to proxy transferring can be done. This method
+   * should perform a proxy transfer as a catch-all last resort.
    *
+   * @param resource the destination resource to transfer this resource to
    * @return (via bell) a {@link Transfer} on success; the returned {@code
    * Transfer} object can be used to control and monitor the transfer
    * @throws ResourceException (via bell) if the transfer fails
@@ -83,7 +88,7 @@ public interface Resource {
    * supported by one of the resources
    * @see Bell
    */
-  Bell<Transfer> transferTo(Resource r);
+  Bell<Transfer> transferTo(Resource resource);
 
   /**
    * Open a sink to the resource. Any connection operation, if necessary,
@@ -103,7 +108,7 @@ public interface Resource {
    * begin, as soon as this method is called. The returned bell should be rung
    * once the tap is ready to emit data.
    *
-   * @return (via bell) a tap which emit slices from this resource and its
+   * @return (via bell) a tap which emits slices from this resource and its
    * subresources
    * @throws ResourceException (via bell) if opening the tap fails
    * @throws UnsupportedOperationException if the resource does not support

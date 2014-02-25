@@ -1,24 +1,33 @@
 package stork.feather;
 
-// A handle on the state of a data transfer.
+/**
+ * A handle on the state of a data transfer.
+ */
 
 public abstract class Transfer {
-  public static TransferFrom from(Resource resource) {
-    return from(resource.tap());
-  } public static TransferFrom from(Tap tap) {
-    return new TransferFrom(tap);
+  public static Bell<Transfer> proxy(Resource src, Resource dest) {
+    return proxy(src.tap(), dest.sink());
   }
-}
-
-class TransferFrom {
-  Tap tap;
-  public TransferFrom(Tap tap) {
-    this.tap = tap;
-  } public Transfer to(Resource resource) {
-    return to(resource.sink());
-  } public Transfer to(Sink sink) {
-    // TODO
-    tap.attach(sink);
-    return null;
+  public static Bell<Transfer> proxy(Tap tap, Sink sink) {
+    return proxy(new Bell<Tap>().ring(tap), new Bell<Sink>().ring(sink));
+  }
+  public static Bell<Transfer> proxy(Tap tap, Bell<Sink> sink) {
+    return proxy(new Bell<Tap>().ring(tap), sink);
+  }
+  public static Bell<Transfer> proxy(Bell<Tap> tap, Sink sink) {
+    return proxy(tap, new Bell<Sink>().ring(sink));
+  }
+  public static Bell<Transfer> proxy(
+      final Bell<Tap> tap, final Bell<Sink> sink) {
+    final Bell<Transfer> bell = new Bell<Transfer>();
+    new Bell.All(tap, sink) {
+      public void done() {
+        tap.sync().attach(sink.sync());
+        bell.ring(new Transfer() { });  // TODO
+      } public void fail(Throwable t) {
+        bell.ring(t);
+      }
+    };
+    return bell;
   }
 }

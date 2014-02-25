@@ -260,164 +260,158 @@ public class Bell<T> implements Future<T> {
    * @param deadline time in seconds after call time that the bell may remain
    * unresolved
    */
-  public synchronized void deadline(double deadline) {
+  public synchronized Bell<T> deadline(double deadline) {
     if (!isDone()) deadlineTimerPool.schedule(new Runnable() {
       public void run() {
         ring(new TimeoutException());
       }
-    }, deadline, TimeUnit.SECONDS);
-  }
-
-  // Utility Methods
-  // ===============
-  /**
-   * Used by multi-bells to implement behavior regarding how to handle bells as
-   * they ring. The one bell passed to the handlers will always be rung.
-   */
-  private static abstract class Aggregator<I,O> {
-    // Check a value/error, ring the bell if so desired.
-    protected void done(Bell<I> one, Bell<O> all) { }
-    protected void fail(Bell<I> one, Bell<O> all) { }
-    protected void always(Bell<I> one, Bell<O> all) { }
-    // The default result if the bell is not rung by the above.
-    protected void end(Bell<I> last, Bell<O> all) { }
+    }, (long)(deadline * 1E6), TimeUnit.MICROSECONDS);
+    return this;
   }
 
   /**
-   * Helper method used by the above methods to create "multi-bells". The
-   * returned bell will be rung whenever, as a result of a pass bell ringing,
-   * the aggregator causes the returned bell to ring. If all the passed bells
-   * ring and the aggregator hasn't rung the returned bell, the aggregator's
-   * end method will be called, which is expected to ring the bell. If it does
-   * not, the returned bell will be rung with null.
+   * Base class for bells whose resolution value depends on the resolution
+   * values of a collection of other bells. Every time a wrapped bell rings,
+   * the method {@link MultiBell#check(Bell)} is called, which should return
+   * {@code true} if the passed bell should ring the multi-bell. If all the
+   * passed bells have rung and {@link MultiBell#check(Bell)} hasn't rung this
+   * bell, {@link MultiBell#end(Bell)} will be called, and is passed the last
+   * bell to ring.  If it does not ring the bell, this bell will be rung with
+   * {@code null}.
+   *
+   * The default implementation rings with {@code null} when all of the wrapped
+   * bells have rung.
+   *
+   * @param <I> the type of this {@code MultiBell}'s input bells
    */
-  private static <I,O> Bell<O> multiBell(
-      Collection<Bell<I>> bells, final Aggregator<I,O> agg) {
-    final Set<Bell<I>> set = new HashSet<Bell<I>>(bells);
-    final Bell<O> bell = new Bell<O>();
-    if (bells.isEmpty()) {
-      agg.end(null, bell);
-      if (!bell.isDone())
-        bell.ring();
-      return bell;
-    } for (final Bell<I> b : bells) {
-      b.promise(new Bell<I>() {
-        protected void always() {
-          synchronized (bell) {
-            if (bell.isDone()) return;
+  public static class MultiBell<I> extends Bell<I> {
+    private final Set<Bell<I>> set;
 
-            // Check with the aggregator.
-            if (b.isSuccessful())
-              agg.done(b, bell);
-            else if (b.isFailed())
-              agg.fail(b, bell);
-            agg.always(b, bell);
+    /**
+     * Create a multi-bell which will ring when either all of {@code bells} have
+     * rung or {@link #check(Bell)} causes this bell to ring.
+     *
+     * @param bells the bells to aggegate
+     */
+    protected MultiBell(Bell<I>... bells) {
+      this(Arrays.asList(bells));
+    }
 
-            // Remove from the set. If done, run end().
-            if (bell.isDone()) return;
+    /**
+     * Create a multi-bell which will ring when either all of {@code bells} have
+     * rung or {@link #check(Bell)} causes this bell to ring.
+     *
+     * @param bells the bells to aggegate
+     */
+    protected MultiBell(Collection<Bell<I>> bells) {
+      set = new HashSet<Bell<I>>(bells);
+
+      if (bells.isEmpty()) {
+        // Degenerate case...
+        nonThrowingCheck(null);
+        if (!isDone()) ring();
+      } else for (final Bell<I> b : bells) {
+        b.promise(new Bell<I>() {
+          protected void always() {
             set.remove(b);
-            if (set.isEmpty()) {
-              agg.end(b, bell);
-              if (!bell.isDone()) bell.ring();
+            synchronized (MultiBell.this) {
+              if (!MultiBell.this.isDone()) 
+                nonThrowingCheck(b);
+              if (!MultiBell.this.isDone() && isLast())
+                MultiBell.this.ring();
             }
           }
-        }
-      });
-      if (bell.isDone())
-        break;
-    } return bell;
-  }
-
-  /**
-   * Convenience method for creating a bell which rings when any of the given
-   * bells rings successfully, or fails if they all fail.
-   */
-  public static <V> Bell<Bell<V>> any(Bell<V>... bells) {
-    return any(Arrays.asList(bells));
-  }
-
-  /**
-   * Convenience method for creating a bell which rings when any of the given
-   * bells rings successfully, or fails if they all fail.
-   */
-  public static <V> Bell<Bell<V>> any(Collection<Bell<V>> bells) {
-    return multiBell(bells, new Aggregator<V,Bell<V>>() {
-      protected void done(Bell<V> one, Bell<Bell<V>> all) {
-        all.ring(one);
-      } protected void end(Bell<V> one, Bell<Bell<V>> all) {
-        all.ring(one.error);
+        });
+        if (isDone()) break;  // See if we can stop early.
       }
-    });
+    }
+
+    private void nonThrowingCheck(Bell<I> one) {
+      try {
+        check(one);
+      } catch (Throwable t) { }
+    }
+
+    /**
+     * A method which is called every time a wrapped bell rings, and may ring
+     * this bell. Any exception this method throws is ignored.
+     *
+     * @param one a bell which has just rung, or {@code null} if the wrapped
+     * set is empty
+     * @throws Throwable arbitrary exception; should be ignored by caller
+     */
+    protected void check(Bell<I> one) throws Throwable { }
+
+    /**
+     * Used inside {@link #check(boolean)} to determine if all the bells have
+     * rung.
+     *
+     * @return {@code true} if all the bells have rung; {@code false} otherwise
+     */
+    protected final synchronized boolean isLast() {
+      return set.isEmpty();
+    }
   }
 
   /**
-   * Convenience method for creating a bell which rings when all of the given
-   * bells rings successfully, or fails if any fail.
+   * A bell which rings when the first of the given bells rings successfully,
+   * or else fails if they all fail. The value of this bell is the value of the
+   * first bell which rang successfully.
    */
-  public static <V> Bell<Bell<V>> all(Bell<V>... bells) {
-    return all(Arrays.asList(bells));
+  public static class Any<V> extends MultiBell<V> {
+    public Any(Bell<V>... bells) { super(bells); }
+    public Any(Collection<Bell<V>> bells) { super(bells); }
+    /** Ring when the first bell rings successfully. */
+    protected void check(Bell<V> one) {
+      if (one != null && (one.isSuccessful() || isLast()))
+        one.promise(this);
+    }
   }
 
   /**
-   * Convenience method for creating a bell which rings when all of the given
-   * bells rings successfully, or fails if any fail.
+   * A bell which rings when all of the given bells rings successfully, or
+   * fails if any fail. The value of this bell is the value of the last bell
+   * which rang successfully.
    */
-  public static <V> Bell<Bell<V>> all(Collection<Bell<V>> bells) {
-    return multiBell(bells, new Aggregator<V,Bell<V>>() {
-      protected void fail(Bell<V> one, Bell<Bell<V>> all) {
-        all.ring(one.error);
-      } protected void end(Bell<V> one, Bell<Bell<V>> all) {
-        all.ring(one);
-      }
-    });
+  public static class All<V> extends MultiBell<V> {
+    public All(Bell<V>... bells) { super(bells); }
+    public All(Collection<Bell<V>> bells) { super(bells); }
+    /** Fail if any bell fails. */
+    protected void check(Bell<V> one) {
+      if (one != null && (one.isFailed() || isLast()))
+        one.promise(this);
+    }
   }
 
   /**
-   * Convenience method for boolean bells that rings with true if any of them
-   * ring with true, or false if all of them ring with false. A failed bell
-   * is considered to have rung with false.
+   * A bell which rings with true if any of the wrapped bells ring with true,
+   * or false if all of them ring with false. A failed bell is considered to
+   * have rung with false.
    */
-  public static Bell<Boolean> or(Bell<Boolean>... bells) {
-    return or(Arrays.asList(bells));
+  public static class Or extends MultiBell<Boolean> {
+    public Or(Bell<Boolean>... bells) { super(bells); }
+    public Or(Collection<Bell<Boolean>> bells) { super(bells); }
+    /** If true, ring with true. */
+    protected void check(Bell<Boolean> one) {
+      if (one == null || one.object)
+        ring(true);
+    }
   }
 
   /**
-   * Convenience method for boolean bells that rings with true if any of them
-   * ring with true, or false if all of them ring with false. A failed bell
-   * is considered to have rung with false.
+   * A bell which rings with {@code true} if all of the wrapped bells ring with
+   * {@code true}, or false if any of them ring with {@code false}. A failed
+   * bell is considered to have rung with {@code false}.
    */
-  public static Bell<Boolean> or(Collection<Bell<Boolean>> bells) {
-    return multiBell(bells, new Aggregator<Boolean,Boolean>() {
-      protected void done(Bell<Boolean> one, Bell<Boolean> all) {
-        if (one.sync())
-          all.ring(true);
-      } protected void end(Bell<Boolean> one, Bell<Boolean> all) {
-        all.ring(one == null);
-      }
-    });
-  }
-
-  /**
-   * Convenience method for boolean bells that rings with true if all of them
-   * ring with true, or false if any of them ring with false. A failed bell
-   * is considered to have rung with false.
-   */
-  public static Bell<Boolean> and(Bell<Boolean>... bells) {
-    return and(Arrays.asList(bells));
-  }
-
-  /**
-   * Convenience method for boolean bells that rings with true if any of them
-   * ring with true, or false if all of them ring with false. A failed bell
-   * is considered to have rung with false.
-   */
-  public static Bell<Boolean> and(Collection<Bell<Boolean>> bells) {
-    return multiBell(bells, new Aggregator<Boolean,Boolean>() {
-      protected void fail(Bell<Boolean> one, Bell<Boolean> all) {
-        all.ring(false);
-      } protected void end(Bell<Boolean> one, Bell<Boolean> all) {
-        all.ring(one == null);
-      }
-    });
+  public static class And extends MultiBell<Boolean> {
+    public And(Bell<Boolean>... bells) { super(bells); }
+    public And(Collection<Bell<Boolean>> bells) { super(bells); }
+    /** If true, ring with true. */
+    protected void check(Bell<Boolean> one) {
+      if (one == null)
+        ring(true);
+      if (one.isFailed() || !one.object)
+        ring(false);
+    }
   }
 }

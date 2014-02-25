@@ -641,9 +641,9 @@ public class FTPChannel {
       bs.add(supports(c));
     return bs;
   } public Bell<Boolean> supportsAny(String... cmd) {
-    return Bell.or(supportsMulti(cmd));
+    return new Bell.Or(supportsMulti(cmd));
   } public Bell<Boolean> supportsAll(String... cmd) {
-    return Bell.and(supportsMulti(cmd));
+    return new Bell.And(supportsMulti(cmd));
   }
 
   // Append the given command to the handler queue. If the command is a sync
@@ -954,7 +954,7 @@ public class FTPChannel {
       public void messageReceived(ChannelHandlerContext ctx, ByteBuf m) {
         if (sink != null) sink.write(new Slice(m));
       } public void exceptionCaught(ChannelHandlerContext ctx, Throwable t) {
-        if (sink != null) sink.write(new ResourceError(null, t));
+        if (sink != null) sink.write(new ResourceException(null, t));
       } public void channelInactive(ChannelHandlerContext ctx) {
         if (sink != null) sink.write(new Slice());
       } public void read(ChannelHandlerContext ctx) {
@@ -986,6 +986,13 @@ public class FTPChannel {
       }
     };
 
+    /**
+     * Get a bell that will ring when the channel is ready.
+     */
+    public Bell<? super DataChannel> bell() {
+      return new Bell<DataChannel>().ring(this);
+    }
+
     // Attach a sink to the tap.
     public synchronized void attach(Sink s) {
       sink = s;
@@ -1001,7 +1008,7 @@ public class FTPChannel {
     // Write a passed slice to the channel.
     public synchronized void write(Slice s) {
       channel().write(s.plain().raw());
-    } public synchronized void write(ResourceError e) {
+    } public synchronized void write(ResourceException e) {
       // TODO
     }
 

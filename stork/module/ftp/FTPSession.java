@@ -8,8 +8,8 @@ import stork.module.*;
 import stork.scheduler.*;
 import stork.util.*;
 
-public class FTPSession extends FTPResource {
-  private transient FTPChannel ch;
+public class FTPSession extends FTPResource implements Session {
+  transient FTPChannel ch;
 
   // Transient state related to the channel configuration.
   private transient boolean mlstOptsAreSet = false;
@@ -115,59 +115,19 @@ public class FTPSession extends FTPResource {
   }
 
   // Close the session and free any resources.
-  public void close() {
-    //ch.close();
-  }
-
-  // Select a resource given the path part of the URI.
-  public Resource select(final URI uri) {
-    return new Resource(uri) {
-      public Session session() {
-        return FTPSession.this;
-      }
-
-      // Detect if we're able to do a third-party transfer. If not, just do a
-      // proxy transfer.
-      public Transfer transferTo(Resource r) {
-        return super.transferTo(r);
-      }
-
-      public Sink sink() {
-        return ch.new DataChannel() {{
-          new Command("STOR", uri.path());
-          unlock();
-        }};
-      }
-
-      public Tap tap() {
-        return ch.new DataChannel() {{
-          new Command("RETR", uri.path());
-          unlock();
-        }};
-      }
-    };
-  }
-
-  // Open a tap to the session root.
-  public Tap tap() {
-    return select(uri).tap();
-  }
-
-  // Open a sink to the session root.
-  public Sink sink() {
-    return select(uri).sink();
-  }
-
-  // Throws an error if the session is closed.
-  private void checkSession() {
+  public Bell<Void> close() {
+    return new Bell<Void>().ring();
   }
 
   public static void main(String[] args) {
-    String u = "ftp://didclab-ws8/dev/urandom";
+    String u = "ftp://didclab-ws8/dev/zero";
     FTPSession sess = connect(new Endpoint(u)).sync();
-    sess.tap().attach(new Sink() {
+    Transfer.proxy(sess.tap(), new Sink() {
       public void write(Slice s) {
-        System.out.println(s);
+        try {
+          System.out.write(s.asBytes());
+        } catch (Exception e) {
+        }
       } public void write(ResourceException e) {
         System.out.println(e);
       }
