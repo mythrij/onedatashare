@@ -25,7 +25,7 @@ import java.util.*;
 public class HttpInterface extends StorkInterface {
   private final boolean https;
 
-  public HttpInterface(StorkScheduler s, URI uri) {
+  public HttpInterface(Scheduler s, URI uri) {
     super(s, uri);
     https = "https".equalsIgnoreCase(uri.getScheme());
     name = https ? "HTTPS" : "HTTP";
@@ -65,7 +65,7 @@ public class HttpInterface extends StorkInterface {
   }
 
   // Check that the handler allows the method.
-  private boolean checkMethod(HttpMethod m, StorkScheduler.CommandHandler h) {
+  private boolean checkMethod(HttpMethod m, Scheduler.CommandHandler h) {
     return m.equals(POST) || m.equals(GET) && !h.affectsState();
   }
 
@@ -89,7 +89,7 @@ public class HttpInterface extends StorkInterface {
   private class HttpAdDecoder extends MessageToMessageDecoder<HttpObject> {
     private HttpRequest head;  // Current request header.
     private HttpContent body;  // Current content body.
-    private StorkScheduler.CommandHandler handler;
+    private Scheduler.CommandHandler handler;
     private String command;
     private Ad ad = new Ad();
     private long len = 0;

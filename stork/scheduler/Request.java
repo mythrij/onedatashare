@@ -11,7 +11,7 @@ public class Request extends Bell<Ad> {
   public final Ad ad;
   public final String cmd;
   public User user;
-  public StorkScheduler.CommandHandler handler;
+  public Scheduler.CommandHandler handler;
   private Ad reply = null;
 
   public Request(Ad ad) {

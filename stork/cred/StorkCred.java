@@ -21,7 +21,7 @@ public abstract class StorkCred<O> extends Credential<O> {
 
   // Retrieve a credential by UUID.
   public static StorkCred unmarshal(String uuid) {
-    return StorkScheduler.instance().creds.getCred(uuid);
+    return Scheduler.instance().creds.getCred(uuid);
   }
 
   // Get or set the name.

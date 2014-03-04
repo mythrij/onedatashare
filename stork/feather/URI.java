@@ -669,6 +669,31 @@ public abstract class URI {
     return string;
   }
 
+  /**
+   * Test this URI for equivalence to another object. A URI is equivalent to
+   * another URI if they are component-wise equal.
+   *
+   * @param object the object to test equivalence with
+   * @return {@code true} if this URI is equivalent to {@code object}; {@code
+   * false} otherwise.
+   */
+  public boolean equals(Object object) {
+    if (!(object instanceof URI))
+      return false;
+    URI u = (URI) object;
+    return toString().equals(u.toString());
+  }
+
+  /**
+   * Generate a hash code for this URI. A URI's hash code should be the same as
+   * the hash code of its string representation.
+   *
+   * @return A hash code for this URI.
+   */
+  public int hashCode() {
+    return toString().hashCode();
+  }
+
   public static void main(String args[]) {
     URI u = URI.create("ftp://google.com/thing/a/b/c?stuff#more");
     System.out.println(u);

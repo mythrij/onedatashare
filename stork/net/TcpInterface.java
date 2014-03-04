@@ -14,7 +14,7 @@ import java.net.*;
 // Basic TCP interface.
 
 public class TcpInterface extends StorkInterface {
-  public TcpInterface(StorkScheduler s, URI uri) {
+  public TcpInterface(Scheduler s, URI uri) {
     super(s, uri);
     name = "TCP";
   }
