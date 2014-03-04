@@ -129,6 +129,69 @@ public class FTPSession extends FTPResource implements Session {
     return new Bell<Void>().ring();
   }
 
+  // Select a resource given the path part of the URI.
+  public Resource select(final URI uri) {
+    return new Resource(uri) {
+      public Session session() {
+        return FTPSession.this;
+      }
+
+      // Transfer this resource to another resource, doing third-party
+      // connectivity detection first.
+      public Transfer transferTo(Resource r) {
+        // If we know for sure we can't do third-party with the given session,
+        // do a proxy transfer.
+        if (cannotDoThirdParty(r.session())
+          return super.transferTo(r);
+
+        // Otherwise, try to establish a third-party connection and transfer
+        // like that.
+        final FTPSession other = r.session();
+        return ch.new ThirdPartyTransfer(other) {
+          public void done() {
+            ch.new Command("STOR");
+          } public void fail() {
+            assume(Transfer.from(tap()).to(sink()));
+          }
+        };
+      }
+
+      public Sink sink() {
+        return ch.new DataChannel() {{
+          new Command("STOR", uri.path());
+          unlock();
+        }};
+      }
+
+      public Tap tap() {
+        return ch.new DataChannel() {{
+          new Command("RETR", uri.path());
+          unlock();
+        }};
+      }
+    };
+  }
+
+  // Return true if we know we definitely can't do a third-party transfer to
+  // the given session. Currently we can only do third-party transfers with
+  // another FTPSession.
+  private boolean cannotDoThirdParty(Session s) {
+    return s instanceof FTPSession;
+  }
+
+  // Open a tap to the session root.
+  public Tap tap() {
+    return select(uri).tap();
+  }
+
+  // Open a sink to the session root.
+  public Sink sink() {
+    return select(uri).sink();
+  }
+
+  // Throws an error if the session is closed.
+  private void checkSession() { }
+
   public static void main(String[] args) {
     FTPSession src  = connect("ftp://didclab-ws8/home/globus/.bash_history").sync();
     FTPSession dest = connect("ftp://didclab-ws8/home/globus/small2.txt").sync();
