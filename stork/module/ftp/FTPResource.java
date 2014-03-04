@@ -31,7 +31,7 @@ public class FTPResource implements Resource {
   protected FTPResource(FTPSession session, String path) {
     this.session = session;
     //uri = session.uri().append(path);
-    uri = URI.create(session.uri()+path);
+    uri = session.uri();
   }
 
   public FTPSession session() {
@@ -43,15 +43,15 @@ public class FTPResource implements Resource {
   }
 
   public Bell<Stat> stat() {
-    return session.stat(uri.path());
+    return session.stat(uri.path().toString());
   }
 
   public Bell<Void> mkdir() {
-    return session.mkdir(uri.path());
+    return session.mkdir(uri.path().toString());
   }
 
   public Bell<Void> rm() {
-    return session.rm(uri.path());
+    return session.rm(uri.path().toString());
   }
 
   /**

@@ -17,7 +17,7 @@ public interface Session extends Resource {
    * possible. A {@link Bell} should be returned which rings when cleanup has
    * completed.
    *
-   * @return (via bell) {@code null}
+   * @return (via bell) {@code null}, once closing has completed.
    */
   Bell<Void> close();
 

@@ -67,9 +67,9 @@ public abstract class TransferModule {
   }
 
   // Create a new session capable of interacting with a URI.
-  public Session session(String... uri) {
+  public Session session(String uri) {
     return session(new Endpoint(uri));
-  } public Session session(URI... uri) {
+  } public Session session(URI uri) {
     return session(new Endpoint(uri));
   } public abstract Session session(Endpoint e);
 

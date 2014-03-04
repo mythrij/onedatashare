@@ -1,6 +1,5 @@
 package stork.scheduler;
 
-import java.net.URI;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -166,10 +165,6 @@ public class StorkJob {
       thread = Thread.currentThread();
     }
 
-    // Check that only one destination was given.
-    if (dest.uri().length != 1)
-      throw new RuntimeException("Only one destination may be specified.");
-
     Session ss = src.session();
     Session ds = dest.session();
 
@@ -191,8 +186,8 @@ public class StorkJob {
 
   // Do the transfer using the given sessions.
   private void doTransfer(final Session ss, final Session ds) {
-    URI su = src.uri()[0].uri;
-    URI du = dest.uri()[0].uri;
+    URI su = src.uri;
+    URI du = dest.uri;
 
     //ss.select(su).sendTo(ds.select(du));
   }

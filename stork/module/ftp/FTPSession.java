@@ -16,32 +16,38 @@ public class FTPSession extends FTPResource implements Session {
 
   // Create an FTP session given the passed endpoint.
   private FTPSession(Endpoint e) {
-    super(e.uri[0]);
-    ch = new FTPChannel(e.uri[0]);
+    super(e.uri);
+    ch = new FTPChannel(e.uri);
   }
 
+  // Asynchronously establish the session.
   public static Bell<FTPSession> connect(String uri) {
     return connect(new Endpoint(uri));
   }
 
-  // Asynchronously establish the session.
   public static Bell<FTPSession> connect(Endpoint e) {
     final Bell<FTPSession> bell = new Bell<FTPSession>();
     final FTPSession sess = new FTPSession(e);
     String user = "anonymous";
     String pass = "";
 
-    if (e.cred == null) {
+    // Pull userinfo from URI.
+    if (e.uri.username() != null)
+      user = e.uri.username();
+    if (e.uri.password() != null)
+      pass = e.uri.password();
+
+    if (e.credential == null) {
       // Do nothing.
-    } else if (e.cred instanceof StorkGSSCred) try {
-      StorkGSSCred cred = (StorkGSSCred) e.cred;
+    } else if (e.credential instanceof StorkGSSCred) try {
+      StorkGSSCred cred = (StorkGSSCred) e.credential;
       sess.ch.authenticate(cred.data()).sync();
       user = ":globus-mapping:";  // FIXME: This is GridFTP-specific.
     } catch (Exception ex) {
       // Couldn't authenticate with the given credentials...
       throw new RuntimeException(ex);
-    } else if (e.cred instanceof StorkUserinfo) {
-      StorkUserinfo cred = (StorkUserinfo) e.cred;
+    } else if (e.credential instanceof StorkUserinfo) {
+      StorkUserinfo cred = (StorkUserinfo) e.credential;
       user = cred.getUser();
       pass = cred.getPass();
     }

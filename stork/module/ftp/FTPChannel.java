@@ -19,6 +19,7 @@ import org.ietf.jgss.*;
 import org.gridforum.jgss.*;
 
 import stork.feather.*;
+import stork.feather.URI;
 import stork.util.*;
 
 // An abstraction of an FTP control channel. This class takes care of command
@@ -77,9 +78,9 @@ public class FTPChannel {
   Deque<Deferred> deferred = new ArrayDeque<Deferred>();
 
   public FTPChannel(String uri) {
-    this(new stork.feather.URI(uri));
-  } public FTPChannel(stork.feather.URI uri) {
-    this(uri.uri.getScheme(), uri.uri.getHost(), null, uri.uri.getPort());
+    this(URI.create(uri));
+  } public FTPChannel(URI uri) {
+    this(uri.protocol(), uri.host(), null, uri.port());
   } public FTPChannel(String host, int port) {
     this(null, host, null, port);
   } public FTPChannel(InetAddress addr, int port) {
