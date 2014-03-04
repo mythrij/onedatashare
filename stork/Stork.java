@@ -34,6 +34,8 @@ public class Stork extends Command {
     public URI[] listen = null;
 
     public boolean registration = false;
+
+    public double request_timeout = 5.0;
   }
 
   // Try to get the version and build time from the build tag.

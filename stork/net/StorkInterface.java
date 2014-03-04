@@ -94,8 +94,12 @@ extends ChannelInitializer<Channel> {
     public void channelRead(final ChannelHandlerContext ctx, Object o)
     throws Exception {
       sched.putRequest(new Request((Ad)o) {
-        protected void done(Ad ad) {
-          ctx.writeAndFlush(ad);
+        protected void done(Object object) {
+          if (object == null)
+            ctx.writeAndFlush(
+              new Ad("message", "Operation completed successfully."));
+          else
+            ctx.writeAndFlush(Ad.marshal(object));
         } protected void fail(Throwable t) {
           String m = t.getMessage();
           if (m == null) m = "unknown error";

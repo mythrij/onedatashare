@@ -5,9 +5,10 @@ import stork.feather.*;
 import stork.user.*;
 import java.util.*;
 
-// Represents a client request to be handled.
-
-public class Request extends Bell<Ad> {
+/**
+ * Represents a client request to be handled.
+ */
+public class Request extends Bell<Object> {
   public final Ad ad;
   public final String cmd;
   public User user;
