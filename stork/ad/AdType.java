@@ -107,8 +107,8 @@ class AdType {
     return asArray(new int[dim]).getClass();
   }
 
-  // Get the generic parameters of the type. Returns a zero-length array
-  // if the type has no generic parameters.
+  // Get the generic parameters of the type. Returns a zero-length array if the
+  // type has no generic parameters.
   protected AdType[] generics() {
     return wrap(rawGenerics());
   } private Type[] rawGenerics() {
@@ -133,11 +133,16 @@ class AdType {
   }
 
   // Wrap an array of types.
-  private AdType[] wrap(Type[] types) {
+  protected AdType[] wrap(Type[] types) {
+    return wrap(this, types);
+  }
+
+  protected static AdType[] wrap(AdType parent, Type[] types) {
     AdType[] arr = new AdType[types.length];
-    for (int i = 0; i < types.length; i++)
-      arr[i] = new AdType(types[i]).parent(this);
-    return arr;
+    for (int i = 0; i < types.length; i++) {
+      arr[i] = new AdType(types[i]);
+      if (parent != null) arr[i].parent(parent);
+    } return arr;
   }
 
   // If this an array, get the component type. Otherwise null.
@@ -152,18 +157,33 @@ class AdType {
 
   // Type Hierarchy Reflection
   // -------------------------
-  // Get the superclasses of this type, from most general to most specific,
-  // including this type. The returned array will contain only this type
-  // if the wrapped type is an interface or an array type.
+  // Get the superclasses of this type, from most general to most specific (or
+  // reversed), including this type. The returned array will contain only this
+  // type if the wrapped type is an interface or an array type.
   protected AdType[] supers() {
-    return fillSupers(new LinkedList<AdType>()).toArray(new AdType[0]);
-  } private List<AdType> fillSupers(List<AdType> list) {
+    return supers(false);
+  } protected AdType[] supers(boolean reverse) {
+    List<AdType> list = new LinkedList<AdType>();
+    return fillSupers(list, reverse).toArray(new AdType[0]);
+  } private List<AdType> fillSupers(List<AdType> list, boolean reverse) {
     if (parent != null)
-      parent.fillSupers(list);
+      parent.fillSupers(list, reverse);
     else if (rawSuper() != null)
-      new AdType(rawSuper()).fillSupers(list);
-    list.add(this);
+      superclass().fillSupers(list, reverse);
+    if (reverse)
+      list.add(0, this);
+    else
+      list.add(this);
     return list;
+  }
+
+  // Get the super class of this type, or null if it's an interface or array
+  // type.
+  protected AdType superclass() {
+    Type t = rawSuper();
+    if (t == null)
+      return null;
+    return new AdType(t);
   } private Type rawSuper() {
     if (isArray())
       return null;
@@ -217,8 +237,47 @@ class AdType {
 
   // Get a method based on the parameter type.
   protected AdMember method(String name, Class... params) {
+    Method m = rawMethod(name, params);
+    if (m == null)
+      return null;
+    return new AdMember(m);
+  } protected Method rawMethod(String name, Class... params) {
     try {
-      return new AdMember(clazz().getDeclaredMethod(name, params));
+      Method m = clazz().getDeclaredMethod(name, params);
+      if (!AdMember.ignore(m)) return m;
+    } catch (NoSuchMethodException e) { }
+
+    try {
+      Method m = clazz().getMethod(name, params);
+      if (!AdMember.ignore(m)) return m;
+    } catch (NoSuchMethodException e) { }
+
+    return null;
+  }
+
+  // Get all the methods exposed by this class.
+  protected AdMember[] methods() {
+    try {
+      Set<AdMember> methods = new HashSet<AdMember>();
+      for (Method m : clazz().getDeclaredMethods()) if (!AdMember.ignore(m))
+        methods.add(new AdMember(m));
+      for (Method m : clazz().getMethods()) if (!AdMember.ignore(m))
+        methods.add(new AdMember(m));
+      return methods.toArray(new AdMember[methods.size()]);
+    } catch (Exception e) {
+      return null;
+    }
+  }
+
+  // Get all the methods of a given name exposed by this class.
+  protected AdMember[] methods(String name) {
+    try {
+      Set<AdMember> methods = new HashSet<AdMember>();
+      for (Method m : clazz().getDeclaredMethods()) if (!AdMember.ignore(m))
+        if (name.equals(m.getName())) methods.add(new AdMember(m));
+      for (Method m : clazz().getMethods()) if (!AdMember.ignore(m))
+        if (name.equals(m.getName())) methods.add(new AdMember(m));
+      return methods.toArray(new AdMember[methods.size()]);
     } catch (Exception e) {
       return null;
     }

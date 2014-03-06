@@ -2,11 +2,11 @@ package stork.ad;
 
 import java.lang.reflect.*;
 
-// A wrapper around class members (fields and methods) that encapsulates
-// extra type information and provides methods for setting and resetting
-// access permissions for getting, setting, or invoking members. This
-// class is not threadsafe, and assumes nothing else is messing with the
-// access permissions of the member, so keep that in mind.
+// A wrapper around class members (fields and methods) that encapsulates extra
+// type information and provides methods for setting and resetting access
+// permissions for getting, setting, or invoking members. This class is not
+// threadsafe, and assumes nothing else is messing with the access permissions
+// of the member, so keep that in mind.
 
 class AdMember extends AdType {
   private Member member;
@@ -28,6 +28,14 @@ class AdMember extends AdType {
     return Method.class.cast(member);
   } private Constructor constructor() {
     return Constructor.class.cast(member);
+  }
+
+  public boolean isField() {
+    return member instanceof Field;
+  } public boolean isMethod() {
+    return member instanceof Method;
+  } public boolean isConstructor() {
+    return member instanceof Constructor;
   }
 
   private void unlock() {
@@ -75,6 +83,20 @@ class AdMember extends AdType {
   protected Object invoke(Object target, Object... args) {
     try {
       unlock(); return method().invoke(target, args);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    } finally { lock(); }
+  }
+
+  // If this is a method or constructor, return the parameter types.
+  protected AdType[] parameters() {
+    try {
+      unlock();
+      if (isMethod())
+        return AdType.wrap(null, method().getGenericParameterTypes());
+      if (isConstructor())
+        return AdType.wrap(null, constructor().getGenericParameterTypes());
+      return null;
     } catch (Exception e) {
       throw new RuntimeException(e);
     } finally { lock(); }

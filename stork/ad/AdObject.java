@@ -5,6 +5,7 @@ import java.math.*;
 import java.lang.reflect.*;
 
 // Beware all ye who enter, for here there be dragons.
+// TODO: This should be combined back into Ad.
 
 public class AdObject implements Comparable<AdObject> {
   Object object;
@@ -46,16 +47,15 @@ public class AdObject implements Comparable<AdObject> {
     map(char.class,    "asChar");
     map(Map.class,     "asMap");
     map(Collection.class, "asList");
-    map(java.net.URI.class, "asURI");
   }
 
   private AdObject(Object o) {
-    object = marshal(o);
+    object = makePrimitive(o);
   }
 
   // Convert an object to an ad primitive type.
   // FIXME: Aaaa isn't there a better way?
-  private static Object marshal(Object o) {
+  private static Object makePrimitive(Object o) {
     if (o == null)
       return o;
     if (o instanceof String)
@@ -64,8 +64,6 @@ public class AdObject implements Comparable<AdObject> {
       return o;
     if (o instanceof Boolean)
       return o;
-    if (o instanceof java.net.URI)
-      return o.toString();
     if (o instanceof Character)
       return o.toString();
     if (o instanceof Enum)
@@ -122,10 +120,6 @@ public class AdObject implements Comparable<AdObject> {
     return (object != null) ? object.toString() : null;
   } public String toString() {
     return (object != null) ? object.toString() : null;
-  }
-
-  public java.net.URI asURI() {
-    return java.net.URI.create(asString());
   }
 
   public Number asNumber() {
