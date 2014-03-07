@@ -22,11 +22,11 @@ class AdMember extends AdType {
 
   // Get the member as a specific type. Throws an exception if it's the
   // wrong type.
-  private Field field() {
+  Field field() {
     return Field.class.cast(member);
-  } private Method method() {
+  } Method method() {
     return Method.class.cast(member);
-  } private Constructor constructor() {
+  } Constructor constructor() {
     return Constructor.class.cast(member);
   }
 
@@ -39,21 +39,13 @@ class AdMember extends AdType {
   }
 
   private void unlock() {
-    if (!isPublic()) {
-      locks++;
-      ((AccessibleObject) member).setAccessible(true);
-    }
+    locks++;
+    ((AccessibleObject) member).setAccessible(true);
   }
 
   private void lock() {
-    if (!isPublic()) {
-      if (locks > 0 && --locks == 0)
-        ((AccessibleObject) member).setAccessible(false);
-    }
-  }
-
-  boolean isPublic() {
-    return Modifier.isPublic(member.getModifiers());
+    if (locks > 0 && --locks == 0)
+      ((AccessibleObject) member).setAccessible(false);
   }
 
   // Get the name of the member.

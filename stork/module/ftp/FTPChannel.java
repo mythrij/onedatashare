@@ -345,7 +345,7 @@ public class FTPChannel {
     // TODO: How should we handle exceptions? Which exceptions can this thing
     // receive anyway?
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable t) {
-      t.printStackTrace();
+      //t.printStackTrace();
     }
   }
 

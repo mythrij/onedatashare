@@ -517,28 +517,45 @@ public class Ad implements Serializable {
    * represtations or unmarshalling ads into new objects. Instantiating a
    * marshaller registers it with the marshalling system. The type handled by
    * the marshaller is determined using reflection.
+   *
+   * @param <T> the least specific type this marshaller operates on
    */
   public static abstract class Marshaller<T> {
-    private Map<Class,AdMember> unmarshalMap = new HashMap<Class, AdMember>();
-    private AdType clazz, type;
+    private Class<? extends T> out;
     private static final MarshallerDeference defer =
       new MarshallerDeference();
 
     /**
      * Create a new marshaller and register it with the marshalling system.
+     *
+     * @param clazz the concrete class this marshaller produces
      */
-    public Marshaller() {
+    public Marshaller(Class<? extends T> clazz) {
+      out = clazz;
+
       // Determine marshaller coverage.
-      clazz = new AdType(getClass());
-      AdType sc = clazz.superclass();
-      while (sc.clazz() != Marshaller.class) {
-        clazz = sc;
-        sc = clazz.superclass();
-      }
-      type = sc.generics()[0];
+      AdType type = new AdType(getClass());
+      while (type.clazz() != Marshaller.class)
+        type = type.superclass();
+      type = type.generics()[0];
 
       // Register with static marshaller map.
       marshallers.put(type.clazz(), this);
+    }
+
+    /**
+     * Find the approriate unmarshalling method, and use it to unmarshal the
+     * given {@code AdObject}.
+     */
+    final T doUnmarshal(AdObject o) {
+      return doUnmarshal(o.object, o.type());
+    } final T doUnmarshal(Object o, AdType t) {
+      if (o == null || t == null) return null;
+      AdType self = new AdType(this.getClass());
+      AdMember m = self.method("unmarshal", t.clazz());
+      if (m == null)
+        return doUnmarshal(o, t.superclass());
+      return out.cast(m.invoke(this, o));
     }
 
     /**
@@ -588,30 +605,36 @@ public class Ad implements Serializable {
   } protected synchronized <O> O unmarshal(O o, AdType t) {
     t = (t != null) ? t : new AdType(o.getClass());
     Class c = t.clazz();
+
     if (c == Ad.class) {
       ((Ad)o).addAll(this);
     } else if (o instanceof Map) {
       AdType kt = t.generics()[0];
       AdType vt = t.generics()[1];
-      for (Map.Entry<String, AdObject> e : map(false).entrySet())
+      Map<String,AdObject> map = map(false);
+      if (map != null) for (Map.Entry<String, AdObject> e : map.entrySet())
         ((Map)o).put(e.getKey(), e.getValue().as(vt));
     } else if (o instanceof Collection) {
       AdType vt = t.generics()[0];
-      for (AdObject v : list(false))
+      List<AdObject> list = list(false);
+      if (list != null) for (AdObject v : list)
         ((Collection)o).add(v.as(vt));
     } else if (t.isArray()) {
       AdType vt = t.component();
       int i = 0;
-      for (AdObject v : list(false)) try {
+      List<AdObject> list = list(false);
+      if (list != null) for (AdObject v : list) try {
         Array.set(o, i++, v.as(vt));
       } catch (ArrayIndexOutOfBoundsException e) {
         break;
       }
     } else for (AdMember f : t.fields()) try {
-      f.set(o, getObject(f.name()).as(f));
+      AdObject ao = getObject(f.name());
+      if (ao != null) f.set(o, ao.as(f));
     } catch (Exception e) {
       // Either ad had no such member or it was final and we couldn't set it.
       // Either way, we don't have to worry about it.
+      e.printStackTrace();
     } return o;
   }
 
@@ -628,7 +651,7 @@ public class Ad implements Serializable {
    * @param t the type to find a marshaller for
    * @return A marshaller capable of handling objects of type {@code t}.
    */
-  private static Marshaller findMarshaller(AdType t) {
+  static Marshaller findMarshaller(AdType t) {
     if (t == null) return null;
     Marshaller m = marshallers.get(t.clazz());
     return (m == null) ? findMarshaller(t.superclass()) : m;
@@ -654,11 +677,13 @@ public class Ad implements Serializable {
       t = new AdType(o.getClass());
     try {
       Marshaller m = findMarshaller(t);
-      if (m != null) {
+      if (m != null) try {
         o = m.marshal(o);
         if (o == null)
           return null;
         t = new AdType(o.getClass());
+      } catch (MarshallerDeference e) {
+        // Delegate to default handler.
       } if (o instanceof Ad) {
         return (Ad)o;
       } else if (o instanceof Map) {
@@ -729,7 +754,7 @@ public class Ad implements Serializable {
   // Testing method.
   public static void main(String args[]) {
     class Blah { public int i = 100; }
-    new Marshaller<Blah>() {
+    new Marshaller<Blah>(Blah.class) {
       public Blah unmarshal(Ad ad) {
         Blah b = new Blah();
         b.i = ad.getInt("a", b.i);

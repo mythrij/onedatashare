@@ -10,7 +10,7 @@ import stork.user.*;
 import stork.util.*;
 
 import java.io.*;
-import java.net.*;
+//import java.net.*;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -52,19 +52,19 @@ public class Scheduler {
   private transient Map<Endpoint, Session> session_pool =
     new ConcurrentHashMap<Endpoint, Session>();
 
-  // Map of on-going listings, for request aggregation.
+  // Map of ongoing listings, for request aggregation.
   private transient Map<Endpoint, Bell<Stat>> ls_aggregator =
     new ConcurrentHashMap<Endpoint, Bell<Stat>>();
 
   static {
     // Register a handler to marshal strings in ads into Feather URIs.
-    /*
-    new Ad.Marshaller<URI>() {
-      public URI marshal(String uri) {
-        return uri.create(uri);
+    new Ad.Marshaller<URI>(URI.class) {
+      public String marshal(URI uri) {
+        return uri.toString();
+      } public URI unmarshal(String uri) {
+        return URI.create(uri);
       }
-    }
-    */
+    };
   }
 
   // Put a job into the scheduling queue.
@@ -217,7 +217,7 @@ public class Scheduler {
   class StorkMkdirHandler extends CommandHandler {
     public Bell handle(Request req) {
       Session sess = null;
-      Endpoint ep = req.ad.unmarshalAs(Endpoint.class);
+      Endpoint ep = req.ad.unmarshalAs(JobEndpoint.class);
       sess = ep.session();
       return sess.mkdir();
     }
@@ -230,7 +230,7 @@ public class Scheduler {
   class StorkRmfHandler extends CommandHandler {
     public Bell handle(Request req) {
       Session sess = null;
-      Endpoint ep = req.ad.unmarshalAs(Endpoint.class);
+      Endpoint ep = req.ad.unmarshalAs(JobEndpoint.class);
       sess = ep.session();
       return sess.rm();
     }
@@ -242,7 +242,7 @@ public class Scheduler {
 
   class StorkLsHandler extends CommandHandler {
     public Bell handle(Request req) {
-      final Endpoint ep = req.ad.unmarshalAs(Endpoint.class);
+      final Endpoint ep = req.ad.unmarshalAs(JobEndpoint.class);
 
       // See if there is an on-going listing request.
       Bell<Stat> ongoing = ls_aggregator.get(ep);

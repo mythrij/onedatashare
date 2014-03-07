@@ -188,9 +188,17 @@ public class AdObject implements Comparable<AdObject> {
     return c.cast(as(new AdType(c)));
   } protected Object as(AdType t) {
     Class c = t.wrapper();
-    if (object == null) {
+    Object o = object;
+    if (o == null) {
       return null;
     } try {
+      // Check if there's an unmarshaller, and delegate if so.
+      Ad.Marshaller ma = Ad.findMarshaller(t);
+      if (ma != null) try {
+        return c.cast(ma.doUnmarshal(this));
+      } catch (Exception e) {
+        e.printStackTrace();
+      }
       // Check if it's an array.
       if (t.isArray())
         return asArray(t);
@@ -249,6 +257,13 @@ public class AdObject implements Comparable<AdObject> {
   // Check if the enclosed object is of a given type.
   public boolean is(Class<?> c) {
     return c.isInstance(object);
+  }
+
+  /**
+   * Get the type of the wrapped object.
+   */
+  public AdType type() {
+    return new AdType(object.getClass());
   }
 
   public boolean equals(Object o) {
