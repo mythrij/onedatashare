@@ -6,7 +6,6 @@ import stork.util.*;
 import stork.scheduler.*;
 
 import java.util.*;
-//import java.net.URI;
 
 // Abstract base class for a Stork transfer module.
 
@@ -66,12 +65,12 @@ public abstract class TransferModule {
     return TransferModuleTable.instance().byProtocol(s);
   }
 
-  // Create a new session capable of interacting with a URI.
-  public Session session(String uri) {
-    return session(new Endpoint(uri));
-  } public Session session(URI uri) {
-    return session(new Endpoint(uri));
-  } public abstract Session session(Endpoint e);
+  // Return a resource capable of interacting with a URI.
+  public Resource session(String uri) {
+    return select(new Endpoint(uri));
+  } public Resource select(URI uri) {
+    return select(new Endpoint(uri));
+  } public abstract Resource select(Endpoint e);
 
   public String toString() {
     return handle;

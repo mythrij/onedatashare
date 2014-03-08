@@ -215,10 +215,13 @@ public class AdObject implements Comparable<AdObject> {
       // Try looking for a likely constructor.
       m = t.constructor(object.getClass());
       if (m != null)
-        return c.cast(m.construct(object));
+        return m.construct(object);
       // Try the nullary constructor.
       if (isAd() && (m = t.constructor()) != null)
-        return asAd().unmarshal(c.cast(m.construct()), t);
+        return asAd().unmarshal(m.construct(), t);
+      // Try unsafe instantiation as a last resort.
+      if (isAd() && (o = AdUnsafe.create(c)) != null)
+        return asAd().unmarshal(o, t);
     } catch (RuntimeException e) {
       throw e;
     } catch (Exception e) {

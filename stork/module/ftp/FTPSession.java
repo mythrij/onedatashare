@@ -8,7 +8,7 @@ import stork.module.*;
 import stork.scheduler.*;
 import stork.util.*;
 
-public class FTPSession extends FTPResource implements Session {
+public class FTPSession implements Session {
   transient FTPChannel ch;
 
   // Transient state related to the channel configuration.

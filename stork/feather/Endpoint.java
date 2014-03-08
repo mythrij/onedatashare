@@ -7,21 +7,16 @@ import stork.util.*;
 
 /**
  * A description of an endpoint resource along with the authentication factors
- * necessary to establish a session with the described endpoint.
+ * necessary to establish a session connection to the described endpoint. The
+ * endpoint's URI and authentication factor can be accessed using the public
+ * fields of this class.
  */
 
 public class Endpoint {
-  public URI uri;
-  public Credential credential;
-
-  /**
-   * Create an endpoint with no URI or credential for the purposes of
-   * subclassing or unmarshalling.
-   */
-  protected Endpoint() {
-    uri = null;
-    credential = null;
-  }
+  /** The URI for this endpoint. */
+  public final URI uri;
+  /** The authentication factor used for this endpoint. */
+  public final Credential credential;
 
   /**
    * Create an endpoint based on the given URI.
@@ -66,14 +61,14 @@ public class Endpoint {
   }
 
   /**
-   * Create a new session capable of interacting with this endpoint, or {@code
-   * null} if no default session can be created.
+   * Select the resource referred to by this endpoint using an approriate
+   * session implementation, or {@code null} if no default implementation is
+   * available.
    *
-   * @return A session capable of interacting with this endpoint, or {@code
-   * null} if no default session can be created.
-   * @see Session
+   * @return A {@code Resource} through which the remote resource can be
+   * interacted with, or {@code null} if no default session can be created.
    */
-  public Session session() {
+  public Resource select() {
     return null;
   }
 

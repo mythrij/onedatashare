@@ -49,8 +49,8 @@ public class Scheduler {
   private transient User anonymous = User.anonymous();
 
   // Map of idle sessions, for session reuse.
-  private transient Map<Endpoint, Session> session_pool =
-    new ConcurrentHashMap<Endpoint, Session>();
+  private transient Set<Session> session_pool =
+    Collections.synchronizedSet(new HashSet<Session>());
 
   // Map of ongoing listings, for request aggregation.
   private transient Map<Endpoint, Bell<Stat>> ls_aggregator =
@@ -216,10 +216,8 @@ public class Scheduler {
 
   class StorkMkdirHandler extends CommandHandler {
     public Bell handle(Request req) {
-      Session sess = null;
       Endpoint ep = req.ad.unmarshalAs(JobEndpoint.class);
-      sess = ep.session();
-      return sess.mkdir();
+      return ep.select().mkdir();
     }
 
     public boolean requiresLogin() {
@@ -229,10 +227,8 @@ public class Scheduler {
 
   class StorkRmfHandler extends CommandHandler {
     public Bell handle(Request req) {
-      Session sess = null;
       Endpoint ep = req.ad.unmarshalAs(JobEndpoint.class);
-      sess = ep.session();
-      return sess.rm();
+      return ep.select().rm();
     }
 
     public boolean requiresLogin() {
@@ -241,30 +237,32 @@ public class Scheduler {
   }
 
   class StorkLsHandler extends CommandHandler {
-    public Bell handle(Request req) {
+    public synchronized Bell handle(Request req) {
       final Endpoint ep = req.ad.unmarshalAs(JobEndpoint.class);
+      final Resource res = ep.select();
 
       // See if there is an on-going listing request.
-      Bell<Stat> ongoing = ls_aggregator.get(ep);
-      if (ongoing != null)
-        return ongoing;
+      Bell<Stat> listing = ls_aggregator.get(ep);
+      if (listing != null) {
+        System.out.println("Waiting on existing list request...");
+        return listing;
+      }
 
-      // See if there's an idle session to this endpoint we can use.
-      Session sess = session_pool.remove(ep);
-      if (sess == null)
-        sess = ep.session();
-      ongoing = sess.stat();
+      listing = res.stat();
 
       // Register the ongoing listing.
-      ls_aggregator.put(ep, ongoing);
+      ls_aggregator.put(ep, listing);
 
       // Put the session back when we're done.
       final Session fs = sess;
-      ongoing.promise(new Bell() {
-        public void always() { session_pool.put(ep, fs); }
+      listing.promise(new Bell() {
+        public void always() {
+          session_pool.put(ep.root(), fs);
+          ls_aggregator.remove(ep);
+        }
       });
 
-      return ongoing;
+      return listing;
     }
 
     public boolean requiresLogin() {
