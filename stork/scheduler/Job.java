@@ -8,7 +8,6 @@ import stork.ad.*;
 import stork.util.*;
 import stork.module.*;
 import stork.feather.*;
-import stork.user.*;
 import static stork.scheduler.JobStatus.*;
 
 // A representation of a transfer job submitted to Stork. The entire
@@ -24,7 +23,7 @@ import static stork.scheduler.JobStatus.*;
 //   files_done  - indication that some files have been transferred
 //   complete    - true if success, false if failure
 
-public class StorkJob {
+public class Job {
   private int job_id = 0;
   private JobStatus status;
   private Endpoint src, dest;
@@ -45,12 +44,12 @@ public class StorkJob {
   // thing unsanitized user input, because it doesn't filter the user_id.
   // That should be filtered by the caller.
   // TODO: Strict filtering and checking.
-  public static StorkJob create(User user, Ad ad) {
+  public static Job create(User user, Ad ad) {
     ad.remove("status", "job_id", "attempts");
     ad.rename("src_url",  "src.url");
     ad.rename("dest_url", "dest.url");
 
-    StorkJob j = ad.unmarshalAs(StorkJob.class).status(scheduled);
+    Job j = ad.unmarshalAs(Job.class).status(scheduled);
     j.user = user;
 
     if (j.src == null || j.dest == null)
@@ -68,11 +67,11 @@ public class StorkJob {
   // status. This can also be used to set a message.
   public synchronized JobStatus status() {
     return status;
-  } public synchronized StorkJob status(JobStatus s) {
+  } public synchronized Job status(JobStatus s) {
     return status(s, message);
-  } public synchronized StorkJob status(String msg) {
+  } public synchronized Job status(String msg) {
     return status(status, msg);
-  } public synchronized StorkJob status(JobStatus s, String msg) {
+  } public synchronized Job status(JobStatus s, String msg) {
     assert !s.isFilter;
 
     message = msg;
@@ -165,8 +164,8 @@ public class StorkJob {
       thread = Thread.currentThread();
     }
 
-    Session ss = src.session();
-    Session ds = dest.session();
+    Resource ss = src.select();
+    Resource ds = dest.select();
 
     // Establish connections to end-points.
     try {
@@ -185,7 +184,7 @@ public class StorkJob {
   }
 
   // Do the transfer using the given sessions.
-  private void doTransfer(final Session ss, final Session ds) {
+  private void doTransfer(final Resource ss, final Resource ds) {
     URI su = src.uri;
     URI du = dest.uri;
 

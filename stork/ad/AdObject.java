@@ -175,20 +175,11 @@ public class AdObject implements Comparable<AdObject> {
     return asAd().unmarshalAs(HashMap.class);
   }
 
-  // Helper function to try to find an unmarshal method.
-  private AdMember getUnmarshalMethod(AdType t) {
-    AdMember m = t.method("unmarshal", object.getClass());
-    if (m != null) return m;
-    m = t.method("unmarshal", Object.class);
-    if (m != null) return m;
-    return null;
-  }
-
   public <T> T as(Class<T> c) {
     return c.cast(as(new AdType(c)));
   } protected Object as(AdType t) {
     Class c = t.wrapper();
-    Object o = object;
+    Object o = object, uo;
     if (o == null) {
       return null;
     } try {
@@ -196,8 +187,8 @@ public class AdObject implements Comparable<AdObject> {
       Ad.Marshaller ma = Ad.findMarshaller(t);
       if (ma != null) try {
         return c.cast(ma.doUnmarshal(this));
-      } catch (Exception e) {
-        e.printStackTrace();
+      } catch (Ad.MarshallerDeference e) {
+        System.out.println("waba");
       }
       // Check if it's an array.
       if (t.isArray())
@@ -208,20 +199,16 @@ public class AdObject implements Comparable<AdObject> {
       Method cm = conv_map.get(c);
       if (cm != null)
         return c.cast(cm.invoke(this));
-      // Try looking for an unmarshalling method.
-      AdMember m = getUnmarshalMethod(t);
-      if (m != null)
-        return c.cast(m.invoke(null, object));
       // Try looking for a likely constructor.
-      m = t.constructor(object.getClass());
+      AdMember m = t.constructor(object.getClass());
       if (m != null)
         return m.construct(object);
       // Try the nullary constructor.
       if (isAd() && (m = t.constructor()) != null)
         return asAd().unmarshal(m.construct(), t);
       // Try unsafe instantiation as a last resort.
-      if (isAd() && (o = AdUnsafe.create(c)) != null)
-        return asAd().unmarshal(o, t);
+      if (isAd() && (uo = AdUnsafe.create(c)) != null)
+        return asAd().unmarshal(uo, t);
     } catch (RuntimeException e) {
       throw e;
     } catch (Exception e) {

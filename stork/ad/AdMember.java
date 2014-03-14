@@ -75,6 +75,8 @@ class AdMember extends AdType {
   protected Object invoke(Object target, Object... args) {
     try {
       unlock(); return method().invoke(target, args);
+    } catch (InvocationTargetException e) {
+      throw new RuntimeException(e.getCause());
     } catch (Exception e) {
       throw new RuntimeException(e);
     } finally { lock(); }

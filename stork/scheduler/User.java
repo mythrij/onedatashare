@@ -1,9 +1,8 @@
-package stork.user;
+package stork.scheduler;
 
 import stork.Stork;
 import stork.ad.*;
 import stork.cred.*;
-import stork.scheduler.*;
 import stork.util.*;
 
 import java.net.*;
@@ -21,7 +20,7 @@ public class User {
   public String salt;
   public String name;
 
-  public ArrayList<StorkJob> jobs = new ArrayList<StorkJob>();
+  public ArrayList<Job> jobs = new ArrayList<Job>();
   public LinkedList<URI>  history = new LinkedList<URI>();
   public HashSet<String>    creds = new HashSet<String>();
 

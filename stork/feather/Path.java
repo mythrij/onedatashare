@@ -3,6 +3,8 @@ package stork.feather;
 import java.util.*;
 import java.io.*;
 
+import stork.feather.util.*;
+
 /**
  * A memory-efficient representation of a path name.
  */

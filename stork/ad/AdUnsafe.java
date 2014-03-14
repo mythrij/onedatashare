@@ -9,42 +9,49 @@ import java.lang.reflect.*;
  * access {@code Unsafe}, in which case we might deprecate this class.
  */
 final class AdUnsafe {
+  private interface Allocator {
+    Object create(Class c);
+  }
 
-  // The unsafe allocation method.
-  private static AdMember allocator;
-  private static int type = findType(), ocid = 0;
+  private static Allocator allocator = discover();
 
-  // Determine the unsafe allocator.
-  //   0 = No Unsafe on system.
-  //   1 = Sun's Unsafe.
-  //   2 = Pre-Gingerbread Dalvik.
-  //   3 = Post-Gingerbread Dalvik.
-  private static int findType() {
+  private static Allocator discover() {
     // Try to find Sun's Unsafe class.
     try {
-      allocator = new AdType(Class.forName("sun.misc.Unsafe"))
-        .method("allocateInstance", Class.class);
-      if (allocator != null) return 1;
+      AdType ut = new AdType(Class.forName("sun.misc.Unsafe"));
+      final AdMember um = ut.method("allocateInstance", Class.class);
+      final Object uo = ut.field("theUnsafe").get(null);
+      return new Allocator() {
+        public Object create(Class c) { return um.invoke(uo, c); }
+      };
     } catch (Exception e) {}
 
     // Try to find pre-Gingerbread ObjectInputStream's newInstance.
     try {
-      allocator = new AdType(java.io.ObjectInputStream.class)
+      final AdMember um = new AdType(java.io.ObjectInputStream.class)
         .method("newInstance", Class.class, Class.class);
-      if (allocator != null) return 2;
+      if (um != null) return new Allocator() {
+        public Object create(Class c) {
+          return um.invoke(null, c, Object.class);
+        }
+      };
     } catch (Exception e) {}
 
     // Try to find post-Gingerbread ObjectInputStream's newInstance.
     try {
       AdType ois = new AdType(java.io.ObjectInputStream.class);
-      ocid = (Integer) ois.method("getConstructorId", Class.class)
+      final int ocid = (Integer) ois.method("getConstructorId", Class.class)
         .invoke(null, Object.class);
-      allocator = ois.method("newInstance", Class.class, int.class);
-      if (allocator != null) return 3;
+      final AdMember um = ois.method("newInstance", Class.class, int.class);
+      if (um != null) return new Allocator() {
+        public Object create(Class c) {
+          return um.invoke(null, c, ocid);
+        }
+      };
     } catch (Exception e) {}
 
     // Guess we can't do unsafe creation...
-    return 0;
+    return null;
   }
 
   /**
@@ -55,13 +62,6 @@ final class AdUnsafe {
    * unconstructed instantiation could not be performed.
    */
   public static synchronized <T> T create(Class<T> c) {
-    try {
-      switch (type) {
-        case 1: return c.cast(allocator.invoke(null, c));
-        case 2: return c.cast(allocator.invoke(null, c, Object.class));
-        case 3: return c.cast(allocator.invoke(null, c, ocid));
-      }
-    } catch (Exception e) { }
-    return null;
+    return (allocator == null) ? null : c.cast(allocator.create(c));
   }
 }

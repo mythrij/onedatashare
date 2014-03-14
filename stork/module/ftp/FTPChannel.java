@@ -35,6 +35,8 @@ public class FTPChannel {
   // The maximum amount of time (in ms) to wait for a connection.
   private static final int timeout = 2000;
 
+  private boolean closed = false;
+
   // FIXME: We should use something system-wide.
   private static EventLoopGroup group = new NioEventLoopGroup();
 
@@ -335,11 +337,15 @@ public class FTPChannel {
             data.welcome = reply;
           break;
         case 421:
-          channel().close();
+          FTPChannel.this.close();
           break;
         default:
           feedHandler(reply);
       }
+    }
+  
+    public void channelInactive(ChannelHandlerContext ctx) {
+      FTPChannel.this.close();
     }
 
     // TODO: How should we handle exceptions? Which exceptions can this thing
@@ -442,6 +448,18 @@ public class FTPChannel {
   private Channel channel() {
     return data.future.syncUninterruptibly().channel();
   }
+
+  // Close the channel and run the onClose handler.
+  public synchronized void close() {
+    if (closed) return;
+    closed = true;
+    channel().close();
+    onClose();
+  }
+
+  // This gets called when the channel is closed by some means. Subclasses
+  // should implement this.
+  protected void onClose() { }
 
   // Try to authenticate using a username and password.
   public Bell<Reply> authorize() {
@@ -957,11 +975,11 @@ public class FTPChannel {
     // A handler which passes data to the sink.
     ChannelHandler reader = new SimpleChannelInboundHandler<ByteBuf>() {
       public void messageReceived(ChannelHandlerContext ctx, ByteBuf m) {
-        if (sink != null) sink.write(new Slice(m));
+        if (sink != null) sink.drain(new Slice(m));
       } public void exceptionCaught(ChannelHandlerContext ctx, Throwable t) {
-        if (sink != null) sink.write(new ResourceException(null, t));
+        //if (sink != null) sink.drain(new ResourceException(null, t));
       } public void channelInactive(ChannelHandlerContext ctx) {
-        if (sink != null) sink.write(new Slice());
+        if (sink != null) sink.drain(new Slice());
       } public void read(ChannelHandlerContext ctx) {
         if (!corked && sink != null) ctx.read();
       }
@@ -1019,14 +1037,12 @@ public class FTPChannel {
     }
 
     // Write a passed slice to the channel.
-    public synchronized void write(Slice s) {
+    public synchronized void drain(Slice s) {
       if (s.isEmpty())
         channel().close();
       else
         channel().writeAndFlush(s);
       //System.out.println("Writing: "+s);
-    } public synchronized void write(ResourceException e) {
-      // TODO
     }
 
     // Used internally to extract the channel from the future.

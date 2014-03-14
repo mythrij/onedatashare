@@ -8,53 +8,49 @@ import stork.module.*;
 import stork.scheduler.*;
 import stork.util.*;
 
-public class FTPSession implements Session {
+public class FTPSession extends Session {
   transient FTPChannel ch;
 
   // Transient state related to the channel configuration.
   private transient boolean mlstOptsAreSet = false;
 
-  // Create an FTP session given the passed endpoint.
-  private FTPSession(Endpoint e) {
-    super(e.uri);
-    ch = new FTPChannel(e.uri);
+  public FTPSession(URI uri, Credential cred) {
+    super(uri, cred);
   }
 
-  // Asynchronously establish the session.
-  public static Bell<FTPSession> connect(String uri) {
-    return connect(new Endpoint(uri));
-  }
-
-  public static Bell<FTPSession> connect(Endpoint e) {
-    final Bell<FTPSession> bell = new Bell<FTPSession>();
-    final FTPSession sess = new FTPSession(e);
+  public Bell<Void> open() {
+    final Bell<Void> bell = new Bell<Void>();
     String user = "anonymous";
     String pass = "";
 
-    // Pull userinfo from URI.
-    if (e.uri.username() != null)
-      user = e.uri.username();
-    if (e.uri.password() != null)
-      pass = e.uri.password();
+    ch = new FTPChannel(uri) {
+      protected void onClose() { FTPSession.this.close(); }
+    };
 
-    if (e.credential == null) {
+    // Pull userinfo from URI.
+    if (uri.username() != null)
+      user = uri.username();
+    if (uri.password() != null)
+      pass = uri.password();
+
+    if (credential == null) {
       // Do nothing.
-    } else if (e.credential instanceof StorkGSSCred) try {
-      StorkGSSCred cred = (StorkGSSCred) e.credential;
-      sess.ch.authenticate(cred.data()).sync();
+    } else if (credential instanceof StorkGSSCred) try {
+      StorkGSSCred cred = (StorkGSSCred) credential;
+      ch.authenticate(cred.data()).sync();
       user = ":globus-mapping:";  // FIXME: This is GridFTP-specific.
     } catch (Exception ex) {
       // Couldn't authenticate with the given credentials...
       throw new RuntimeException(ex);
-    } else if (e.credential instanceof StorkUserinfo) {
-      StorkUserinfo cred = (StorkUserinfo) e.credential;
+    } else if (credential instanceof StorkUserinfo) {
+      StorkUserinfo cred = (StorkUserinfo) credential;
       user = cred.getUser();
       pass = cred.getPass();
     }
 
-    sess.ch.authorize(user, pass).promise(new Bell() {
+    ch.authorize(user, pass).promise(new Bell() {
       protected void done() {
-        bell.ring(sess);
+        bell.ring();
       } protected void fail(Throwable t) {
         bell.ring(t);
       }
@@ -115,23 +111,31 @@ public class FTPSession implements Session {
   }
 
   // Create a directory at the end-point, as well as any parent directories.
-  public Bell<Void> mkdir(String path) {
+  public Bell<Void> mkdir(URI uri) {
     return null;
   }
 
   // Remove a file or directory.
-  public Bell<Void> rm(String path) {
+  public Bell<Void> rm(URI uri) {
     return null;
   }
 
-  // Close the session and free any resources.
-  public Bell<Void> close() {
-    return new Bell<Void>().ring();
+  public Bell<Sink> sink(final URI uri) {
+    return (Bell<Sink>) ch.new DataChannel() {{
+      new Command("STOR", uri.path());
+      unlock();
+    }}.bell();
   }
 
-  public static void main(String[] args) {
-    FTPSession src  = connect("ftp://didclab-ws8/home/globus/.bash_history").sync();
-    FTPSession dest = connect("ftp://didclab-ws8/home/globus/small2.txt").sync();
-    src.transferTo(dest);
+  public Bell<Tap> tap(final URI uri) {
+    return (Bell<Tap>) ch.new DataChannel() {{
+      new Command("RETR", uri.path());
+      unlock();
+    }}.bell();
+  }
+
+  // Close the session and free any resources.
+  public void doClose() {
+    ch.close();
   }
 }

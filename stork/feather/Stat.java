@@ -2,6 +2,8 @@ package stork.feather;
 
 import java.util.*;
 
+import stork.feather.util.*;
+
 /**
  * Metadata about a resource, including subresources if the resource is a
  * directory. Many of the members of this class are determined on a best-effort

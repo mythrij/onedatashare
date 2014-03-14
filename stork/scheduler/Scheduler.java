@@ -6,7 +6,6 @@ import stork.cred.*;
 import stork.util.*;
 import stork.feather.*;
 import stork.module.ftp.*;
-import stork.user.*;
 import stork.util.*;
 
 import java.io.*;
@@ -33,15 +32,15 @@ public class Scheduler {
   public User.Map users = new User.Map();
   public CredManager creds = new CredManager();
 
-  public transient LinkedBlockingQueue<StorkJob> jobs =
-    new LinkedBlockingQueue<StorkJob>();
+  public transient LinkedBlockingQueue<Job> jobs =
+    new LinkedBlockingQueue<Job>();
 
   private transient StorkQueueThread[]  thread_pool;
   private transient StorkWorkerThread[] worker_pool;
   private transient DumpStateThread dump_state_thread;
 
   private transient Map<String, CommandHandler> cmd_handlers;
-  public transient TransferModuleTable xfer_modules;
+  public transient ModuleTable modules;
 
   private transient LinkedBlockingQueue<Request> req_queue =
     new LinkedBlockingQueue<Request>();
@@ -49,14 +48,21 @@ public class Scheduler {
   private transient User anonymous = User.anonymous();
 
   // Map of idle sessions, for session reuse.
-  private transient Set<Session> session_pool =
-    Collections.synchronizedSet(new HashSet<Session>());
+  private transient Map<Session, Session> session_pool =
+    Collections.synchronizedMap(new HashMap<Session, Session>());
 
   // Map of ongoing listings, for request aggregation.
-  private transient Map<Endpoint, Bell<Stat>> ls_aggregator =
-    new ConcurrentHashMap<Endpoint, Bell<Stat>>();
+  private transient Map<Resource, Bell<Stat>> ls_aggregator =
+    new ConcurrentHashMap<Resource, Bell<Stat>>();
 
   static {
+    // Register a handler to marshal endpoints.
+    new Ad.Marshaller<Endpoint>(Endpoint.class) {
+      public Endpoint unmarshal(String uri) {
+        return new Endpoint(uri);
+      }
+    };
+
     // Register a handler to marshal strings in ads into Feather URIs.
     new Ad.Marshaller<URI>(URI.class) {
       public String marshal(URI uri) {
@@ -68,7 +74,7 @@ public class Scheduler {
   }
 
   // Put a job into the scheduling queue.
-  public void schedule(StorkJob job) {
+  public void schedule(Job job) {
     jobs.add(job);
   }
 
@@ -101,17 +107,17 @@ public class Scheduler {
   }
 
   // A thread which runs continuously and starts jobs as they're found.
-  private class StorkQueueThread extends StorkThread<StorkJob> {
+  private class StorkQueueThread extends StorkThread<Job> {
     StorkQueueThread() {
       super("stork queue thread");
     }
 
-    public StorkJob getAJob() throws Exception {
+    public Job getAJob() throws Exception {
       return jobs.take();
     }
 
     // Continually remove jobs from the queue and start them.
-    public void execute(StorkJob job) {
+    public void execute(Job job) {
       Log.info("Pulled job from queue: "+job);
 
       // Run the job then check the return status.
@@ -216,7 +222,7 @@ public class Scheduler {
 
   class StorkMkdirHandler extends CommandHandler {
     public Bell handle(Request req) {
-      Endpoint ep = req.ad.unmarshalAs(JobEndpoint.class);
+      Endpoint ep = req.ad.unmarshalAs(Endpoint.class);
       return ep.select().mkdir();
     }
 
@@ -227,7 +233,7 @@ public class Scheduler {
 
   class StorkRmfHandler extends CommandHandler {
     public Bell handle(Request req) {
-      Endpoint ep = req.ad.unmarshalAs(JobEndpoint.class);
+      Endpoint ep = req.ad.unmarshalAs(Endpoint.class);
       return ep.select().rm();
     }
 
@@ -238,11 +244,28 @@ public class Scheduler {
 
   class StorkLsHandler extends CommandHandler {
     public synchronized Bell handle(Request req) {
-      final Endpoint ep = req.ad.unmarshalAs(JobEndpoint.class);
-      final Resource res = ep.select();
+      final Endpoint ep = req.ad.unmarshalAs(Endpoint.class);
+      Resource nr = ep.select();
+
+      // See if there's an existing session we can reuse.
+      Session session = session_pool.remove(nr.session());
+      if (session != null && !session.isClosed()) {
+        System.out.println("Reusing existing session...");
+        nr = nr.reselect(session);
+      } else {
+        System.out.println("Using new session...");
+        final Resource r = nr;
+        r.session().onClose().promise(new Bell() {
+          public void always() {
+            session_pool.remove(r.session());
+          }
+        });
+      }
+
+      final Resource res = nr;
 
       // See if there is an on-going listing request.
-      Bell<Stat> listing = ls_aggregator.get(ep);
+      Bell<Stat> listing = ls_aggregator.get(res);
       if (listing != null) {
         System.out.println("Waiting on existing list request...");
         return listing;
@@ -251,14 +274,20 @@ public class Scheduler {
       listing = res.stat();
 
       // Register the ongoing listing.
-      ls_aggregator.put(ep, listing);
-
-      // Put the session back when we're done.
-      final Session fs = sess;
+      ls_aggregator.put(res, listing);
       listing.promise(new Bell() {
         public void always() {
-          session_pool.put(ep.root(), fs);
-          ls_aggregator.remove(ep);
+          ls_aggregator.remove(res);
+        }
+      });
+
+      // Put the session back when we're done.
+      listing.promise(new Bell() {
+        public void always() {
+          Session s = res.session();
+          if (!s.isClosed() && !session_pool.containsKey(s))
+            session_pool.put(s, s);
+          ls_aggregator.remove(res);
         }
       });
 
@@ -302,7 +331,7 @@ public class Scheduler {
 
   class StorkSubmitHandler extends CommandHandler {
     public Bell handle(Request req) {
-      StorkJob job = StorkJob.create(req.user, req.ad);
+      Job job = Job.create(req.user, req.ad);
 
       // Schedule the job to execute and add the job to the user context.
       schedule(job);
@@ -329,8 +358,8 @@ public class Scheduler {
         throw new RuntimeException("No jobs specified.");
 
       // Find ad in job list, set it as removed.
-      List<StorkJob> list = new JobSearcher(req.user.jobs).query(req.ad);
-      for (StorkJob j : list) try {
+      List<Job> list = new JobSearcher(req.user.jobs).query(req.ad);
+      for (Job j : list) try {
         j.remove("removed by user");
         sdr.swallow(j.jobId());
       } catch (Exception e) {
@@ -355,7 +384,7 @@ public class Scheduler {
   class StorkInfoHandler extends CommandHandler {
     // Send transfer module information.
     Ad sendModuleInfo(Request req) {
-      return Ad.marshal(xfer_modules.infoAds());
+      return Ad.marshal(modules.infoAds());
     }
 
     // Send server information. But for now, don't send anything until we
@@ -420,14 +449,14 @@ public class Scheduler {
   public void populateModules() {
     // Load built-in modules.
     // TODO: Automatic discovery for built-in modules.
-    //xfer_modules.register(new GridFTPModule());
-    //xfer_modules.register(new SFTPModule());
-    xfer_modules.register(new FTPModule());
+    //modules.register(new GridFTPModule());
+    //modules.register(new SFTPModule());
+    modules.register(new FTPModule());
     if (env.has("libexec"))
-      xfer_modules.registerDirectory(new File(env.get("libexec")));
+      modules.registerDirectory(new File(env.get("libexec")));
 
     // Check if anything got added.
-    if (xfer_modules.modules().isEmpty())
+    if (modules.modules().isEmpty())
       Log.warning("no transfer modules registered");
   }
 
@@ -613,7 +642,7 @@ public class Scheduler {
       users.insert(u);
 
       // Add their unfinished jobs.
-      if (u.jobs != null) for (StorkJob j : u.jobs)
+      if (u.jobs != null) for (Job j : u.jobs)
         if (!j.isTerminated()) schedule(j.status(JobStatus.scheduled));
     }
   }
@@ -686,7 +715,7 @@ public class Scheduler {
     cmd_handlers.put("cred", new StorkCredHandler());
 
     // Initialize transfer module set
-    xfer_modules = TransferModuleTable.instance();
+    modules = ModuleTable.instance();
 
     // Initialize workers
     populateModules();

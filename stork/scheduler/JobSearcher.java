@@ -9,9 +9,9 @@ import java.util.*;
 // A class for performing queries on collections of jobs.
 
 public class JobSearcher {
-  private Collection<StorkJob> jobs;
+  private Collection<Job> jobs;
 
-  public JobSearcher(Collection<StorkJob> jobs) {
+  public JobSearcher(Collection<Job> jobs) {
     this.jobs = jobs;
   }
 
@@ -20,8 +20,8 @@ public class JobSearcher {
   //   range  - a range of job ids to select
   //   status - the name of a job status filter
   // The results are returned as a list.
-  public List<StorkJob> query(Ad ad) {
-    List<StorkJob> list = new LinkedList<StorkJob>();
+  public List<Job> query(Ad ad) {
+    List<Job> list = new LinkedList<Job>();
 
     // Filter fields.
     String user_id = null;
@@ -42,7 +42,7 @@ public class JobSearcher {
     }
 
     // Perform a simple but not very efficient O(n) selection.
-    for (StorkJob j : jobs) {
+    for (Job j : jobs) {
       if (status.contains(j.status()) && range.contains(j.jobId()))
         list.add(j);
     } return list;

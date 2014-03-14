@@ -508,7 +508,7 @@ public class Ad implements Serializable {
   // Methods and inner classes for marshalling objects to/from ads.
 
   // Used internally by marshallers.
-  private static final class MarshallerDeference extends RuntimeException {
+  static final class MarshallerDeference extends RuntimeException {
     public final void throwThis() { throw this; }
   }
 
@@ -553,9 +553,13 @@ public class Ad implements Serializable {
       if (o == null || t == null) return null;
       AdType self = new AdType(this.getClass());
       AdMember m = self.method("unmarshal", t.clazz());
-      if (m == null)
+      if (m == null) {
         return doUnmarshal(o, t.superclass());
-      return out.cast(m.invoke(this, o));
+      } try {
+        return out.cast(m.invoke(this, o));
+      } catch (RuntimeException e) {
+        throw (e.getCause() == defer) ? defer : e;
+      }
     }
 
     /**

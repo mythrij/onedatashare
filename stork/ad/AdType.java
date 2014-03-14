@@ -225,6 +225,21 @@ class AdType {
       fm.put(f.getName(), (AdMember) new AdMember(f).parent(this));
   }
 
+  // Get a single field.
+  protected AdMember field(String name) {
+    Field f = rawField(name);
+    if (f == null) return null;
+    return (AdMember) new AdMember(f).parent(this);
+  } private Field rawField(String name) {
+    try {
+      return clazz().getDeclaredField(name);
+    } catch (Exception e) { } try {
+      return clazz().getField(name);
+    } catch (Exception e) {
+      return null;
+    }
+  }
+
   // Get a constructor for the class based on the parameter type, or null if
   // none exists.
   protected AdMember constructor(Class... params) {
