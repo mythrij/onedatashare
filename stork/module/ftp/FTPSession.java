@@ -24,7 +24,7 @@ public class FTPSession extends Session {
     String pass = "";
 
     ch = new FTPChannel(uri) {
-      protected void onClose() { FTPSession.this.close(); }
+      public void onClose() { FTPSession.this.close(); }
     };
 
     // Pull userinfo from URI.
@@ -49,9 +49,9 @@ public class FTPSession extends Session {
     }
 
     ch.authorize(user, pass).promise(new Bell() {
-      protected void done() {
+      public void done() {
         bell.ring();
-      } protected void fail(Throwable t) {
+      } public void fail(Throwable t) {
         bell.ring(t);
       }
     });
@@ -60,7 +60,11 @@ public class FTPSession extends Session {
   }
 
   // Perform a listing of the given path relative to the root directory.
-  public synchronized Bell<Stat> stat(final String path) {
+  public synchronized Bell<Stat> stat(final URI uri) {
+    if (uri.path() == null)
+      return stat("/");
+    return stat(uri.path().toString());
+  } public synchronized Bell<Stat> stat(final String path) {
     if (path.startsWith("/~"))
       return stat(path.substring(1));
     if (!path.startsWith("/") && !path.startsWith("~"))
@@ -135,7 +139,7 @@ public class FTPSession extends Session {
   }
 
   // Close the session and free any resources.
-  public void doClose() {
+  public void cleanup() {
     ch.close();
   }
 }

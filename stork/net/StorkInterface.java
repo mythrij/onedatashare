@@ -101,8 +101,13 @@ extends ChannelInitializer<Channel> {
           else
             ctx.writeAndFlush(Ad.marshal(object));
         } protected void fail(Throwable t) {
+          t.printStackTrace();
           String m = t.getMessage();
-          if (m == null) m = "unknown error";
+          if (m == null) {
+            String n = t.getClass().getSimpleName();
+            m = "Unspecified error";
+            if (!n.isEmpty()) m += " ("+n+")";
+          }
           ctx.writeAndFlush(new Ad("error", m));
         }
       });

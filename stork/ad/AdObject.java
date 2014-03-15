@@ -187,9 +187,7 @@ public class AdObject implements Comparable<AdObject> {
       Ad.Marshaller ma = Ad.findMarshaller(t);
       if (ma != null) try {
         return c.cast(ma.doUnmarshal(this));
-      } catch (Ad.MarshallerDeference e) {
-        System.out.println("waba");
-      }
+      } catch (Ad.MarshallerDeference e) { }
       // Check if it's an array.
       if (t.isArray())
         return asArray(t);
