@@ -40,7 +40,7 @@ public abstract class Session extends Resource {
     public void always() { cleanup(); }
   };
 
-  private SessionDecorator decorator;
+  private final Session decorator = decorate();
 
   /**
    * Create a session with the given root URI.
@@ -68,7 +68,6 @@ public abstract class Session extends Resource {
   // Constructor used solely by SessionDecorator.
   private Session(Session other) {
     this(other.uri, other.credential);
-    decorator = (SessionDecorator) this;
   }
 
   /**
@@ -80,20 +79,20 @@ public abstract class Session extends Resource {
    * @return this session wrapped in a decorator.
    */
   public final Session decorate() {
+    if (this instanceof SessionDecorator)
+      return this;
     if (decorator == null)
-      decorator = new SessionDecorator(this);
+      return new SessionDecorator();
     return decorator;
   }
 
   // A decorator which upholds the Session-Client Contract. We give ourselves
   // CTS writing boilerplate so you don't have to!
-  private static class SessionDecorator extends Session {
-    private final Session session;
+  private class SessionDecorator extends Session {
     private Bell<Void> openBell = null;
 
-    public SessionDecorator(Session s) {
-      super(s);
-      session = s;
+    public SessionDecorator() {
+      super(Session.this.uri, Session.this.credential);
     }
 
     // This really means "opening has definitely completed". This may return
@@ -120,66 +119,56 @@ public abstract class Session extends Resource {
 
     public Bell<Stat> stat(final URI uri) {
       if (isClosed()) return (Bell<Stat>) onClose();
-      if (isOpen())   return onClose(session.stat(uri));
+      if (isOpen())   return onClose(Session.this.stat(uri));
       return new OnOpen<Stat>() {
-        Bell<Stat> task() { return session.stat(uri); }
+        Bell<Stat> task() { return Session.this.stat(uri); }
       };
     }
 
     public Bell<Void> mkdir(final URI uri) {
       if (isClosed()) return (Bell<Void>) onClose();
-      if (isOpen())   return onClose(session.mkdir(uri));
+      if (isOpen())   return onClose(Session.this.mkdir(uri));
       return new OnOpen<Void>() {
-        Bell<Void> task() { return session.mkdir(uri); }
+        Bell<Void> task() { return Session.this.mkdir(uri); }
       };
     }
 
     public Bell<Void> rm(final URI uri) {
       if (isClosed()) return (Bell<Void>) onClose();
-      if (isOpen())   return onClose(session.rm(uri));
+      if (isOpen())   return onClose(Session.this.rm(uri));
       return new OnOpen<Void>() {
-        Bell<Void> task() { return session.rm(uri); }
+        Bell<Void> task() { return Session.this.rm(uri); }
       };
     }
 
     public Bell<Sink> sink(final URI uri) {
       if (isClosed()) return (Bell<Sink>) onClose();
-      if (isOpen())   return onClose(session.sink(uri));
+      if (isOpen())   return onClose(Session.this.sink(uri));
       return new OnOpen<Sink>() {
-        Bell<Sink> task() { return session.sink(uri); }
+        Bell<Sink> task() { return Session.this.sink(uri); }
       };
     }
 
     public Bell<Tap> tap(final URI uri) {
       if (isClosed()) return (Bell<Tap>) onClose();
-      if (isOpen())   return onClose(session.tap(uri));
+      if (isOpen())   return onClose(Session.this.tap(uri));
       return new OnOpen<Tap>() {
-        Bell<Tap> task() { return session.tap(uri); }
+        Bell<Tap> task() { return Session.this.tap(uri); }
       };
     }
 
     public synchronized Bell<Void> open() {
       if (openBell != null)
         return openBell;
-      openBell = session.open();
+      openBell = Session.this.open();
       if (openBell == null)  // Some beephead beeped up big time...
         close("Programmer error in open procedure.");
       return openBell;
     }
 
-    public boolean equals(Object o) { return session.equals(o); }
+    public boolean equals(Object o) { return Session.this.equals(o); }
 
-    public int hashCode() { return session.hashCode(); }
-  }
-
-  /**
-   * Select a {@link Resource} from the session, based on a path.
-   *
-   * @param uri the URI of the resource to be selected, as a string.
-   * @return The {@link Resource} identified by the URI.
-   */
-  public final Resource select(String uri) {
-    return select(URI.create(uri));
+    public int hashCode() { return Session.this.hashCode(); }
   }
 
   /**
@@ -189,6 +178,8 @@ public abstract class Session extends Resource {
    * @return The {@link Resource} identified by the URI.
    */
   public Resource select(URI uri) {
+    if (uri == null)
+      return decorate();
     return new Resource(this, uri);
   }
 

@@ -28,8 +28,8 @@ public class Resource {
   protected Resource(URI uri) {
     if (uri == null)
       throw new NullPointerException();
-    this.session = (Session) this;
     this.uri = uri.makeImmutable();
+    this.session = ((Session) this).decorate();
   }
 
   /**
@@ -43,8 +43,8 @@ public class Resource {
   public Resource(Session session, URI uri) {
     if (session == null || uri == null)
       throw new NullPointerException();
-    this.session = session;
     this.uri = uri.makeImmutable();
+    this.session = session.decorate();
   }
 
   /**
@@ -134,12 +134,11 @@ public class Resource {
    *
    * @return A subresource relative to this resource.
    * @param path the path to the subresource, relative to this resource.
-   * @throws ResourceException (via bell) if the resource could not be fully
-   * removed
-   * @throws UnsupportedOperationException if removal is not supported
    * @see Bell
    */
-  public Resource select(String path) {
+  public final Resource select(String path) {
+    if (path == null)
+      return select((Path)null);
     return select(Path.create(path));
   }
 
@@ -148,9 +147,6 @@ public class Resource {
    *
    * @return A subresource relative to this resource.
    * @param path the path to the subresource, relative to this resource.
-   * @throws ResourceException (via bell) if the resource could not be fully
-   * removed
-   * @throws UnsupportedOperationException if removal is not supported
    * @see Bell
    */
   public Resource select(Path path) {

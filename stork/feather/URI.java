@@ -395,7 +395,8 @@ public abstract class URI {
    * @return A URI based on this one with the given host and port components.
    */
   public URI hostPort(String hostport) {
-    // FIXME
+    if (hostport == null)
+      return hostPort(null, -1);
     String[] hp = hostport.split(":");
     return hostPort(hp[0], hp[1]);
   }
@@ -453,7 +454,7 @@ public abstract class URI {
    */
   public URI authority(String authority) {
     if (authority == null)
-      return path((Path)null).query(null).fragment(null);
+      return userInfo(null).hostPort(null);
     URI u = create(authority);
     return userInfo(u.userInfo()).hostPort(u.hostPort());
   }
@@ -625,7 +626,7 @@ public abstract class URI {
    * Return a URI containing only the resource components of this URI.
    *
    * @return A URI based on this one with only the resource components, or
-   * {@code null} if there are no endpoint components.
+   * {@code null} if there are no resource components.
    */
   public URI resourceURI() {
     return endpoint(null).nonEmpty();

@@ -254,10 +254,10 @@ public class Scheduler {
         nr = nr.reselect(session);
       } else {
         System.out.println("Using new session...");
-        final Resource r = nr;
-        r.session().onClose().promise(new Bell() {
+        final Session s = nr.session();
+        s.onClose(new Bell() {
           public void always() {
-            session_pool.remove(r.session());
+            session_pool.remove(s);
           }
         });
       }

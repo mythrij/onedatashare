@@ -330,7 +330,7 @@ public class FTPChannel {
   // Handles replies as they are received.
   class ReplyHandler extends SimpleChannelInboundHandler<Reply> {
     public void messageReceived(ChannelHandlerContext ctx, Reply reply) {
-      //System.out.println(this+": Got: "+reply);
+      System.out.println(this+": Got: "+reply);
       switch (reply.code) {
         case 220:
           if (data.welcome == null)
@@ -351,7 +351,7 @@ public class FTPChannel {
     // TODO: How should we handle exceptions? Which exceptions can this thing
     // receive anyway?
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable t) {
-      //t.printStackTrace();
+      t.printStackTrace();
     }
   }
 
@@ -430,7 +430,7 @@ public class FTPChannel {
     protected void encode
       (ChannelHandlerContext ctx, Object msg, List<Object> out)
     throws Exception {
-      //System.out.println("Writing "+msg);
+      System.out.println("Writing "+msg);
       ByteBuf b =
         Unpooled.wrappedBuffer(msg.toString().getBytes(data.encoding));
 
@@ -807,7 +807,7 @@ public class FTPChannel {
   // owner.
   protected synchronized void assumeControl() {
     synchronized (data) {
-      //System.out.println(data.owner.hashCode()+" -> "+hashCode());
+      System.out.println(data.owner.hashCode()+" -> "+hashCode());
       data.owner = this;
       if (!deferred.isEmpty()) {
         Deque<Deferred> realDeferred = deferred;
@@ -842,11 +842,11 @@ public class FTPChannel {
       // If we're not the owner, defer the command. Otherwise, send it.
       if (data.owner != FTPChannel.this) {
         deferred.add(this);
-        //System.out.println(FTPChannel.this.hashCode()+": Deferring "+this);
+        System.out.println(FTPChannel.this.hashCode()+": Deferring "+this);
       } else {
         appendHandler(cmd);
         if (verb != null) channel().writeAndFlush(this);
-        //System.out.println(FTPChannel.this.hashCode()+": Sending "+this);
+        System.out.println(FTPChannel.this.hashCode()+": Sending "+this);
       }
     } public String toString() {
       if (verb == null)
@@ -1042,7 +1042,7 @@ public class FTPChannel {
         channel().close();
       else
         channel().writeAndFlush(s);
-      //System.out.println("Writing: "+s);
+      System.out.println("Writing: "+s);
     }
 
     // Used internally to extract the channel from the future.
@@ -1051,5 +1051,13 @@ public class FTPChannel {
         throw new RuntimeException(error);
       return future.syncUninterruptibly().channel();
     }
+  }
+
+  public static void main(String[] args) throws Exception {
+    FTPChannel ch = new FTPChannel(args[1]);
+    java.io.BufferedReader r = new java.io.BufferedReader(
+      new java.io.InputStreamReader(System.in));
+    while (true)
+      ch.new Command(r.readLine());
   }
 }
