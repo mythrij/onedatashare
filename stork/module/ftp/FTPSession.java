@@ -86,12 +86,10 @@ public class FTPSession extends Session {
 
       // This will call itself until it finds a supported command.
       private void tryListing(final ListCommand cmd) {
-        System.out.println("tryListing: "+cmd);
         if (cmd == null)
           ring(new Exception("Listing is not supported."));
         else ch.supports(cmd.toString()).promise(new Bell<Boolean>() {
           public void done(Boolean supported) {
-            System.out.println("wanna: "+supported+" "+cmd+"  "+cmd.next());
             if (supported) {
               actuallyDoListing(cmd);
             } else {
