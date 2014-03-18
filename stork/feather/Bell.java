@@ -98,8 +98,8 @@ public class Bell<T> implements Future<T> {
    * Cancel the bell, resolving it with a cancellation error.
    *
    * @param mayInterruptIfRunning Ignored in this implementation.
-   * @return <code>true</code> if the bell was cancelled as a result of this
-   * call, <code>false</code> otherwise.
+   * @return {@code true} if the bell was cancelled as a result of this call,
+   * {@code false} otherwise.
    * @see Future#cancel(boolean)
    */
   public synchronized boolean cancel(boolean mayInterruptIfRunning) {
@@ -110,8 +110,7 @@ public class Bell<T> implements Future<T> {
   }
 
   /**
-   * @return <code>true</code> if this bell was rung with a cancellation
-   * exception.
+   * @return {@code true} if this bell was rung with a cancellation exception.
    * @see Future#isCancelled
    */
   public synchronized boolean isCancelled() {
@@ -135,7 +134,7 @@ public class Bell<T> implements Future<T> {
     return done && error != null;
   }
 
-  // Wait for the bell to be rung, then return the value. */
+  /** Wait for the bell to be rung, then return the value. */
   public synchronized T get()
   throws InterruptedException, ExecutionException {
     while (!done)

@@ -3,6 +3,8 @@ package stork.feather;
 import java.util.*;
 import java.io.*;
 
+import stork.feather.util.*;
+
 /**
  * A memory-efficient representation of a path name.
  */
@@ -17,7 +19,7 @@ public abstract class Path {
   }
 
   // The root path, which should be the only path with a blank name.
-  private static final Path ROOT = new Path("") {
+  public static final Path ROOT = new Path("") {
     public Path up()         { return this; }
     public int length()      { return 0; }
     public String toString(boolean escaped) {
@@ -138,7 +140,7 @@ public abstract class Path {
   public String toString(boolean escaped) {
     String j = "/";
     return up().isRoot() ? up().name(escaped)+j+name(escaped) :
-           isRoot()      ? name(escaped) : up()+j+(escaped);
+           isRoot()      ? name(escaped) : up()+j+name(escaped);
   }
 
   /**

@@ -6,7 +6,7 @@ import stork.util.*;
 import stork.scheduler.*;
 import java.net.URI;
 
-// This is basically a standalone wrapper around StorkScheduler that lets
+// This is basically a standalone wrapper around Scheduler that lets
 // the scheduler run as a standalone process (as opposed to as a client
 // of another JVM). This will create server interfaces for the scheduler.
 
@@ -35,7 +35,7 @@ public class StorkServer extends Command {
     env.unmarshal(Stork.settings);
     env.addAll(Ad.marshal(Stork.settings));
 
-    StorkScheduler s = StorkScheduler.start(env);
+    Scheduler s = Scheduler.start(env);
     URI[] listen = Stork.settings.listen;
 
     if (listen == null || listen.length < 1)

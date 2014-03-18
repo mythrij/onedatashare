@@ -20,19 +20,19 @@ public abstract class StorkInterface
 extends ChannelInitializer<Channel> {
   protected String name;  // Used for debugging messages.
   protected final URI uri;
-  protected final StorkScheduler sched;
+  protected final Scheduler sched;
   private Channel chan;
 
   // Global connection selector.
   private static final EventLoopGroup acceptor = new NioEventLoopGroup();
 
-  public StorkInterface(StorkScheduler sched, URI uri) {
+  public StorkInterface(Scheduler sched, URI uri) {
     this.uri = uri;
     this.sched = sched;
   }
 
   // Automatically determine and create an interface from a URI.
-  public static StorkInterface create(StorkScheduler s, URI u) {
+  public static StorkInterface create(Scheduler s, URI u) {
     String p = u.getScheme();
     if (p == null)
       p = u.toString();
@@ -94,11 +94,20 @@ extends ChannelInitializer<Channel> {
     public void channelRead(final ChannelHandlerContext ctx, Object o)
     throws Exception {
       sched.putRequest(new Request((Ad)o) {
-        protected void done(Ad ad) {
-          ctx.writeAndFlush(ad);
+        protected void done(Object object) {
+          if (object == null)
+            ctx.writeAndFlush(
+              new Ad("message", "Operation completed successfully."));
+          else
+            ctx.writeAndFlush(Ad.marshal(object));
         } protected void fail(Throwable t) {
+          t.printStackTrace();
           String m = t.getMessage();
-          if (m == null) m = "unknown error";
+          if (m == null) {
+            String n = t.getClass().getSimpleName();
+            m = "Unspecified error";
+            if (!n.isEmpty()) m += " ("+n+")";
+          }
           ctx.writeAndFlush(new Ad("error", m));
         }
       });

@@ -7,11 +7,10 @@ import stork.scheduler.*;
 
 import java.util.*;
 import java.io.*;
-import java.net.URI;
 
 // A transfer module which executes as an independent process.
 
-public class ExternalModule extends TransferModule {
+public class ExternalModule extends Module {
   private transient File exe;
 
   // Inner class representing a transfer.
@@ -127,7 +126,7 @@ public class ExternalModule extends TransferModule {
   }
 
   // Just to satisfy the interface for now.
-  public Session session(Endpoint e) {
+  public Resource select(URI uri, Credential cred) {
     return null;
   }
 

@@ -35,6 +35,8 @@ public class FTPChannel {
   // The maximum amount of time (in ms) to wait for a connection.
   private static final int timeout = 2000;
 
+  private boolean closed = false;
+
   // FIXME: We should use something system-wide.
   private static EventLoopGroup group = new NioEventLoopGroup();
 
@@ -328,18 +330,22 @@ public class FTPChannel {
   // Handles replies as they are received.
   class ReplyHandler extends SimpleChannelInboundHandler<Reply> {
     public void messageReceived(ChannelHandlerContext ctx, Reply reply) {
-      System.out.println(this+": Got: "+reply);
+      Log.finer(this+": Got: "+reply);
       switch (reply.code) {
         case 220:
           if (data.welcome == null)
             data.welcome = reply;
           break;
         case 421:
-          channel().close();
+          FTPChannel.this.close();
           break;
         default:
           feedHandler(reply);
       }
+    }
+  
+    public void channelInactive(ChannelHandlerContext ctx) {
+      FTPChannel.this.close();
     }
 
     // TODO: How should we handle exceptions? Which exceptions can this thing
@@ -424,7 +430,7 @@ public class FTPChannel {
     protected void encode
       (ChannelHandlerContext ctx, Object msg, List<Object> out)
     throws Exception {
-      //System.out.println("Writing "+msg);
+      Log.finer("Writing "+msg);
       ByteBuf b =
         Unpooled.wrappedBuffer(msg.toString().getBytes(data.encoding));
 
@@ -442,6 +448,18 @@ public class FTPChannel {
   private Channel channel() {
     return data.future.syncUninterruptibly().channel();
   }
+
+  // Close the channel and run the onClose handler.
+  public synchronized void close() {
+    if (closed) return;
+    closed = true;
+    channel().close();
+    onClose();
+  }
+
+  // This gets called when the channel is closed by some means. Subclasses
+  // should implement this.
+  protected void onClose() { }
 
   // Try to authenticate using a username and password.
   public Bell<Reply> authorize() {
@@ -518,52 +536,54 @@ public class FTPChannel {
     return bell;
   }
 
-  // A structure used to hold a set of features supported by a server.
-  // TODO: This should propagate control channel errors.
+  // A structure used to hold a set of features supported by a server. A fine
+  // specimen of overengineering.
+  // TODO: This should probably propagate control channel errors.
   class FeatureSet {
-    private boolean inProgress = false;
     private Set<String> features;
-    private Set<CheckBell> checks;
+    private Map<String,Set<CheckBell>> checks;
 
     // Custom bell which is associated with a given command query.
-    abstract class CheckBell extends Bell<Boolean> {
-      abstract String cmd();
-    }
-
-    // Returns true if feature detection has been performed and all future
-    // checks will be resolved immediately.
-    public synchronized boolean isDone() {
-      return features != null && !inProgress;
+    class CheckBell extends Bell<Boolean> {
+      public final String cmd;
+      CheckBell(String cmd) {
+        this.cmd = cmd;
+        addCheck(this);
+      } public String toString() { return cmd; }
     }
 
     // Asynchronously check if a command is supported.
-    public synchronized Bell<Boolean> supports(final String cmd) {
-      CheckBell bell = new CheckBell() {
-        String cmd() { return cmd; }
+    private synchronized void init() {
+      if (features != null)
+        return;
+
+      features = new HashSet<String>();
+      checks = new HashMap<String,Set<CheckBell>>();
+
+      // ...and pipe all the check commands.
+      new Command("HELP") {
+        public void handle(Reply r) {
+          if (!r.isComplete()) return;
+          for (int i = 1; i < r.length()-1; i++)
+          for (String c : r.line(i).trim().toUpperCase().split(" "))
+            if (!c.contains("*")) addFeature(c);
+        }
       };
+      new Command("HELP SITE") {
+        public void handle(Reply r) {
+          if (!r.isComplete()) return;
+          for (int i = 1; i < r.length()-1; i++)
+            addFeature(r.line(i).trim().split(" ", 2)[0].toUpperCase());
+        }
+      };
+      //new Command("FEAT");  // TODO
+      new Command(null) {
+        public void handle() { finalizeChecks(); }
+      };
+    }
 
-      if (features == null) {
-        // This is the first time we've been called, initialize state...
-        inProgress = true;
-        features = new HashSet<String>();
-        checks = new HashSet<CheckBell>();
-
-        // ...and pipe all the check commands.
-        checks.add(bell);
-        new Command("HELP").promise(parseHelpReply());
-        new Command("HELP SITE").promise(parseSiteReply());
-        new Command("FEAT").promise(parseFeatReply());
-        new Command(null) {
-          public void handle() { finalizeChecks(); }
-        };
-      } else if (inProgress) {
-        // Still waiting; queue the bell.
-        checks.add(bell);
-      } else {
-        bell.ring(isSupported(cmd));
-      }
-
-      return bell;
+    public Bell<Boolean> supports(String cmd) {
+      return new CheckBell(cmd);
     }
 
     // Synchronously check for command support. Used internally.
@@ -571,65 +591,31 @@ public class FTPChannel {
       return features != null && features.contains(cmd);
     }
 
-    // Add a feature to the feature set.
     private synchronized void addFeature(String cmd) {
+      if (features == null)
+        init();
       features.add(cmd);
-    }
-
-    // Parse a HELP reply and update features.
-    private Bell<Reply> parseHelpReply() {
-      return new Bell<Reply>() {
-        public void done(Reply r) {
-          if (!r.isComplete()) return;
-          for (int i = 1; i < r.length()-1; i++)
-          for (String c : r.line(i).trim().toUpperCase().split(" "))
-            if (!c.contains("*")) addFeature(c);
-          updateChecks();
-        }
-      };
-    }
-
-    // Parse a FEAT reply and update features.
-    private Bell<Reply> parseFeatReply() {
-      return new Bell<Reply>() {
-        public void done(Reply r) {
-          if (!r.isComplete()) return;
-          for (int i = 1; i < r.length()-1; i++)
-            addFeature(r.line(i).trim().split(" ", 2)[0].toUpperCase());
-          updateChecks();
-        }
-      };
-    }
-
-    // Parse a HELP SITE reply and update features.
-    private Bell<Reply> parseSiteReply() {
-      return new Bell<Reply>() {
-        public void done(Reply r) {
-          // TODO
-        }
-      };
-    }
-
-    // Iterate over the queued checks, and resolve them if a command is known
-    // to be supported.
-    private synchronized void updateChecks() {
-      for (Iterator<CheckBell> it = checks.iterator(); it.hasNext();) {
-        CheckBell b = it.next();
-        if (isSupported(b.cmd())) {
-          b.ring(true);
-          it.remove();
-        }
-      }
+      if (checks.containsKey(cmd)) for (CheckBell cb : checks.get(cmd))
+        cb.ring(true);
+    } private synchronized void addCheck(final CheckBell cb) {
+      if (features == null)
+        init();
+      if (checks == null)
+        cb.ring(isSupported(cb.cmd));
+      else if (features.contains(cb.cmd))
+        cb.ring(true);
+      else if (!checks.containsKey(cb.cmd))
+        checks.put(cb.cmd, new HashSet<CheckBell>() {{ add(cb); }});
+      else
+        checks.get(cb.cmd).add(cb);
     }
 
     // Ring this when no more commands will be issued to check support. It will
     // resolve all unsupported commands with false and update the state to
     // reflect the command list has been finalized.
     private synchronized void finalizeChecks() {
-      updateChecks();
-      for (CheckBell b : checks)
+      for (Set<CheckBell> cbs : checks.values()) for (CheckBell b : cbs)
         b.ring(false);
-      inProgress = false;
       checks = null;
     }
   }
@@ -789,7 +775,7 @@ public class FTPChannel {
   // owner.
   protected synchronized void assumeControl() {
     synchronized (data) {
-      System.out.println(data.owner.hashCode()+" -> "+hashCode());
+      Log.finer(data.owner.hashCode()+" -> "+hashCode());
       data.owner = this;
       if (!deferred.isEmpty()) {
         Deque<Deferred> realDeferred = deferred;
@@ -824,11 +810,11 @@ public class FTPChannel {
       // If we're not the owner, defer the command. Otherwise, send it.
       if (data.owner != FTPChannel.this) {
         deferred.add(this);
-        System.out.println(FTPChannel.this.hashCode()+": Deferring "+this);
+        Log.finer(FTPChannel.this.hashCode()+": Deferring "+this);
       } else {
         appendHandler(cmd);
         if (verb != null) channel().writeAndFlush(this);
-        System.out.println(FTPChannel.this.hashCode()+": Sending "+this);
+        Log.finer(FTPChannel.this.hashCode()+": Sending "+this);
       }
     } public String toString() {
       if (verb == null)
@@ -957,11 +943,11 @@ public class FTPChannel {
     // A handler which passes data to the sink.
     ChannelHandler reader = new SimpleChannelInboundHandler<ByteBuf>() {
       public void messageReceived(ChannelHandlerContext ctx, ByteBuf m) {
-        if (sink != null) sink.write(new Slice(m));
+        if (sink != null) sink.drain(new Slice(m));
       } public void exceptionCaught(ChannelHandlerContext ctx, Throwable t) {
-        if (sink != null) sink.write(new ResourceException(null, t));
+        //if (sink != null) sink.drain(new ResourceException(null, t));
       } public void channelInactive(ChannelHandlerContext ctx) {
-        if (sink != null) sink.write(new Slice());
+        if (sink != null) sink.drain(new Slice());
       } public void read(ChannelHandlerContext ctx) {
         if (!corked && sink != null) ctx.read();
       }
@@ -1019,14 +1005,12 @@ public class FTPChannel {
     }
 
     // Write a passed slice to the channel.
-    public synchronized void write(Slice s) {
+    public synchronized void drain(Slice s) {
       if (s.isEmpty())
         channel().close();
       else
         channel().writeAndFlush(s);
-      System.out.println("Writing: "+s);
-    } public synchronized void write(ResourceException e) {
-      // TODO
+      Log.finer("Writing: "+s);
     }
 
     // Used internally to extract the channel from the future.
@@ -1035,5 +1019,13 @@ public class FTPChannel {
         throw new RuntimeException(error);
       return future.syncUninterruptibly().channel();
     }
+  }
+
+  public static void main(String[] args) throws Exception {
+    FTPChannel ch = new FTPChannel(args[1]);
+    java.io.BufferedReader r = new java.io.BufferedReader(
+      new java.io.InputStreamReader(System.in));
+    while (true)
+      ch.new Command(r.readLine());
   }
 }

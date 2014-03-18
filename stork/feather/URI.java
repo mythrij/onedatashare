@@ -1,22 +1,49 @@
 package stork.feather;
 
+import stork.feather.util.*;
+
 /**
+ * <p>
  * A representation of a Uniform Resource Identifier (URI). The getter methods
  * of this class which return single components will return unescaped (decoded)
  * representations, and likewise the single-component setter methods expect
- * unescaped inputs; the getter methods which return concatenated subcomponents
- * will return representations with escaped (encoded) subcomponents and
- * unescaped joiners, and likewise the single-component setter methods expect
+ * unescaped inputs; the getter methods which return concatenated component
+ * groups will return representations with escaped (encoded) subcomponents and
+ * unescaped joiners, and likewise the component group setter methods expect
  * escaped inputs with unescaped joiners.
+ * </p>
  *
+ * <p>
+ * The syntax of URIs in Feather conform to the URI generic syntax defined in
+ * RFC 3986. However, some non-standard component groups are also defined for
+ * URLs, as shown in this diagram:
+ * </p>
+ *
+ * <blockquote><pre>
+ *                       authority
+ *                  _________|__________
+ *                 /                    \
+ *                 userinfo      hostport
+ *             _______|_______   ___|___
+ *            /               \ /       \
+ *   scheme://username:password@host:port/path?query#fragment
+ *   \__________________________________/\__________________/
+ *                     |                          |
+ *                  endpoint                   resource
+ * </pre></blockquote>
+ *
+ * <p>
  * This class is left abstract, allowing users to provide their own URI
  * implementation or an adapter allowing an existing one to be used wherever a
  * Feather URI is expected. A default implementation is provided, which takes
  * advantage of the interning utility provided by Feather for improved storage
  * performance. The default implementation may be accessed through the static
  * {@link #create(String)} method.
- *
+ * </p>
+ * 
+ * <p>
  * This interface is inspired heavily by URI.js, which can be found here:
+ * </p>
  *
  * <blockquote>{@code https://github.com/medialize/URI.js}</blockquote>
  */
@@ -47,11 +74,11 @@ public abstract class URI {
 
 
   /**
-   * This is the default mutable URI implementation. A builder utility,
-   * similar in spirit to {@link StringBuilder}, for efficiently creating URIs
+   * This is the default mutable URI implementation. A builder utility, similar
+   * in spirit to {@link StringBuilder}, for efficiently creating URIs
    * component-wise.
    */
-  final class Builder extends URI {
+  public static class Builder extends URI {
     private String scheme, userinfo, host, query, fragment;
     private Path path;
     private int port = -1;
@@ -368,7 +395,8 @@ public abstract class URI {
    * @return A URI based on this one with the given host and port components.
    */
   public URI hostPort(String hostport) {
-    // FIXME
+    if (hostport == null)
+      return hostPort(null, -1);
     String[] hp = hostport.split(":");
     return hostPort(hp[0], hp[1]);
   }
@@ -416,6 +444,19 @@ public abstract class URI {
     if (ui == null) return hp;  // May return null.
     if (hp == null) hp = "";
     return ui+"@"+hp;
+  }
+
+  /**
+   * Return a URI based on this one with the given authority segment.
+   *
+   * @param authority the new authority component
+   * @return A URI based on this one with the given authority component.
+   */
+  public URI authority(String authority) {
+    if (authority == null)
+      return userInfo(null).hostPort(null);
+    URI u = create(authority);
+    return userInfo(u.userInfo()).hostPort(u.hostPort());
   }
 
   /**
@@ -559,11 +600,102 @@ public abstract class URI {
     String q = escape(query());
     String f = escape(fragment());
 
+    if (p == null && q == null && f == null) return null;
+
     if (p != null) sb.append(p);
     if (q != null) sb.append("?").append(q);
     if (f != null) sb.append("#").append(f);
 
     return sb.toString();
+  }
+
+  /**
+   * Return a URI based on this one with the given resource component.
+   *
+   * @param resource the new resource string
+   * @return A URI based on this one with the given resource component.
+   */
+  public URI resource(String resource) {
+    if (resource == null)
+      return path((Path)null).query(null).fragment(null);
+    URI u = create(resource);
+    return path(u.path()).query(u.query()).fragment(u.fragment());
+  }
+
+  /**
+   * Return a URI containing only the resource components of this URI.
+   *
+   * @return A URI based on this one with only the resource components, or
+   * {@code null} if there are no resource components.
+   */
+  public URI resourceURI() {
+    return endpoint(null).nonEmpty();
+  }
+
+  /**
+   * Get the endpoint component of the URI, if it is a URL. The returned string
+   * is in the form of:
+   *
+   * <blockquote>
+   * {@code [scheme:][//authority]}
+   * </blockquote>
+   *
+   * This method will return {@code null} if the URI does not have an endpoint
+   * component.
+   */
+  public String endpoint() {
+    StringBuilder sb = new StringBuilder();
+    String s = escape(scheme());
+    String a = authority();
+
+    if (s == null && a == null) return null;
+
+    if (s != null) sb.append(s).append(":");
+    if (a != null) sb.append("//").append(a);
+
+    return sb.toString();
+  }
+
+  /**
+   * Return a URI based on this one with the given endpoint component.
+   *
+   * @param endpoint the new endpoint string
+   * @return A URI based on this one with the given endpoint component.
+   */
+  public URI endpoint(String endpoint) {
+    if (endpoint == null)
+      return scheme(null).authority(null);
+    URI u = create(endpoint);
+    return scheme(u.scheme()).authority(u.authority());
+  }
+
+  /**
+   * Return a URI containing only the endpoint components of this URI. This is an alias
+   *
+   * @return A URI based on this one with only the endpoint components, or
+   * {@code null} if there are no endpoint components.
+   */
+  public final URI endpointURI() {
+    return resource(null).nonEmpty();
+  }
+
+  /**
+   * Check if this is an empty URI. That is, if all of its components are
+   * {@code null}, or a URI whose string representation is an empty string.
+   *
+   * @return {@code true} if the URI is empty; {@code false} otherwise.
+   */
+  public boolean isEmpty() {
+    return toString().isEmpty();
+  }
+
+  /**
+   * Return this URI if it is non-empty, or {@code null} if it is empty.
+   *
+   * @return This URI if it is non-empty, or {@code null} if it is empty.
+   */
+  private final URI nonEmpty() {
+    return isEmpty() ? null : this;
   }
 
   /**
@@ -667,6 +799,31 @@ public abstract class URI {
     if (string == null)
       return null;
     return string;
+  }
+
+  /**
+   * Test this URI for equivalence to another object. A URI is equivalent to
+   * another URI if they are component-wise equal.
+   *
+   * @param object the object to test equivalence with
+   * @return {@code true} if this URI is equivalent to {@code object}; {@code
+   * false} otherwise.
+   */
+  public boolean equals(Object object) {
+    if (!(object instanceof URI))
+      return false;
+    URI u = (URI) object;
+    return toString().equals(u.toString());
+  }
+
+  /**
+   * Generate a hash code for this URI. A URI's hash code should be the same as
+   * the hash code of its string representation.
+   *
+   * @return A hash code for this URI.
+   */
+  public int hashCode() {
+    return toString().hashCode();
   }
 
   public static void main(String args[]) {

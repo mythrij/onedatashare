@@ -95,15 +95,17 @@ public class FTPListParser extends Bell<Stat> implements Sink {
     ring(err.getCause());
   }
 
-  // Write a byte buffer to the file, decode as string, scan for newlines, and
-  // feed lines through parser. Assumably we're reading data where newlines are
-  // one byte so just look for newline characters.
-  public void write(Slice s) {
+  public void drain(Slice s) {
     if (s.isEmpty())
       finish();
     else
       write(s.plain().raw());
-  } public void write(ByteBuf b) {
+  }
+
+  // Write a byte buffer to the file, decode as string, scan for newlines, and
+  // feed lines through parser. Assumably we're reading data where newlines are
+  // one byte so just look for newline characters.
+  public void write(ByteBuf b) {
     byte[] bytes;
     if (b.hasArray())
       bytes = b.array();

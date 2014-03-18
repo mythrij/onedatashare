@@ -10,19 +10,19 @@ import java.io.*;
 
 // A class for looking up transfer modules by protocol and handle.
 
-public class TransferModuleTable {
-  private static TransferModuleTable instance = null;
-  Map<String, TransferModule> by_proto, by_handle;
+public class ModuleTable {
+  private static ModuleTable instance = null;
+  Map<String, Module> by_proto, by_handle;
 
-  public TransferModuleTable() {
-    by_proto  = new HashMap<String, TransferModule>();
-    by_handle = new HashMap<String, TransferModule>();
+  public ModuleTable() {
+    by_proto  = new HashMap<String, Module>();
+    by_handle = new HashMap<String, Module>();
   }
 
   // Get the global transfer module table.
-  public static synchronized TransferModuleTable instance() {
+  public static synchronized ModuleTable instance() {
     if (instance == null)
-      instance = new TransferModuleTable();
+      instance = new ModuleTable();
     return instance;
   }
 
@@ -41,22 +41,22 @@ public class TransferModuleTable {
   // Add a transfer module to the table.
   public void register(File f) {
     register(new ExternalModule(f));
-  } public void register(TransferModule tm) {
+  } public void register(Module m) {
     // Check if handle is in use.
-    if (!by_handle.containsKey(tm.handle)) {
-      by_handle.put(tm.handle, tm);
-      Log.info("Registered module \"", tm, "\" [handle: ", tm.handle, "]");
+    if (!by_handle.containsKey(m.handle)) {
+      by_handle.put(m.handle, m);
+      Log.info("Registered module \"", m, "\" [handle: ", m.handle, "]");
     } else {
-      Log.warning("Module handle \"", tm.handle, "\"in use, ignoring");
+      Log.warning("Module handle \"", m.handle, "\"in use, ignoring");
       return;
     }
 
     // Add the protocols for this module.
     Set<String> good = new TreeSet<String>(), bad = new TreeSet<String>();
-    for (String p : tm.protocols) {
+    for (String p : m.protocols) {
       if (by_proto.get(p) == null) {
         good.add(p);
-        by_proto.put(p, tm);
+        by_proto.put(p, m);
       } else {
         bad.add(p);
       }
@@ -71,29 +71,29 @@ public class TransferModuleTable {
   // Get all of the transfer module info ads in a list.
   public Ad infoAds() {
     Ad mods = new Ad();
-    for (TransferModule tm : by_handle.values())
-      mods.put(tm.handle, Ad.marshal(tm));
+    for (Module m : by_handle.values())
+      mods.put(m.handle, Ad.marshal(m));
     return mods;
   }
 
   // Get a transfer module by its handle.
-  public TransferModule byHandle(String h) {
-    TransferModule tm = by_handle.get(h);
-    if (tm != null)
-      return tm;
+  public Module byHandle(String h) {
+    Module m = by_handle.get(h);
+    if (m != null)
+      return m;
     throw new RuntimeException("no module '"+h+"' registered");
   }
 
   // Get a transfer module by protocol.
-  public TransferModule byProtocol(String p) {
-    TransferModule tm = by_proto.get(p);
-    if (tm != null)
-      return tm;
+  public Module byProtocol(String p) {
+    Module m = by_proto.get(p);
+    if (m != null)
+      return m;
     throw new RuntimeException("no module for protocol '"+p+"' registered");
   }
 
   // Get a set of all the modules.
-  public Collection<TransferModule> modules() {
+  public Collection<Module> modules() {
     return by_handle.values();
   }
 

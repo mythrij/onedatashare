@@ -5,6 +5,7 @@ import java.math.*;
 import java.lang.reflect.*;
 
 // Beware all ye who enter, for here there be dragons.
+// TODO: This should be combined back into Ad.
 
 public class AdObject implements Comparable<AdObject> {
   Object object;
@@ -46,16 +47,15 @@ public class AdObject implements Comparable<AdObject> {
     map(char.class,    "asChar");
     map(Map.class,     "asMap");
     map(Collection.class, "asList");
-    map(java.net.URI.class, "asURI");
   }
 
   private AdObject(Object o) {
-    object = marshal(o);
+    object = makePrimitive(o);
   }
 
   // Convert an object to an ad primitive type.
   // FIXME: Aaaa isn't there a better way?
-  private static Object marshal(Object o) {
+  private static Object makePrimitive(Object o) {
     if (o == null)
       return o;
     if (o instanceof String)
@@ -64,8 +64,6 @@ public class AdObject implements Comparable<AdObject> {
       return o;
     if (o instanceof Boolean)
       return o;
-    if (o instanceof java.net.URI)
-      return o.toString();
     if (o instanceof Character)
       return o.toString();
     if (o instanceof Enum)
@@ -124,10 +122,6 @@ public class AdObject implements Comparable<AdObject> {
     return (object != null) ? object.toString() : null;
   }
 
-  public java.net.URI asURI() {
-    return java.net.URI.create(asString());
-  }
-
   public Number asNumber() {
     if (object instanceof Number)
       return (Number) object;
@@ -181,22 +175,19 @@ public class AdObject implements Comparable<AdObject> {
     return asAd().unmarshalAs(HashMap.class);
   }
 
-  // Helper function to try to find an unmarshal method.
-  private AdMember getUnmarshalMethod(AdType t) {
-    AdMember m = t.method("unmarshal", object.getClass());
-    if (m != null) return m;
-    m = t.method("unmarshal", Object.class);
-    if (m != null) return m;
-    return null;
-  }
-
   public <T> T as(Class<T> c) {
     return c.cast(as(new AdType(c)));
   } protected Object as(AdType t) {
     Class c = t.wrapper();
-    if (object == null) {
+    Object o = object, uo;
+    if (o == null) {
       return null;
     } try {
+      // Check if there's an unmarshaller, and delegate if so.
+      Ad.Marshaller ma = Ad.findMarshaller(t);
+      if (ma != null) try {
+        return c.cast(ma.doUnmarshal(this));
+      } catch (Ad.MarshallerDeference e) { }
       // Check if it's an array.
       if (t.isArray())
         return asArray(t);
@@ -206,17 +197,16 @@ public class AdObject implements Comparable<AdObject> {
       Method cm = conv_map.get(c);
       if (cm != null)
         return c.cast(cm.invoke(this));
-      // Try looking for an unmarshalling method.
-      AdMember m = getUnmarshalMethod(t);
-      if (m != null)
-        return c.cast(m.invoke(null, object));
       // Try looking for a likely constructor.
-      m = t.constructor(object.getClass());
+      AdMember m = t.constructor(object.getClass());
       if (m != null)
-        return c.cast(m.construct(object));
+        return m.construct(object);
       // Try the nullary constructor.
       if (isAd() && (m = t.constructor()) != null)
-        return asAd().unmarshal(c.cast(m.construct()), t);
+        return asAd().unmarshal(m.construct(), t);
+      // Try unsafe instantiation as a last resort.
+      if (isAd() && (uo = AdUnsafe.create(c)) != null)
+        return asAd().unmarshal(uo, t);
     } catch (RuntimeException e) {
       throw e;
     } catch (Exception e) {
@@ -255,6 +245,13 @@ public class AdObject implements Comparable<AdObject> {
   // Check if the enclosed object is of a given type.
   public boolean is(Class<?> c) {
     return c.isInstance(object);
+  }
+
+  /**
+   * Get the type of the wrapped object.
+   */
+  public AdType type() {
+    return new AdType(object.getClass());
   }
 
   public boolean equals(Object o) {

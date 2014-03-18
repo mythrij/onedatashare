@@ -13,21 +13,77 @@ package stork.feather;
  * @see Stat
  * @see URI
  */
-public interface Resource {
+public class Resource {
+  protected final Session session;
+  protected final URI uri;
+
+  /**
+   * The {@code Session} class calls this constructor.
+   *
+   * @param uri the URI referring to this resource.
+   * @throws NullPointerException if {@code uri} is {@code null}.
+   * @throws ClassCastException if the calling subclass is not a {@code
+   * Session}.
+   */
+  protected Resource(URI uri) {
+    if (uri == null)
+      throw new NullPointerException();
+    this.uri = uri.makeImmutable();
+    this.session = ((Session) this).decorate();
+  }
+
+  /**
+   * Create a resource wrapping the given URI and session.
+   *
+   * @param session the session through which this resource can be accessed.
+   * @param uri the URI referring to this resource.
+   * @throws NullPointerException if either {@code session} or {@code uri} are
+   * {@code null}.
+   */
+  public Resource(Session session, URI uri) {
+    if (session == null || uri == null)
+      throw new NullPointerException();
+    this.uri = uri.makeImmutable();
+    this.session = session.decorate();
+  }
+
+  /**
+   * Reselect this resource through an equivalent session. Assuming the
+   * sessions are actually equivalent, the returned resource will point to the
+   * same physical resource. This can, for instance, be used to select the same
+   * resource through an already existing session.
+   *
+   * @param session the session to reselect this resource on.
+   * @return An equivalent resource which can be accessed through an equivalent
+   * session.
+   * @throws IllegalArgumentException if {@code session} is not equivalent to
+   * this resource's session.
+   * @throws NullPointerException if {@code session} is {@code null}.
+   */
+  public Resource reselect(Session session) {
+    if (!session.equals(this.session))
+      throw new IllegalArgumentException();
+    return session.select(uri);
+  }
+
   /**
    * Get the {@link Session) associated with this resource.
    *
    * @return The {@link Session} associated with this resource.
    * @see Session
    */
-  Session session();
+  public Session session() {
+    return session;
+  }
 
   /**
    * Get the {@link URI} associated with this resource.
    * 
    * @return A {@link URI} which identifies this resource.
    */
-  URI uri();
+  public URI uri() {
+    return uri;
+  }
 
   /**
    * Get metadata for this resource, which includes a list of subresources.
@@ -38,7 +94,9 @@ public interface Resource {
    * @throws UnsupportedOperationException if metadata retrieval is not
    * supported
    */
-  Bell<Stat> stat();
+  public Bell<Stat> stat() {
+    return session.stat(uri);
+  }
 
   /**
    * Create this resource as a directory on the storage system. If the resource
@@ -52,7 +110,9 @@ public interface Resource {
    * supported
    * @see Bell
    */
-  Bell<Void> mkdir();
+  public Bell<Void> mkdir() {
+    return session.mkdir(uri);
+  }
 
   /**
    * Delete the resource and all subresources from the storage system. If the
@@ -65,18 +125,39 @@ public interface Resource {
    * @throws UnsupportedOperationException if removal is not supported
    * @see Bell
    */
-  Bell<Void> rm();
+  public Bell<Void> rm() {
+    return session.rm(uri);
+  }
 
   /**
    * Select a subresource relative to this resource.
+   *
+   * @return A subresource relative to this resource.
+   * @param path the path to the subresource, relative to this resource.
+   * @see Bell
    */
-  //Resource select(Path path);
+  public final Resource select(String path) {
+    if (path == null)
+      return select((Path)null);
+    return select(Path.create(path));
+  }
+
+  /**
+   * Select a subresource relative to this resource.
+   *
+   * @return A subresource relative to this resource.
+   * @param path the path to the subresource, relative to this resource.
+   * @see Bell
+   */
+  public Resource select(Path path) {
+    return session.select(uri.append(path));
+  }
 
   /**
    * Called by client code to initiate a transfer to the named {@link Resource}
    * using whatever method is deemed most appropriate by the implementation.
    * The implementation should try to transfer the resource as efficiently as
-   * possible, as so should inspect the destination resource to determine if
+   * possible, and so should inspect the destination resource to determine if
    * more efficient alternatives to proxy transferring can be done. This method
    * should perform a proxy transfer as a catch-all last resort.
    *
@@ -88,7 +169,9 @@ public interface Resource {
    * supported by one of the resources
    * @see Bell
    */
-  Bell<Transfer> transferTo(Resource resource);
+  public Bell<Transfer> transferTo(Resource resource) {
+    return Transfer.proxy(tap(), resource.sink());
+  }
 
   /**
    * Open a sink to the resource. Any connection operation, if necessary,
@@ -101,7 +184,9 @@ public interface Resource {
    * writing
    * @see Bell
    */
-  Bell<Sink> sink();
+  public Bell<Sink> sink() {
+    return session.sink(uri);
+  }
 
   /**
    * Open a tap on the resource. Any connection operation, if necessary, should
@@ -115,5 +200,7 @@ public interface Resource {
    * reading
    * @see Bell
    */
-  Bell<Tap> tap();
+  public Bell<Tap> tap() {
+    return session.tap(uri);
+  }
 }

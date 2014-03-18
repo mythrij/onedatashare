@@ -5,7 +5,7 @@ import stork.feather.*;
 import stork.module.*;
 import stork.scheduler.*;
 
-public class FTPModule extends TransferModule {
+public class FTPModule extends Module {
   public FTPModule() {
     super("Stork FTP Module", "ftp", "gsiftp", "gridftp");
     version = "1.0";
@@ -17,10 +17,8 @@ public class FTPModule extends TransferModule {
       "GridFTP extensions.";
   }
 
-  // Interface methods
-  // -----------------
-  // Create a new connection to an FTP server.
-  public Session session(Endpoint e) {
-    return FTPSession.connect(e).sync();
+  public Resource select(URI uri, Credential credential) {
+    URI endpoint = uri.endpointURI(), resource = uri.resourceURI();
+    return new FTPSession(endpoint, credential).select(resource);
   }
 }

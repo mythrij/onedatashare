@@ -6,49 +6,75 @@ import stork.cred.*;
 import stork.util.*;
 import stork.feather.*;
 import stork.module.ftp.*;
-import stork.user.*;
 import stork.util.*;
 
 import java.io.*;
-import java.net.*;
+//import java.net.*;
 import java.util.*;
 import java.util.concurrent.*;
 
-// The Stork transfer job scheduler. Maintains its own internal
-// configuration and state as an ad. Operates based on commands given
-// to it in the form of ads. Can be run standalone and receive commands
-// from a number of interfaces, or can be run as part of a larger
-// program and be given commands directly (or both).
-//
-// The entire state of the scheduler can be serialized and saved to disk,
-// and subsequently recovered if so desired.
-//
-// TODO: Break this thing up into separate classes.
-
-public class StorkScheduler {
-  public static volatile StorkScheduler instance;
+/**
+ * The Stork transfer job scheduler. Maintains its own internal configuration
+ * and state as an ad. Operates based on commands given to it in the form of
+ * ads. Can be run standalone and receive commands from a number of interfaces,
+ * or can be run as part of a larger program and be given commands directly (or
+ * both).
+ *
+ * The entire state of the scheduler can be serialized and saved to disk, and
+ * subsequently recovered if so desired.
+ *
+ * TODO: This thing could use some refactoring.
+ */
+public class Scheduler {
+  public static volatile Scheduler instance;
 
   public Ad env = new Ad();
   public User.Map users = new User.Map();
   public CredManager creds = new CredManager();
 
-  public transient LinkedBlockingQueue<StorkJob> jobs =
-    new LinkedBlockingQueue<StorkJob>();
+  public transient LinkedBlockingQueue<Job> jobs =
+    new LinkedBlockingQueue<Job>();
 
   private transient StorkQueueThread[]  thread_pool;
   private transient StorkWorkerThread[] worker_pool;
   private transient DumpStateThread dump_state_thread;
 
   private transient Map<String, CommandHandler> cmd_handlers;
-  public transient TransferModuleTable xfer_modules;
+  public transient ModuleTable modules;
 
   private transient LinkedBlockingQueue<Request> req_queue =
     new LinkedBlockingQueue<Request>();
 
   private transient User anonymous = User.anonymous();
 
+  // Map of idle sessions, for session reuse.
+  private transient Map<Session, Session> session_pool =
+    Collections.synchronizedMap(new HashMap<Session, Session>());
+
+  // Map of ongoing listings, for request aggregation.
+  private transient Map<Resource, Bell<Stat>> ls_aggregator =
+    new ConcurrentHashMap<Resource, Bell<Stat>>();
+
+  static {
+    // Register a handler to marshal endpoints.
+    new Ad.Marshaller<Endpoint>(Endpoint.class) {
+      public Endpoint unmarshal(String uri) {
+        return new Endpoint(uri);
+      }
+    };
+
+    // Register a handler to marshal strings in ads into Feather URIs.
+    new Ad.Marshaller<URI>(URI.class) {
+      public String marshal(URI uri) {
+        return uri.toString();
+      } public URI unmarshal(String uri) {
+        return URI.create(uri);
+      }
+    };
+  }
+
   // Put a job into the scheduling queue.
-  public void schedule(StorkJob job) {
+  public void schedule(Job job) {
     jobs.add(job);
   }
 
@@ -81,17 +107,17 @@ public class StorkScheduler {
   }
 
   // A thread which runs continuously and starts jobs as they're found.
-  private class StorkQueueThread extends StorkThread<StorkJob> {
+  private class StorkQueueThread extends StorkThread<Job> {
     StorkQueueThread() {
       super("stork queue thread");
     }
 
-    public StorkJob getAJob() throws Exception {
+    public Job getAJob() throws Exception {
       return jobs.take();
     }
 
     // Continually remove jobs from the queue and start them.
-    public void execute(StorkJob job) {
+    public void execute(Job job) {
       Log.info("Pulled job from queue: "+job);
 
       // Run the job then check the return status.
@@ -124,9 +150,8 @@ public class StorkScheduler {
     }
 
     // Continually remove jobs from the queue and start them.
-    public void execute(Request req) {
+    public void execute(final Request req) {
       Log.fine("Worker pulled request from queue: ", req.cmd);
-      Ad ad = null;
 
       // Try handling the command if it's not done already.
       if (!req.isDone()) try {
@@ -145,23 +170,31 @@ public class StorkScheduler {
         }
 
         // Let the magic happen.
-        ad = req.handler.handle(req);
+        Bell bell = req.handler.handle(req);
 
-        // Save state if we affected it.
-        if (req.handler.affectsState(req))
-          dumpState();
+        // Limit request time.
+        double deadline = env.getDouble("request_timeout", 0);
+        if (deadline > 0)
+          req.deadline(deadline);
 
-        req.ring(ad);
+        bell.promise(req).promise(new Bell() {
+          public void always() {
+            // Save state if we affected it.
+            if (req.handler.affectsState(req))
+              dumpState();
+            Log.fine("Done with request: ", req.cmd);
+          }
+        });
       } catch (Exception e) {
         e.printStackTrace();
         req.ring(e);
-      } Log.fine("Worker done with request: ", req.cmd, ad);
+      }
     }
   }
 
   // Stork command handlers should implement this interface.
   public abstract class CommandHandler {
-    public abstract Ad handle(Request req);
+    public abstract Bell handle(Request req);
 
     // Override this for commands that either don't require logging in or
     // always require logging in.
@@ -178,25 +211,19 @@ public class StorkScheduler {
   }
 
   class StorkQHandler extends CommandHandler {
-    public Ad handle(Request req) {
+    public Bell handle(Request req) {
+      Bell bell = new Bell();
       List l = new JobSearcher(req.user.jobs).query(req.ad);
 
-      return req.ad.getBoolean("count") ?
-        new Ad("count", l.size()) : Ad.marshal(req.user.jobs);
+      return bell.ring(req.ad.getBoolean("count") ?
+        new Ad("count", l.size()) : Ad.marshal(req.user.jobs));
     }
   }
 
   class StorkMkdirHandler extends CommandHandler {
-    public Ad handle(Request req) {
-      Session sess = null;
-      try {
-        Endpoint ep = req.ad.unmarshalAs(Endpoint.class);
-        sess = ep.session();
-        sess.mkdir();
-        return new Ad("message", "Success!");
-      } finally {
-        if (sess != null) sess.close();
-      }
+    public Bell handle(Request req) {
+      Endpoint ep = req.ad.unmarshalAs(Endpoint.class);
+      return ep.select().mkdir();
     }
 
     public boolean requiresLogin() {
@@ -205,16 +232,9 @@ public class StorkScheduler {
   }
 
   class StorkRmfHandler extends CommandHandler {
-    public Ad handle(Request req) {
-      Session sess = null;
-      try {
-        Endpoint ep = req.ad.unmarshalAs(Endpoint.class);
-        sess = ep.session();
-        sess.rm();
-        return new Ad("message", "Success!");
-      } finally {
-        if (sess != null) sess.close();
-      }
+    public Bell handle(Request req) {
+      Endpoint ep = req.ad.unmarshalAs(Endpoint.class);
+      return ep.select().rm();
     }
 
     public boolean requiresLogin() {
@@ -223,16 +243,60 @@ public class StorkScheduler {
   }
 
   class StorkLsHandler extends CommandHandler {
-    public Ad handle(Request req) {
-      Session sess = null;
-      try {
-        Endpoint ep = req.ad.unmarshalAs(Endpoint.class);
-        sess = ep.session();
-        //return Ad.marshal(sess.list(ep.path(), req.ad).get());
-        return Ad.marshal(sess.stat().sync());
-      } finally {
-        if (sess != null) sess.close();
+    public synchronized Bell handle(Request req) {
+      final Endpoint ep = req.ad.unmarshalAs(Endpoint.class);
+      Resource nr = ep.select();
+
+      // See if there's an existing session we can reuse.
+      Session session = session_pool.remove(nr.session());
+      if (session != null && !session.isClosed()) {
+        Log.fine("Reusing existing session: ", session);
+        nr = nr.reselect(session);
+      } else {
+        final Session s = nr.session();
+        Log.fine("Using new session: ", s);
+        s.onClose(new Bell() {
+          public void always() {
+            Log.fine("Removing from session pool: ", s);
+            synchronized (session_pool) {
+              session_pool.remove(s);
+            }
+          }
+        });
       }
+
+      final Resource res = nr;
+
+      // See if there is an on-going listing request.
+      Bell<Stat> listing = ls_aggregator.get(res);
+      if (listing != null) {
+        Log.fine("Waiting on existing list request...");
+        return listing;
+      }
+
+      listing = res.stat();
+
+      // Register the ongoing listing.
+      ls_aggregator.put(res, listing);
+      listing.promise(new Bell() {
+        public void always() {
+          ls_aggregator.remove(res);
+        }
+      });
+
+      // Put the session back when we're done.
+      listing.promise(new Bell() {
+        public void always() {
+          Session s = res.session();
+          synchronized (session_pool) {
+            if (!s.isClosed() && !session_pool.containsKey(s))
+              session_pool.put(s, s);
+          }
+          ls_aggregator.remove(res);
+        }
+      });
+
+      return listing;
     }
 
     public boolean requiresLogin() {
@@ -242,20 +306,21 @@ public class StorkScheduler {
 
   // Handle user registration.
   class StorkUserHandler extends CommandHandler {
-    public Ad handle(Request req) {
+    public Bell handle(Request req) {
+      Bell bell = new Bell();
       if ("register".equals(req.ad.get("action"))) {
         User su = users.register(req.ad);
         Log.info("Registering user: ", su.email);
-        return su.toAd();
+        return bell.ring(su.toAd());
       } if ("login".equals(req.ad.get("action"))) {
-        return users.login(req.ad).toAd();
+        return bell.ring(users.login(req.ad).toAd());
       } if ("history".equals(req.ad.get("action"))) {
         if (req.ad.has("uri")) try {
           req.user.addHistory(StorkUtil.makeURI(req.ad.get("uri")));
         } catch (Exception e) {
           throw new RuntimeException("Could not parse URI...");
-        } return Ad.marshal(req.user.history);
-      } return req.user.toAd();
+        } return bell.ring(req.user.history);
+      } return bell.ring(req.user.toAd());
     }
 
     public boolean requiresLogin() {
@@ -270,8 +335,8 @@ public class StorkScheduler {
   }
 
   class StorkSubmitHandler extends CommandHandler {
-    public Ad handle(Request req) {
-      StorkJob job = StorkJob.create(req.user, req.ad);
+    public Bell handle(Request req) {
+      Job job = Job.create(req.user, req.ad);
 
       // Schedule the job to execute and add the job to the user context.
       schedule(job);
@@ -281,7 +346,7 @@ public class StorkScheduler {
         job.jobId(req.user.jobs.size());
       }
 
-      return job.getAd();
+      return new Bell().ring(job.getAd());
     }
 
     public boolean affectsState() {
@@ -290,7 +355,7 @@ public class StorkScheduler {
   }
 
   class StorkRmHandler extends CommandHandler {
-    public Ad handle(Request req) {
+    public Bell handle(Request req) {
       Range r = new Range(req.ad.get("range"));
       Range sdr = new Range(), cdr = new Range();
 
@@ -298,8 +363,8 @@ public class StorkScheduler {
         throw new RuntimeException("No jobs specified.");
 
       // Find ad in job list, set it as removed.
-      List<StorkJob> list = new JobSearcher(req.user.jobs).query(req.ad);
-      for (StorkJob j : list) try {
+      List<Job> list = new JobSearcher(req.user.jobs).query(req.ad);
+      for (Job j : list) try {
         j.remove("removed by user");
         sdr.swallow(j.jobId());
       } catch (Exception e) {
@@ -313,7 +378,7 @@ public class StorkScheduler {
       Ad ad = new Ad("removed", sdr.toString());
       if (!cdr.isEmpty())
         ad.put("not_removed", cdr.toString());
-      return ad;
+      return new Bell().ring(ad);
     }
 
     public boolean affectsState() {
@@ -324,7 +389,7 @@ public class StorkScheduler {
   class StorkInfoHandler extends CommandHandler {
     // Send transfer module information.
     Ad sendModuleInfo(Request req) {
-      return Ad.marshal(xfer_modules.infoAds());
+      return Ad.marshal(modules.infoAds());
     }
 
     // Send server information. But for now, don't send anything until we
@@ -348,16 +413,16 @@ public class StorkScheduler {
       }
     }
 
-    public Ad handle(Request req) {
+    public Bell handle(Request req) {
       String type = req.ad.get("type", "module");
 
       if (type.equals("module"))
-        return sendModuleInfo(req);
+        return new Bell().ring(sendModuleInfo(req));
       if (type.equals("server"))
-        return sendServerInfo(req);
+        return new Bell().ring(sendServerInfo(req));
       if (type.equals("cred"))
-        return sendCredInfo(req);
-      return new Ad("error", "invalid type: "+type);
+        return new Bell().ring(sendCredInfo(req));
+      throw new RuntimeException("Invalid type: "+type);
     }
 
     public boolean requiresLogin() {
@@ -367,7 +432,7 @@ public class StorkScheduler {
 
   // Handles creating credentials.
   class StorkCredHandler extends CommandHandler {
-    public Ad handle(Request req) {
+    public Bell handle(Request req) {
       String action = req.ad.get("action");
 
       if (action == null) {
@@ -376,7 +441,7 @@ public class StorkScheduler {
         StorkCred<?> cred = req.ad.unmarshalAs(StorkCred.class);
         String uuid = creds.add(cred);
         req.user.creds.add(uuid);
-        return cred.getAd().put("uuid", uuid);
+        return new Bell().ring(cred.getAd().put("uuid", uuid));
       } throw new RuntimeException("invalid action");
     }
 
@@ -389,14 +454,14 @@ public class StorkScheduler {
   public void populateModules() {
     // Load built-in modules.
     // TODO: Automatic discovery for built-in modules.
-    //xfer_modules.register(new GridFTPModule());
-    //xfer_modules.register(new SFTPModule());
-    xfer_modules.register(new FTPModule());
+    //modules.register(new GridFTPModule());
+    //modules.register(new SFTPModule());
+    modules.register(new FTPModule());
     if (env.has("libexec"))
-      xfer_modules.registerDirectory(new File(env.get("libexec")));
+      modules.registerDirectory(new File(env.get("libexec")));
 
     // Check if anything got added.
-    if (xfer_modules.modules().isEmpty())
+    if (modules.modules().isEmpty())
       Log.warning("no transfer modules registered");
   }
 
@@ -483,7 +548,7 @@ public class StorkScheduler {
   }
 
   // Force the state dumping thread to dump the state.
-  private synchronized StorkScheduler dumpState() {
+  private synchronized Scheduler dumpState() {
     dump_state_thread.interrupt();
     return this;
   }
@@ -541,7 +606,7 @@ public class StorkScheduler {
           ".stork_state", "tmp", state_file.getParentFile());
         pw = new PrintWriter(temp_file, "UTF-8");
 
-        pw.print(Ad.marshal(StorkScheduler.this).toJSON());
+        pw.print(Ad.marshal(Scheduler.this).toJSON());
         pw.close();
         pw = null;
 
@@ -564,7 +629,7 @@ public class StorkScheduler {
   }
 
   // Set the path for the state file.
-  public synchronized StorkScheduler setStateFile(File f) {
+  public synchronized Scheduler setStateFile(File f) {
     if (f != null)
       env.put("state_file", f.getAbsolutePath());
     else
@@ -582,20 +647,20 @@ public class StorkScheduler {
       users.insert(u);
 
       // Add their unfinished jobs.
-      if (u.jobs != null) for (StorkJob j : u.jobs)
+      if (u.jobs != null) for (Job j : u.jobs)
         if (!j.isTerminated()) schedule(j.status(JobStatus.scheduled));
     }
   }
 
   // Load server state from a file.
-  public StorkScheduler loadServerState(String f) {
+  public Scheduler loadServerState(String f) {
     return loadServerState(f != null ? new File(f) : null);
-  } public StorkScheduler loadServerState(File f) {
+  } public Scheduler loadServerState(File f) {
     if (f != null && f.exists()) {
       Log.info("Loading server state file: "+f);
       return loadServerState(Ad.parse(f));
     } return this;
-  } public StorkScheduler loadServerState(Ad state) {
+  } public Scheduler loadServerState(Ad state) {
     try {
       unmarshalFrom(state);
     } catch (Exception e) {
@@ -605,14 +670,14 @@ public class StorkScheduler {
   }
 
   // start() will return the singleton instance.
-  public static StorkScheduler instance() {
+  public static Scheduler instance() {
     return start();
   }
 
   // Restart a scheduler from saved state.
-  public static StorkScheduler restart(String s) {
+  public static Scheduler restart(String s) {
     return restart(new File(s));
-  } public static synchronized StorkScheduler restart(File f) {
+  } public static synchronized Scheduler restart(File f) {
     if (instance != null)
       instance.kill();
     instance = null;
@@ -620,15 +685,15 @@ public class StorkScheduler {
   }
 
   // Start a new scheduler with an optional config environment.
-  public static StorkScheduler start() {
+  public static Scheduler start() {
     return start((Ad)null);
-  } public static StorkScheduler start(File f) {
+  } public static Scheduler start(File f) {
     return start(Ad.parse(f));
-  } public static synchronized StorkScheduler start(Ad env) {
+  } public static synchronized Scheduler start(Ad env) {
     if (instance != null)
       return instance;
 
-    StorkScheduler s = new StorkScheduler();
+    Scheduler s = new Scheduler();
 
     if (env == null)
       env = new Ad();
@@ -640,7 +705,7 @@ public class StorkScheduler {
     return instance = s.init();
   }
 
-  private StorkScheduler init() {
+  private Scheduler init() {
     // Initialize command handlers
     cmd_handlers = new HashMap<String, CommandHandler>();
     cmd_handlers.put("q", new StorkQHandler());
@@ -655,7 +720,7 @@ public class StorkScheduler {
     cmd_handlers.put("cred", new StorkCredHandler());
 
     // Initialize transfer module set
-    xfer_modules = TransferModuleTable.instance();
+    modules = ModuleTable.instance();
 
     // Initialize workers
     populateModules();
@@ -680,7 +745,7 @@ public class StorkScheduler {
   }
 
   // Don't allow these to be created willy-nilly.
-  private StorkScheduler() {
+  private Scheduler() {
     if (instance != null)
       throw new Error("A Stork scheduler has already been instantiated");
   }

@@ -10,6 +10,9 @@ import java.lang.reflect.*;
 public class Ad implements Serializable {
   static final long serialVersionUID = 5988172454007663702L;
 
+  static final Map<Class, Marshaller> marshallers =
+    new HashMap<Class, Marshaller>();
+
   // An ad is either a list or a map, but never both. Never access these
   // directly, always access through list() or map().
   private Map<String, AdObject> map = null;
@@ -502,7 +505,102 @@ public class Ad implements Serializable {
 
   // Marshalling
   // -----------
-  // Methods for marshalling objects to/from ads.
+  // Methods and inner classes for marshalling objects to/from ads.
+
+  // Used internally by marshallers.
+  static final class MarshallerDeference extends RuntimeException {
+    public final void throwThis() { throw this; }
+  }
+
+  /**
+   * Marshallers handle special cases for converting objects into alternative
+   * represtations or unmarshalling ads into new objects. Instantiating a
+   * marshaller registers it with the marshalling system. The type handled by
+   * the marshaller is determined using reflection.
+   *
+   * @param <T> the least specific type this marshaller operates on
+   */
+  public static abstract class Marshaller<T> {
+    private Class<? extends T> out;
+    private static final MarshallerDeference defer =
+      new MarshallerDeference();
+
+    /**
+     * Create a new marshaller and register it with the marshalling system.
+     *
+     * @param clazz the concrete class this marshaller produces
+     */
+    public Marshaller(Class<? extends T> clazz) {
+      out = clazz;
+
+      // Determine marshaller coverage.
+      AdType type = new AdType(getClass());
+      while (type.clazz() != Marshaller.class)
+        type = type.superclass();
+      type = type.generics()[0];
+
+      // Register with static marshaller map.
+      marshallers.put(type.clazz(), this);
+    }
+
+    /**
+     * Find the approriate unmarshalling method, and use it to unmarshal the
+     * given {@code AdObject}.
+     */
+    final T doUnmarshal(AdObject o) {
+      return doUnmarshal(o.object, o.type());
+    } final T doUnmarshal(Object o, AdType t) {
+      if (o == null || t == null) return null;
+      AdType self = new AdType(this.getClass());
+      AdMember m = self.method("unmarshal", t.clazz());
+      if (m == null) {
+        return doUnmarshal(o, t.superclass());
+      } try {
+        return out.cast(m.invoke(this, o));
+      } catch (RuntimeException e) {
+        throw (e.getCause() == defer) ? defer : e;
+      }
+    }
+
+    /**
+     * Unmarshal an {@code Object} into a new instance of {@code T}. {@code
+     * object} will always be a primitive. This method is the last resort if a
+     * more specific version of {@code unmarshal(...)} is not defined. By
+     * default, this defers to a more general handler.
+     *
+     * @param object the {@code AdObject} to create a new {@code T} from
+     * @return An unmarshalled instance of {@code T}.
+     */
+    public T unmarshal(Object object) { throw defer(); }
+
+    /**
+     * Marshal a {@code T} into an {@code Object}. By default, this defers to
+     * a more general handler.
+     *
+     * @param t the {@code T} to create a new {@code Object} from
+     * @return An unmarshalled instance of {@code T}.
+     */
+    public Object marshal(T t) { throw defer(); }
+
+    /**
+     * Subclasses may call this in {@code marshal(...)} or {@code
+     * unmarshal(...)} to defer to the default field marshalling mechanism.
+     * This is done by throwing a special {@code RuntimeException} subclass.
+     *
+     * @throws MarshallerDeference to indicate to the caller that it should
+     * defer to another marshalling method
+     * @return The {@code MarshallerDeference} that will be thrown. This will
+     * never actually be returned, since calling this method throws the
+     * exception, but this can be used to conveniently satisfy Java's safe
+     * method exit check by doing {@code throw defer()}.
+     */
+    protected final MarshallerDeference defer() {
+      // This is a little weird, but it's for the purpose of allowing nicer
+      // syntax for satisfying compilation checks. See above.
+      defer.throwThis();
+      return defer;
+    }
+  }
 
   // Unmarshal this ad into an object. This operation can throw a runtime
   // exception. Should we reset fields if there's an exception?
@@ -511,30 +609,36 @@ public class Ad implements Serializable {
   } protected synchronized <O> O unmarshal(O o, AdType t) {
     t = (t != null) ? t : new AdType(o.getClass());
     Class c = t.clazz();
+
     if (c == Ad.class) {
       ((Ad)o).addAll(this);
     } else if (o instanceof Map) {
       AdType kt = t.generics()[0];
       AdType vt = t.generics()[1];
-      for (Map.Entry<String, AdObject> e : map(false).entrySet())
+      Map<String,AdObject> map = map(false);
+      if (map != null) for (Map.Entry<String, AdObject> e : map.entrySet())
         ((Map)o).put(e.getKey(), e.getValue().as(vt));
     } else if (o instanceof Collection) {
       AdType vt = t.generics()[0];
-      for (AdObject v : list(false))
+      List<AdObject> list = list(false);
+      if (list != null) for (AdObject v : list)
         ((Collection)o).add(v.as(vt));
     } else if (t.isArray()) {
       AdType vt = t.component();
       int i = 0;
-      for (AdObject v : list(false)) try {
+      List<AdObject> list = list(false);
+      if (list != null) for (AdObject v : list) try {
         Array.set(o, i++, v.as(vt));
       } catch (ArrayIndexOutOfBoundsException e) {
         break;
       }
     } else for (AdMember f : t.fields()) try {
-      f.set(o, getObject(f.name()).as(f));
+      AdObject ao = getObject(f.name());
+      if (ao != null) f.set(o, ao.as(f));
     } catch (Exception e) {
-      // Either ad had no such member or it was final and we couldn't set
-      // it. Either way, we don't have to worry about it.
+      // Either ad had no such member or it was final and we couldn't set it.
+      // Either way, we don't have to worry about it.
+      e.printStackTrace();
     } return o;
   }
 
@@ -543,12 +647,48 @@ public class Ad implements Serializable {
     return AdObject.wrap(this).as(clazz);
   }
 
-  // Marshal an object into an ad.
-  public static Ad marshal(Object o) {
-    return marshal(o, new AdType(o.getClass()));
-  } public static Ad marshal(Object o, AdType t) {
+  /**
+   * Utility method to find the marshaller for a given type. This works by
+   * searching up the type heirarchy for a registered marshaller of the given
+   * type.
+   *
+   * @param t the type to find a marshaller for
+   * @return A marshaller capable of handling objects of type {@code t}.
+   */
+  static Marshaller findMarshaller(AdType t) {
+    if (t == null) return null;
+    Marshaller m = marshallers.get(t.clazz());
+    return (m == null) ? findMarshaller(t.superclass()) : m;
+  }
+
+  /**
+   * Marshal an object into an ad. This method checks if the type of {@code
+   * object} is registered as a special marshalling case, and if so delegates
+   * to the marshalling handler. Otherwise, it marshals the object field-wise.
+   *
+   * @param object the object to marshal into a new {@code Ad}
+   * @return An ad representation of the object, or {@code null} if {@code
+   * object} is {@code null}.
+   */
+  public static Ad marshal(Object object) {
+    return marshal(object, null);
+  }
+
+  public static Ad marshal(Object o, AdType t) {
+    if (o == null)
+      return null;
+    if (t == null)
+      t = new AdType(o.getClass());
     try {
-      if (o instanceof Ad) {
+      Marshaller m = findMarshaller(t);
+      if (m != null) try {
+        o = m.marshal(o);
+        if (o == null)
+          return null;
+        t = new AdType(o.getClass());
+      } catch (MarshallerDeference e) {
+        // Delegate to default handler.
+      } if (o instanceof Ad) {
         return (Ad)o;
       } else if (o instanceof Map) {
         return new Ad((Map) o);
@@ -581,7 +721,7 @@ public class Ad implements Serializable {
 
   // Composition methods
   // ------------------
-  // Obvious an ad as an ad it just itself.
+  // Obviously an ad as an ad it just itself.
   public Ad toAd() {
     return this;
   }
@@ -617,16 +757,21 @@ public class Ad implements Serializable {
 
   // Testing method.
   public static void main(String args[]) {
-    Ad ad = new Ad();
-    ad.put("sl", new int[] { 1, 2, 3 });
-    ad.put("il", new String[] { "1", "2", "3" });
-    ad.put("sa", new int[] { 1, 2, 3 });
-    ad.put("ia", new String[] { "1", "2", "3" });
-    TestClass tc = ad.unmarshalAs(TestClass.class);
-    System.out.println(Ad.marshal(tc));
-    System.out.println(tc.sl);
-    System.out.println(tc.il);
-    System.out.println(tc.sa[0]+tc.sa[2]);
-    System.out.println(tc.ia[0]+tc.ia[2]);
+    class Blah { public int i = 100; }
+    new Marshaller<Blah>(Blah.class) {
+      public Blah unmarshal(Ad ad) {
+        Blah b = new Blah();
+        b.i = ad.getInt("a", b.i);
+        return b;
+      }
+      public Object marshal(final Blah b) {
+        return new Object() {
+          int j = b.i;
+        };
+      }
+    };
+    System.out.println(Ad.marshal(new Blah()));
+    Blah b = new Ad("a", 50).unmarshalAs(Blah.class);
+    System.out.println(Ad.marshal(b));
   }
 }
