@@ -140,7 +140,7 @@ public abstract class Path {
   public String toString(boolean escaped) {
     String j = "/";
     return up().isRoot() ? up().name(escaped)+j+name(escaped) :
-           isRoot()      ? name(escaped) : up()+j+(escaped);
+           isRoot()      ? name(escaped) : up()+j+name(escaped);
   }
 
   /**

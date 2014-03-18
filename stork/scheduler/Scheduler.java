@@ -250,14 +250,17 @@ public class Scheduler {
       // See if there's an existing session we can reuse.
       Session session = session_pool.remove(nr.session());
       if (session != null && !session.isClosed()) {
-        System.out.println("Reusing existing session...");
+        Log.fine("Reusing existing session: ", session);
         nr = nr.reselect(session);
       } else {
-        System.out.println("Using new session...");
         final Session s = nr.session();
+        Log.fine("Using new session: ", s);
         s.onClose(new Bell() {
           public void always() {
-            session_pool.remove(s);
+            Log.fine("Removing from session pool: ", s);
+            synchronized (session_pool) {
+              session_pool.remove(s);
+            }
           }
         });
       }
@@ -267,7 +270,7 @@ public class Scheduler {
       // See if there is an on-going listing request.
       Bell<Stat> listing = ls_aggregator.get(res);
       if (listing != null) {
-        System.out.println("Waiting on existing list request...");
+        Log.fine("Waiting on existing list request...");
         return listing;
       }
 
@@ -285,8 +288,10 @@ public class Scheduler {
       listing.promise(new Bell() {
         public void always() {
           Session s = res.session();
-          if (!s.isClosed() && !session_pool.containsKey(s))
-            session_pool.put(s, s);
+          synchronized (session_pool) {
+            if (!s.isClosed() && !session_pool.containsKey(s))
+              session_pool.put(s, s);
+          }
           ls_aggregator.remove(res);
         }
       });

@@ -359,6 +359,10 @@ public abstract class Session extends Resource {
    */
   protected final void finalize() { close(); }
 
+  public String toString() {
+    return uri.toString();
+  }
+
   public boolean equals(Object o) {
     if (o == this) return true;
     if (!(o instanceof Session)) return false;
