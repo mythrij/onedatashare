@@ -1,4 +1,4 @@
-angular.module('stork', ['ui.bootstrap', 'ui'],
+angular.module('stork', ['ngRoute', 'ui.bootstrap', 'ui'],
   function ($provide, $routeProvider) {
     $routeProvider.when('/', {
       title: 'Home',
@@ -95,7 +95,7 @@ angular.module('stork', ['ui.bootstrap', 'ui'],
     }
   }
 }).config(function ($provide) {
-  $provide.factory('$stork', function ($http, $q) {
+  $provide.factory('Stork', function ($http, $q) {
     var api = function (r) {
       return '/api/stork/'+r
     }
@@ -155,7 +155,7 @@ angular.module('stork', ['ui.bootstrap', 'ui'],
     }
   })
 }).config(function ($provide) {
-  $provide.factory('$user', function ($stork, $location, $rootScope) {
+  $provide.factory('$user', function (Stork, $location, $rootScope) {
     return {
       user: function () {
         return $rootScope.$user
@@ -173,14 +173,14 @@ angular.module('stork', ['ui.bootstrap', 'ui'],
       },
       logIn: function (info) {
         if (info)
-          return $stork.login(info).then(this.saveLogin, this.forgetLogin)
+          return Stork.login(info).then(this.saveLogin, this.forgetLogin)
       },
       checkAccess: function (redirectTo) {
         if (!$rootScope.$user)
           $location.path(redirectTo||'/')
       },
       history: function (uri) {
-        if (uri) return $stork.history(uri).then(
+        if (uri) return Stork.history(uri).then(
           function (h) {
             return $rootScope.$user.history = h
           }
@@ -221,7 +221,7 @@ angular.module('stork', ['ui.bootstrap', 'ui'],
   )
 })
 
-function LoginCtrl($scope, $stork, $location, $user, $modal) {
+function LoginCtrl($scope, Stork, $location, $user, $modal) {
   $scope.logOut = function () {
     $user.forgetLogin()
     $location.path('/login')
@@ -242,9 +242,9 @@ function LoginCtrl($scope, $stork, $location, $user, $modal) {
   }
 }
 
-function RegisterCtrl($scope, $stork, $location, $user, $modal) {
+function RegisterCtrl($scope, Stork, $location, $user, $modal) {
   $scope.register = function (u) {
-    return $stork.register(u).then(function (d) {
+    return Stork.register(u).then(function (d) {
       $user.saveLogin(d)
       $location.path('/')
       delete $scope.user
@@ -254,7 +254,7 @@ function RegisterCtrl($scope, $stork, $location, $user, $modal) {
   }
 }
 
-function TransferCtrl($scope, $user, $stork, $modal) {
+function TransferCtrl($scope, $user, Stork, $modal) {
   // Hardcoded options.
   $scope.optSet = [{
       'title': 'Use transfer optimization',
@@ -323,7 +323,7 @@ function TransferCtrl($scope, $user, $stork, $modal) {
         $scope.job = job
       }
     }).result.then(function (job) {
-      return $stork.submit(job).then(
+      return Stork.submit(job).then(
         function (d) {
           alert('Job submitted successfully!')
           return d
@@ -335,7 +335,7 @@ function TransferCtrl($scope, $user, $stork, $modal) {
   }
 }
 
-function BrowseCtrl($scope, $stork, $q, $modal, $user) {
+function BrowseCtrl($scope, Stork, $q, $modal, $user) {
   $scope.uri_state = { }
   $scope.showHidden = false
 
@@ -347,13 +347,13 @@ function BrowseCtrl($scope, $stork, $q, $modal, $user) {
     var ep = angular.copy($scope.end)
     ep.uri = u.href()
 
-    return $stork.ls(ep, 1).then(
+    return Stork.ls(ep, 1).then(
       function (d) {
         return scope.root = d
       }, function (e) {
         return $q.reject(scope.error = e)
       }
-    ).always(function () {
+    ).finally(function () {
       scope.loading = false
     })
   }
@@ -365,7 +365,7 @@ function BrowseCtrl($scope, $stork, $q, $modal, $user) {
       scope: $scope
     }).result.then(function (pn) {
       var u = new URI(pn[0]).segment(pn[1])
-      return $stork.mkdir(u.href()).then(
+      return Stork.mkdir(u.href()).then(
         function (m) {
           $scope.refresh()
         }, function (e) {
@@ -379,7 +379,7 @@ function BrowseCtrl($scope, $stork, $q, $modal, $user) {
   $scope.rm = function (uris) {
     _.each(uris, function (u) {
       if (confirm("Delete "+u+"?")) {
-        return $stork.rmf(u).then(
+        return Stork.rmf(u).then(
           function () {
             $scope.refresh()
           }, function (e) {
@@ -476,6 +476,12 @@ function BrowseCtrl($scope, $stork, $q, $modal, $user) {
     var scope = this
     var u = this.uri().toString()
 
+    // Unselect text.
+    if (document.selection && document.selection.empty)
+      document.selection.empty();
+    else if (window.getSelection)
+      window.getSelection().removeAllRanges();
+
     if (!this.selected) {
       if (!e.ctrlKey)
         $scope.unselectAll()
@@ -520,7 +526,7 @@ function CredCtrl($scope, $modal) {
   }
 }
 
-function QueueCtrl($scope, $rootScope, $stork, $timeout) {
+function QueueCtrl($scope, $rootScope, Stork, $timeout) {
   $scope.filters = {
     all: function (j) {
       return true
@@ -598,7 +604,7 @@ function QueueCtrl($scope, $rootScope, $stork, $timeout) {
   $scope.cancel = function (j) {
     if (j.job_id &&
         confirm("Are you sure you want to remove job "+j.job_id+"?"))
-      return $stork.rm(j.job_id).then(
+      return Stork.rm(j.job_id).then(
         function (m) {
           j.status = 'removed'
         }, function (e) {
@@ -616,7 +622,7 @@ function QueueCtrl($scope, $rootScope, $stork, $timeout) {
   }
 
   $scope.refresh = function () {
-    return $stork.q().then(
+    return Stork.q().then(
       function (jobs) {
         for (var i in jobs) {
           var j = jobs[i]
@@ -655,11 +661,11 @@ $(document).on('click', '.panel-collapse-header', function (e) {
 
 // Tooltips
 $(document).on('mouseover', '[title]', function () {
+  $('.tooltip').remove()
   $(this).tooltip({
-    animation: false,
+    animation: 'none',
     container: 'body',
     placement: 'auto top'
   })
-  $('.tooltip').remove()
   $(this).tooltip('show')
 })
