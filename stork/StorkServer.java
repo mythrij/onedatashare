@@ -1,10 +1,10 @@
 package stork;
 
 import stork.ad.*;
+import stork.feather.*;
 import stork.net.*;
 import stork.util.*;
 import stork.scheduler.*;
-import java.net.URI;
 
 // This is basically a standalone wrapper around Scheduler that lets
 // the scheduler run as a standalone process (as opposed to as a client
@@ -31,25 +31,29 @@ public class StorkServer extends Command {
   }
 
   public void execute(Ad env) {
-    // TODO: Ugh, this is really idiotic, but we can deal with it later.
     env.unmarshal(Stork.settings);
     env.addAll(Ad.marshal(Stork.settings));
 
     Scheduler s = Scheduler.start(env);
     URI[] listen = Stork.settings.listen;
+    URI web_url = Stork.settings.web_service_url;
 
     if (listen == null || listen.length < 1)
       listen = new URI[] { Stork.settings.connect };
 
+    // Initialize API endpoints.
     for (URI u : listen) try {
       // Fix shorthand URIs.
-      if (u.getScheme() == null)
-        u = new URI(u.getSchemeSpecificPart(), "-1", u.getFragment());
-      u = u.normalize();
+      if (u.scheme() == null)
+        u = new URI.Builder().scheme(u.toString());
       StorkInterface.create(s, u).start();
     } catch (Exception e) {
       e.printStackTrace();
       Log.warning("could not create interface: "+e.getMessage());
     }
+
+    // Initialize web server for web documents.
+    if (web_url != null)
+      HttpInterface.register("web", web_url);
   }
 }

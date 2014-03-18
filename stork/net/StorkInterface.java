@@ -1,8 +1,6 @@
 package stork.net;
 
-import stork.ad.*;
-import stork.scheduler.*;
-import stork.util.*;
+import java.net.*;
 
 import io.netty.bootstrap.*;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -12,7 +10,10 @@ import io.netty.handler.codec.*;
 import io.netty.channel.*;
 import io.netty.channel.socket.*;
 
-import java.net.*;
+import stork.ad.*;
+import stork.scheduler.*;
+import stork.util.*;
+import stork.feather.URI;
 
 // An interface for clients to communicate with a Stork server.
 
@@ -20,7 +21,7 @@ public abstract class StorkInterface
 extends ChannelInitializer<Channel> {
   protected String name;  // Used for debugging messages.
   protected final URI uri;
-  protected final Scheduler sched;
+  protected Scheduler sched;
   private Channel chan;
 
   // Global connection selector.
@@ -33,29 +34,29 @@ extends ChannelInitializer<Channel> {
 
   // Automatically determine and create an interface from a URI.
   public static StorkInterface create(Scheduler s, URI u) {
-    String p = u.getScheme();
+    u = u.makeImmutable();
+    String p = u.scheme();
     if (p == null)
       p = u.toString();
     if (p.equals("tcp"))
       return new TcpInterface(s, u);
     if (p.equals("http"))
-      return new HttpInterface(s, u);
+      return HttpInterface.register(s, u);
     if (p.equals("https"))
-      return new HttpInterface(s, u);
-    throw new RuntimeException("unsupported interface scheme: "+p);
+      return HttpInterface.register(s, u);
+    throw new RuntimeException("Unsupported interface scheme: "+p);
   }
 
   // Get the port from the URI, falling back to the default if none.
   private int getPortFromUri() {
-    int port = uri.getPort();
-    String ssp = uri.getSchemeSpecificPart();
+    int port = uri.port();
 
-    if (uri.getScheme() == null)
+    if (uri.scheme() == null)
       return defaultPort();
     if (port > 0)
       return port;
-    if (uri.getHost() == null && ssp != null)
-      port = Integer.parseInt(ssp);
+    if (uri.host() == null)
+      port = Integer.parseInt(uri.toString());
     if (port > 0)
       return port;
     return defaultPort();
@@ -81,7 +82,7 @@ extends ChannelInitializer<Channel> {
     sb.option(ChannelOption.SO_KEEPALIVE, true);
 
     // Determine host and port from uri.
-    InetAddress ia = InetAddress.getByName(uri.getHost());
+    InetAddress ia = InetAddress.getByName(uri.host());
     InetSocketAddress addr = new InetSocketAddress(ia, getPortFromUri());
 
     // Bind socket to the given host/port.

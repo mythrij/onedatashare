@@ -1,7 +1,9 @@
 package stork.net;
 
-import stork.ad.*;
-import stork.scheduler.*;
+import java.net.*;
+import java.util.*;
+import java.io.*;
+import java.nio.file.*;
 
 import io.netty.buffer.*;
 import io.netty.channel.*;
@@ -9,6 +11,7 @@ import io.netty.channel.socket.*;
 import io.netty.handler.codec.*;
 import io.netty.handler.codec.http.*;
 import io.netty.handler.ssl.*;
+import io.netty.handler.stream.*;
 import io.netty.util.*;
 
 import static io.netty.handler.codec.http.HttpHeaders.Names.*;
@@ -17,18 +20,128 @@ import static io.netty.handler.codec.http.HttpResponseStatus.*;
 import static io.netty.handler.codec.http.HttpVersion.*;
 import static io.netty.handler.codec.http.HttpMethod.*;
 
-import java.net.*;
-import java.util.*;
+import stork.ad.*;
+import stork.feather.URI;
+import stork.feather.Path;
+import stork.scheduler.*;
 
-// Basic REST/HTTP interface.
+// XXX This whole file is a little kludgy... It has an ad hoc routing
+// implementation to handle overlapping HTTP resources (typically an API
+// resource and a static web interface resource) served over the same port.
+// This should probably be cleaned up a little bit.
 
+// An entry in the routing table.
+class Route {
+  HttpInterface iface;
+  URI uri;
+  Object end;
+
+  Route(HttpInterface hi, URI uri, Object end) {
+    iface = hi;
+    this.uri = uri.makeImmutable();
+    this.end = end;
+  }
+
+  // FIXME when URIs can officially be relatived. This is hacky, slow, and bad.
+  RouteMatch match(URI uri) {
+    String ep = uri.endpoint();
+    if (ep != null && !ep.equals(this.uri.endpoint()))
+      return null;
+    String q = uri.query();
+    uri.query(null).fragment(null);
+
+    Path ip = uri.path();
+    if (ip == null) ip = Path.ROOT;
+    Path bp = this.uri.path();
+    if (bp == null) bp = Path.ROOT;
+
+    // Prefix match
+    if (ip.toString().startsWith(bp.toString())) {
+      String rp = ip.toString().substring(bp.toString().length());
+      return new RouteMatch(rp, q, this);
+    }
+
+    return null;
+  }
+}
+
+// Result of a routing lookup.
+class RouteMatch {
+  String path, query;
+  Route route;
+
+  RouteMatch(String path, String query, Route route) {
+    this.path = path;
+    this.query = query;
+    this.route = route;
+  } boolean isWebDoc() {
+    return route.end instanceof File;
+  } File file() {
+    return new File((File) route.end, path);
+  }
+}
+
+// Simple mechanism for routing HTTP requests.
+class Router {
+  static List<Route> routes = new LinkedList<Route>();
+
+  // Returns the first matched route.
+  static RouteMatch route(URI uri) {
+    for (Route r : routes) {
+      RouteMatch m = r.match(uri);
+      if (m != null) return m;
+    } return null;
+  }
+
+  // Add a route.
+  static void add(Route r) { routes.add(r); }
+}
+
+/** Basic HTTP interface. */
 public class HttpInterface extends StorkInterface {
   private final boolean https;
 
-  public HttpInterface(Scheduler s, URI uri) {
+  private static Map<URI, HttpInterface> interfaces =
+    new HashMap<URI, HttpInterface>();
+
+  // Used to create scheduler interface.
+  private HttpInterface(Scheduler s, URI uri) {
     super(s, uri);
-    https = "https".equalsIgnoreCase(uri.getScheme());
+    https = "https".equalsIgnoreCase(uri.scheme());
     name = https ? "HTTPS" : "HTTP";
+  }
+
+  // Used to create webdoc interface.
+  private HttpInterface(String docroot, URI uri) {
+    super(null, uri);
+    https = "https".equalsIgnoreCase(uri.scheme());
+    name = https ? "HTTPS" : "HTTP";
+  }
+
+  /**
+   * Listen for scheduler API requests at the given URI.
+   */
+  public static HttpInterface register(Scheduler scheduler, URI uri) {
+    URI ep = uri.endpointURI().makeImmutable();
+    HttpInterface hi = interfaces.get(ep);
+    if (hi == null)
+      interfaces.put(ep, hi = new HttpInterface(scheduler, uri));
+    else
+      hi.sched = scheduler;
+    Router.add(new Route(hi, uri, scheduler));
+    return hi;
+  }
+
+  /**
+   * Listen for static document requests at the given URI.
+   */
+  public static HttpInterface register(String docroot, URI uri) {
+    URI ep = uri.endpointURI().makeImmutable();
+    HttpInterface hi = interfaces.get(ep);
+    if (hi == null)
+      interfaces.put(ep, hi = new HttpInterface(docroot, uri));
+    Router.add(new Route(hi, uri, new File(docroot)));
+    return hi;
   }
 
   // Convert a cookie string into an ad.
@@ -48,20 +161,6 @@ public class HttpInterface extends StorkInterface {
     for (String k : map.keySet())
       ad.put(k, map.get(k).get(0));
     return ad;
-  }
-
-  // Get the command from a path. Throws if the path is invalid or remote.
-  private URI getRequestUri(String path) {
-    try {
-      URI bu = new URI(uri.getPath()+"/").normalize();
-      URI pu = bu.relativize(new URI(path));
-
-      if (pu.getScheme() != null || pu.getHost() != null)
-        throw new HttpException(NOT_FOUND);
-      return pu;
-    } catch (URISyntaxException e) {
-      throw new HttpException(BAD_REQUEST);
-    }
   }
 
   // Check that the handler allows the method.
@@ -86,7 +185,7 @@ public class HttpInterface extends StorkInterface {
   }
 
   // A codec for converting HTTP requests into ads.
-  private class HttpAdDecoder extends MessageToMessageDecoder<HttpObject> {
+  private class HttpDecoder extends MessageToMessageDecoder<HttpObject> {
     private HttpRequest head;  // Current request header.
     private HttpContent body;  // Current content body.
     private Scheduler.CommandHandler handler;
@@ -94,21 +193,28 @@ public class HttpInterface extends StorkInterface {
     private Ad ad = new Ad();
     private long len = 0;
     private boolean done = false;
+    private RouteMatch route;
 
     // Extract information from the header and put it in the ad.
     public void handleHead(HttpRequest head) {
-      // Get the command from the request.
-      URI cmd = getRequestUri(head.getUri());
+      // Run the requested path through the router.
+      route = Router.route(URI.create(head.getUri()));
+      if (route == null)
+        throw new HttpException(NOT_FOUND);
+
+      // If the match is for a webdoc endpoint, stop.
+      if (route.isWebDoc()) return;
 
       // Get the body length.
-      len = HttpHeaders.getContentLength(head, 0);
+      len = getContentLength(head, 0);
 
       // Make sure the command exists and supports the method.
-      handler = sched.handler(cmd.getPath());
+      handler = sched.handler(route.path);
       if (handler == null)
         throw new HttpException(NOT_FOUND);
       if (!checkMethod(head.getMethod(), handler))
         throw new HttpException(METHOD_NOT_ALLOWED);
+      command = route.path;
 
       String cookie = head.headers().get("Cookie");
 
@@ -117,11 +223,8 @@ public class HttpInterface extends StorkInterface {
         ad.addAll(cookiesToAd(cookie));
 
       // Merge in query string.
-      if (cmd.getQuery() != null)
-        ad.addAll(queryToAd(cmd.getRawQuery()));
-
-      command = cmd.getPath();
-      System.out.println("head: "+ad+", "+cmd+" "+done);
+      if (route.query != null)
+        ad.addAll(queryToAd(route.query));
     }
 
     // Parse body chunks.
@@ -137,7 +240,6 @@ public class HttpInterface extends StorkInterface {
       else
         ad.addAll(Ad.parse(data));
       done = true;
-      System.out.println("body: "+ad);
     }
 
     public void decode(ChannelHandlerContext ctx, HttpObject obj, List<Object> out) {
@@ -146,8 +248,10 @@ public class HttpInterface extends StorkInterface {
       } if (obj instanceof HttpContent) {
         handleBody(body = (HttpContent) obj);
       } if (done) {
-        out.add(ad.put("command", command));
-        System.out.println("Done: "+ad);
+        if (route.isWebDoc())
+          out.add(route.file());
+        else
+          out.add(ad.put("command", command));
         ad = new Ad();
         done = false;
       }
@@ -160,6 +264,25 @@ public class HttpInterface extends StorkInterface {
         (HttpException) t : new HttpException(INTERNAL_SERVER_ERROR);
       ctx.writeAndFlush(he.toHttpMessage());
       ctx.close();
+    }
+  }
+
+  // A codec for reading a static file into an HTTP response.
+  private class HttpFileEncoder extends MessageToMessageEncoder<File> {
+    public void encode(ChannelHandlerContext ctx, File file, List<Object> out) {
+      if (!file.exists()) {
+        out.add(new DefaultFullHttpResponse(HTTP_1_1, NOT_FOUND));
+      } else try {
+        FullHttpResponse r = new DefaultFullHttpResponse(HTTP_1_1, OK);
+        RandomAccessFile raf = new RandomAccessFile(file, "r");
+        setContentLength(r, raf.length());
+        String mt = Files.probeContentType(Paths.get(file.getPath()));
+        if (mt != null) r.headers().set(CONTENT_TYPE, mt);
+        out.add(r);
+        out.add(new ChunkedFile(raf));
+      } catch (Exception e) {
+        out.add(new DefaultFullHttpResponse(HTTP_1_1, INTERNAL_SERVER_ERROR));
+      }
     }
   }
 
@@ -183,7 +306,7 @@ public class HttpInterface extends StorkInterface {
   public void init(Channel ch, ChannelPipeline pl) {
     pl.addLast(new HttpServerCodec());
     pl.addLast(new HttpContentCompressor());
-    pl.addLast(new HttpAdDecoder());
+    pl.addLast(new HttpDecoder());
     pl.addLast(new HttpAdEncoder());
   }
 

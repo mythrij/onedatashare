@@ -1,15 +1,16 @@
 package stork.net;
 
-import stork.*;
-import stork.ad.*;
-import stork.scheduler.*;
-
 import io.netty.buffer.*;
 import io.netty.handler.codec.*;
 import io.netty.channel.*;
 import io.netty.channel.socket.*;
 
 import java.net.*;
+
+import stork.*;
+import stork.ad.*;
+import stork.feather.URI;
+import stork.scheduler.*;
 
 // Basic TCP interface.
 

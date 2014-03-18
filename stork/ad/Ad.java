@@ -680,15 +680,7 @@ public class Ad implements Serializable {
     if (t == null)
       t = new AdType(o.getClass());
     try {
-      Marshaller m = findMarshaller(t);
-      if (m != null) try {
-        o = m.marshal(o);
-        if (o == null)
-          return null;
-        t = new AdType(o.getClass());
-      } catch (MarshallerDeference e) {
-        // Delegate to default handler.
-      } if (o instanceof Ad) {
+      if (o instanceof Ad) {
         return (Ad)o;
       } else if (o instanceof Map) {
         return new Ad((Map) o);

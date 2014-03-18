@@ -62,15 +62,6 @@ public class Scheduler {
         return new Endpoint(uri);
       }
     };
-
-    // Register a handler to marshal strings in ads into Feather URIs.
-    new Ad.Marshaller<URI>(URI.class) {
-      public String marshal(URI uri) {
-        return uri.toString();
-      } public URI unmarshal(String uri) {
-        return URI.create(uri);
-      }
-    };
   }
 
   // Put a job into the scheduling queue.
@@ -316,7 +307,7 @@ public class Scheduler {
         return bell.ring(users.login(req.ad).toAd());
       } if ("history".equals(req.ad.get("action"))) {
         if (req.ad.has("uri")) try {
-          req.user.addHistory(StorkUtil.makeURI(req.ad.get("uri")));
+          req.user.addHistory(URI.create(req.ad.get("uri")));
         } catch (Exception e) {
           throw new RuntimeException("Could not parse URI...");
         } return bell.ring(req.user.history);

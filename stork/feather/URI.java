@@ -699,6 +699,27 @@ public abstract class URI {
   }
 
   /**
+   * Return whether or not the URI is absolute. That is, whether or not the URI
+   * contains a scheme name.
+   *
+   * @return {@code true} if this URI is absolute; {@code false} otherwise.
+   */
+  public final boolean isAbsolute() {
+    return scheme() == null;
+  }
+
+  /**
+   * Return a URI based on this one relativized to {@code base}. If there is no
+   * overlap between this URI and {@code base}, this URI is returned. TODO
+   *
+   * @param base the base URI to relativize this URI to.
+   * @return A URI based on this one, relative to {@code base},
+   */
+  public URI relativeTo(URI base) {
+    return this;
+  }
+
+  /**
    * Get the hierarchical component of the URI. The returned string is in the
    * form of:
    *
