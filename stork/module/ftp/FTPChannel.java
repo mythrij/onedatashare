@@ -536,52 +536,54 @@ public class FTPChannel {
     return bell;
   }
 
-  // A structure used to hold a set of features supported by a server.
-  // TODO: This should propagate control channel errors.
+  // A structure used to hold a set of features supported by a server. A fine
+  // specimen of overengineering.
+  // TODO: This should probably propagate control channel errors.
   class FeatureSet {
-    private boolean inProgress = false;
     private Set<String> features;
-    private Set<CheckBell> checks;
+    private Map<String,Set<CheckBell>> checks;
 
     // Custom bell which is associated with a given command query.
-    abstract class CheckBell extends Bell<Boolean> {
-      abstract String cmd();
-    }
-
-    // Returns true if feature detection has been performed and all future
-    // checks will be resolved immediately.
-    public synchronized boolean isDone() {
-      return features != null && !inProgress;
+    class CheckBell extends Bell<Boolean> {
+      public final String cmd;
+      CheckBell(String cmd) {
+        this.cmd = cmd;
+        addCheck(this);
+      } public String toString() { return cmd; }
     }
 
     // Asynchronously check if a command is supported.
-    public synchronized Bell<Boolean> supports(final String cmd) {
-      CheckBell bell = new CheckBell() {
-        String cmd() { return cmd; }
+    private synchronized void init() {
+      if (features != null)
+        return;
+
+      features = new HashSet<String>();
+      checks = new HashMap<String,Set<CheckBell>>();
+
+      // ...and pipe all the check commands.
+      new Command("HELP") {
+        public void handle(Reply r) {
+          if (!r.isComplete()) return;
+          for (int i = 1; i < r.length()-1; i++)
+          for (String c : r.line(i).trim().toUpperCase().split(" "))
+            if (!c.contains("*")) addFeature(c);
+        }
       };
+      new Command("HELP SITE") {
+        public void handle(Reply r) {
+          if (!r.isComplete()) return;
+          for (int i = 1; i < r.length()-1; i++)
+            addFeature(r.line(i).trim().split(" ", 2)[0].toUpperCase());
+        }
+      };
+      //new Command("FEAT");  // TODO
+      new Command(null) {
+        public void handle() { finalizeChecks(); }
+      };
+    }
 
-      if (features == null) {
-        // This is the first time we've been called, initialize state...
-        inProgress = true;
-        features = new HashSet<String>();
-        checks = new HashSet<CheckBell>();
-
-        // ...and pipe all the check commands.
-        checks.add(bell);
-        new Command("HELP").promise(parseHelpReply());
-        new Command("HELP SITE").promise(parseSiteReply());
-        new Command("FEAT").promise(parseFeatReply());
-        new Command(null) {
-          public void handle() { finalizeChecks(); }
-        };
-      } else if (inProgress) {
-        // Still waiting; queue the bell.
-        checks.add(bell);
-      } else {
-        bell.ring(isSupported(cmd));
-      }
-
-      return bell;
+    public Bell<Boolean> supports(String cmd) {
+      return new CheckBell(cmd);
     }
 
     // Synchronously check for command support. Used internally.
@@ -589,65 +591,31 @@ public class FTPChannel {
       return features != null && features.contains(cmd);
     }
 
-    // Add a feature to the feature set.
     private synchronized void addFeature(String cmd) {
+      if (features == null)
+        init();
       features.add(cmd);
-    }
-
-    // Parse a HELP reply and update features.
-    private Bell<Reply> parseHelpReply() {
-      return new Bell<Reply>() {
-        public void done(Reply r) {
-          if (!r.isComplete()) return;
-          for (int i = 1; i < r.length()-1; i++)
-          for (String c : r.line(i).trim().toUpperCase().split(" "))
-            if (!c.contains("*")) addFeature(c);
-          updateChecks();
-        }
-      };
-    }
-
-    // Parse a FEAT reply and update features.
-    private Bell<Reply> parseFeatReply() {
-      return new Bell<Reply>() {
-        public void done(Reply r) {
-          if (!r.isComplete()) return;
-          for (int i = 1; i < r.length()-1; i++)
-            addFeature(r.line(i).trim().split(" ", 2)[0].toUpperCase());
-          updateChecks();
-        }
-      };
-    }
-
-    // Parse a HELP SITE reply and update features.
-    private Bell<Reply> parseSiteReply() {
-      return new Bell<Reply>() {
-        public void done(Reply r) {
-          // TODO
-        }
-      };
-    }
-
-    // Iterate over the queued checks, and resolve them if a command is known
-    // to be supported.
-    private synchronized void updateChecks() {
-      for (Iterator<CheckBell> it = checks.iterator(); it.hasNext();) {
-        CheckBell b = it.next();
-        if (isSupported(b.cmd())) {
-          b.ring(true);
-          it.remove();
-        }
-      }
+      if (checks.containsKey(cmd)) for (CheckBell cb : checks.get(cmd))
+        cb.ring(true);
+    } private synchronized void addCheck(final CheckBell cb) {
+      if (features == null)
+        init();
+      if (checks == null)
+        cb.ring(isSupported(cb.cmd));
+      else if (features.contains(cb.cmd))
+        cb.ring(true);
+      else if (!checks.containsKey(cb.cmd))
+        checks.put(cb.cmd, new HashSet<CheckBell>() {{ add(cb); }});
+      else
+        checks.get(cb.cmd).add(cb);
     }
 
     // Ring this when no more commands will be issued to check support. It will
     // resolve all unsupported commands with false and update the state to
     // reflect the command list has been finalized.
     private synchronized void finalizeChecks() {
-      updateChecks();
-      for (CheckBell b : checks)
+      for (Set<CheckBell> cbs : checks.values()) for (CheckBell b : cbs)
         b.ring(false);
-      inProgress = false;
       checks = null;
     }
   }

@@ -11,6 +11,23 @@ import stork.util.*;
 public class FTPSession extends Session {
   transient FTPChannel ch;
 
+  // Listing commands in order of priority.
+  private static enum ListCommand {
+    MLSC, STAT, MLSD, LIST(true), NLST(true);
+    private boolean dataChannel;
+
+    ListCommand() {
+      this(false);
+    } ListCommand(boolean dataChannel) {
+      this.dataChannel = dataChannel;
+    } ListCommand next() {
+      final int n = ordinal()+1;
+      return (n < values().length) ? values()[n] : null;
+    } boolean requiresDataChannel() {
+      return dataChannel;
+    }
+  }
+
   // Transient state related to the channel configuration.
   private transient boolean mlstOptsAreSet = false;
 
@@ -61,57 +78,74 @@ public class FTPSession extends Session {
 
   // Perform a listing of the given path relative to the root directory.
   public synchronized Bell<Stat> stat(final URI uri) {
-    if (uri.path() == null)
-      return stat("/");
-    return stat(uri.path().toString());
-  } public synchronized Bell<Stat> stat(final String path) {
-    if (path.startsWith("/~"))
-      return stat(path.substring(1));
-    if (!path.startsWith("/") && !path.startsWith("~"))
-      return stat("/"+path);
+    return stat(uri, null);
+  } private synchronized Bell<Stat> stat(final URI uri, final Stat base) {
+    final Path path = (uri.path() != null) ? uri.path() : Path.ROOT;
+    return new Bell<Stat>() {
+      { tryListing(ListCommand.values()[0]); }
 
-    if (ch.supports("MLSC").sync())
-      return goList(true, "MLSC", path);
-    if (ch.supports("STAT").sync())
-      return goList(true, "STAT", path);
-    if (ch.supports("MLSD").sync())
-      return goList(false, "MLSD", path);
-    return goList(false, "LIST", path);
-  }
+      // This will call itself until it finds a supported command.
+      private void tryListing(final ListCommand cmd) {
+        System.out.println("tryListing: "+cmd);
+        if (cmd == null)
+          ring(new Exception("Listing is not supported."));
+        else ch.supports(cmd.toString()).promise(new Bell<Boolean>() {
+          public void done(Boolean supported) {
+            System.out.println("wanna: "+supported+" "+cmd+"  "+cmd.next());
+            if (supported) {
+              actuallyDoListing(cmd);
+            } else {
+              tryListing(cmd.next());
+            }
+          }
+        });
+      }
 
-  // This method will initiate a listing using the given command.
-  private Bell<Stat> goList(
-      boolean cc, final String cmd, final String path) {
-    final char hint = cmd.startsWith("M") ? 'M' : 0;
-    final FTPListParser parser = new FTPListParser(null, hint);
+      // This will get called to send the listing command.
+      private void actuallyDoListing(final ListCommand cmd) {
+        char hint = cmd.toString().startsWith("M") ? 'M' : 0;
+        final FTPListParser parser = new FTPListParser(base, hint);
 
-    parser.name(StorkUtil.basename(path));
+        parser.name(StorkUtil.basename(path.name()));
+        parser.promise(this);
 
-    // When doing MLSx listings, we can reduce the response size with this.
-    if (hint == 'M' && !mlstOptsAreSet) {
-      ch.new Command("OPTS MLST Type*;Size*;Modify*;UNIX.mode*");
-      mlstOptsAreSet = true;
-    }
+        // When doing MLSx listings, we can reduce the response size with this.
+        if (hint == 'M' && !mlstOptsAreSet) {
+          ch.new Command("OPTS MLST Type*;Size*;Modify*;UNIX.mode*");
+          mlstOptsAreSet = true;
+        }
 
-    // Do a control channel listing, if specified.
-    if (cc) ch.new Command(cmd, path) {
-      public void handle(FTPChannel.Reply r) {
-        if (r.code/100 > 2)
-          parser.ring(r.asError());
-        parser.write(r.message().getBytes());
-        if (r.isComplete())
-          parser.finish();
+        // Do a control channel listing, if specified.
+        if (!cmd.requiresDataChannel())
+          ch.new Command(cmd.toString(), makePath()) {
+            public void handle(FTPChannel.Reply r) {
+              if (r.code/100 > 2)
+                parser.ring(r.asError());
+              parser.write(r.message().getBytes());
+              if (r.isComplete())
+                parser.finish();
+            }
+          };
+
+        // Otherwise we're doing a data channel listing.
+        else ch.new DataChannel() {{
+          attach(parser);
+          new Command(cmd.toString(), makePath());
+          unlock();
+        }};
+      }
+
+      // Do this every time we send a command so we don't have to store a whole
+      // concatenated path string for every outstanding listing command.
+      private String makePath() {
+        String p = path.toString();
+        if (p.startsWith("/~"))
+          return p.substring(1);
+        else if (!p.startsWith("/") && !p.startsWith("~"))
+          return "/"+p;
+        return p;
       }
     };
-
-    // Otherwise we're doing a data channel listing.
-    else ch.new DataChannel() {{
-      attach(parser);
-      new Command(cmd, path);
-      unlock();
-    }};
-
-    return parser;
   }
 
   // Create a directory at the end-point, as well as any parent directories.

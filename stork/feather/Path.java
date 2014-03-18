@@ -19,7 +19,7 @@ public abstract class Path {
   }
 
   // The root path, which should be the only path with a blank name.
-  private static final Path ROOT = new Path("") {
+  public static final Path ROOT = new Path("") {
     public Path up()         { return this; }
     public int length()      { return 0; }
     public String toString(boolean escaped) {
