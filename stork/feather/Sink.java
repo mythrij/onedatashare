@@ -9,11 +9,10 @@ package stork.feather;
  * requested again, and it is the sink's responsibility to guarantee that the
  * slice is eventually drained.
  *
- * @see Resource
  * @see Tap
  * @see Slice
  */
-public abstract class Sink implements ProxyEnd {
+public abstract class Sink implements ProxyElement {
   private ProxyTransfer transfer;
   private final Resource resource;
 

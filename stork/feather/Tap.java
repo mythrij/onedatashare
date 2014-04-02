@@ -6,11 +6,10 @@ package stork.feather;
  * {@link #resume()}) to allow attached sinks to prevent themselves from being
  * overwhelmed.
  *
- * @see Resource
  * @see Sink
  * @see Slice
  */
-public abstract class Tap implements ProxyEnd {
+public abstract class Tap implements ProxyElement {
   private ProxyTransfer transfer;
 
   /** The root resource of this tap. */
@@ -53,8 +52,8 @@ public abstract class Tap implements ProxyEnd {
     return transfer;
   }
 
-  public final synchronized Bell<?> initialize(Path path) {
-    return transfer().initialize(path);
+  protected final Bell<?> initialize(RelativeResource resource) {
+    return transfer().initialize(resource);
   }
 
   public final synchronized void drain(Path path, Slice slice) {

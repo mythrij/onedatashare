@@ -40,6 +40,9 @@ public class FTPChannel {
   // FIXME: We should use something system-wide.
   private static EventLoopGroup group = new NioEventLoopGroup();
 
+  // Used for GSS authentication.
+  private final String host;
+
   // Internal representation of the remote server type.
   private static enum Protocol {
     ftp(21), gridftp(2811);
@@ -97,6 +100,8 @@ public class FTPChannel {
   private FTPChannel(String proto, String host, InetAddress addr, int port) {
     data = new FTPSharedChannelState();
     data.owner = this;
+
+    this.host = (host != null) ? host : addr.toString();
 
     data.protocol = (proto == null) ?
       Protocol.ftp : Protocol.valueOf(proto.toLowerCase());
@@ -381,7 +386,6 @@ public class FTPChannel {
     public GSSSecurityContext(GSSCredential cred) throws GSSException {
       GSSManager manager = ExtendedGSSManager.getInstance();
       Oid oid = new Oid("1.3.6.1.4.1.3536.1.1");
-      String host = "trestles-dm.sdsc.xsede.org";
       GSSName peer = manager.createName(
         "host@"+host, GSSName.NT_HOSTBASED_SERVICE);
       context = manager.createContext(
@@ -519,7 +523,7 @@ public class FTPChannel {
           switch (r.code/100) {
             case 3:
               ByteBuf token = Base64.decode(r.lines[0].skipBytes(5));
-              handshake(sec, Unpooled.EMPTY_BUFFER).promise(bell);
+              handshake(sec, token).promise(bell);
             case 1:
               return;
             case 2:

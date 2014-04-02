@@ -1,9 +1,9 @@
 package stork.feather;
 
 /**
- * An abstract base class for anything which can serve as an endpoint for a
- * proxy transfer. In particular, this is the base class for {@link Sink} and
- * {@link Tap}.
+ * An abstract base class for anything which can serve as an element in a proxy
+ * transfer pipeline. In particular, this is the base class for {@link Sink}
+ * and {@link Tap}.
  * <p/>
  * This class implements a state machine which enforces call guards on
  * operations that control the flow of data in a proxy transfer according to
@@ -22,16 +22,16 @@ package stork.feather;
  * |__________||__________|_________|_________|
  * </pre>
  */
-public abstract class ProxyEnd {
+public abstract class ProxyElement {
   private boolean started = false, paused = false, stopped = false;
   Resource root;
 
   /**
-   * Initialize a {@code ProxyEnd} with the given root resource.
+   * Initialize a {@code ProxyElement} with the given root resource.
    *
-   * @param root the root resource of this {@code ProxyEnd}.
+   * @param root the root resource of this {@code ProxyElement}.
    */
-  protected ProxyEnd(Resource root) {
+  protected ProxyElement(Resource root) {
     this.root = root;
   }
 
@@ -135,17 +135,30 @@ public abstract class ProxyEnd {
 
   /**
    * Initialize the transfer of data for the resource specified by {@path path}
-   * relative to the transfer root. This will be called before any data is
-   * drained for {@code path}.
+   * relative to the root {@code Resource}. This simply delegates to {@link
+   * #initialize(Resource)}.
+   *
+   * @param path the relative path to the resource which should be initialized.
+   * @return A {@code Bell} which will ring when data for {@code path} is ready
+   * to be drained, or {@code null} if data can begin being drained
+   * immediately.
+   */
+  protected final Bell<?> initialize(Path path) {
+    return initialize(new RelativeResource(root, path));
+  }
+
+  /**
+   * Prepare the pipeline for the transfer of data for {@code resource}. This
+   * must be called before any data is drained for {@code resource}.
    * <p/>
-   * This method should return immediately, and initialization should take
-   * place asynchronously. It may return a {@code Bell} which will be rung when
-   * the initialization process is complete and slices for {@code path} may
-   * begun being drained through this endpoint. It may also return {@code null}
-   * to indicate that transmission may begin immediately.
+   * This method returns immediately, and initialization takes place
+   * asynchronously. It may return a {@code Bell} which will be rung when the
+   * initialization process is complete and slices for {@code path} may begun
+   * being drained through this endpoint. It may also return {@code null} to
+   * indicate that transmission may begin immediately.
    *
    * @param resource the resource which should be initialized.
-   * @return A {@code Bell} which will ring when data for {@code path} is ready
+   * @return A {@code Bell} which will ring when data for {@code resource} is ready
    * to be drained, or {@code null} if data can begin being drained
    * immediately.
    */
@@ -161,12 +174,10 @@ public abstract class ProxyEnd {
   }
 
   /**
-   * Drain a {@link Slice} through the pipeline. This method should return as
-   * soon as possible, with the actual I/O operation taking place
-   * asynchronously.
+   * Drain a {@link Slice} through the pipeline. This method returns as soon as
+   * possible, with the actual I/O operation taking place asynchronously.
    *
-   * @param path the relative path of the resource {@code slice} originated
-   * from.
+   * @param resource the resource {@code slice} originated from.
    * @param slice a slice of data being drained through the pipeline.
    * @throws IllegalStateException if this method is called when the pipeline
    * has not been initialized.
@@ -184,38 +195,39 @@ public abstract class ProxyEnd {
 
   /**
    * Finalize the transfer of data for the specified resource. This method
-   * should return immediately, and initialization should take place
-   * asynchronously. It may return a {@code Bell} which will be rung when the
-   * finalization process is complete. It may also return {@code null} to
-   * indicate that the finalization process completed immediately.
+   * should return immediately, and finalization should take place
+   * asynchronously.
    *
-   * @param resource the resource which should be initialized.
-   * @return A {@code Bell} which will ring when data for {@code path} is ready
-   * to be drained, or {@code null} if data can begin being drained
-   * immediately.
+   * @param resource the resource being finalized.
    * @throws IllegalStateException if this method is called when the pipeline
    * has not been initialized.
    */
-  protected abstract Bell<?> finalize(RelativeResource resource);
+  protected abstract void finalize(RelativeResource resource);
 
   /**
-   * Check if this endpoint can transmit data slices in random order. The
-   * return value of this method should remain constant across calls.
+   * Check if the pipeline is capable of draining slices in arbitrary order.
+   * The return value of this method should remain constant across calls.
    *
    * @return {@code true} if transmitting slices in arbitrary order is
    * supported.
+   * @throws IllegalStateException if this method is called when the pipeline
+   * has not been initialized.
    */
   protected abstract boolean random();
 
   /**
-   * Get the number of distinct resources this endpoint may be in the process
-   * of transmitting simultaneously. Specifically, this value limits how many times
-   * {@link #initialize(Path)} may be called 
+   * Get the number of distinct resources the pipeline may be in the process of
+   * transferring simultaneously. Specifically, this value limits how many
+   * times {@link #initialize(RelativeResource)} may be called before a
+   * corresponding {@link #finalize(RelativeResource)} must be called to free
+   * up a transfer slot.
    * <p/>
    * Returning a number less than or equal to zero indicates that an arbitrary
-   * number of resources may be in the process of transmission concurrently.
+   * number of resources may be transferred concurrently.
    *
    * @return The number of data resources this sink can receive concurrently.
+   * @throws IllegalStateException if this method is called when the pipeline
+   * has not been initialized.
    */
   protected abstract int concurrency();
 }
