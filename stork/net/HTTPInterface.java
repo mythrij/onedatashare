@@ -32,34 +32,64 @@ public class HTTPInterface extends StorkInterface {
   private static Map<URI, HTTPInterface> interfaces =
     new HashMap<URI, HTTPInterface>();
 
-  private HTTPInterface(Scheduler s, URI uri) {
+  public HTTPInterface(Scheduler s, URI uri) {
     super(s, uri);
+
+    new HTTPServer.Route(uri, "GET", "POST") {
+      public void handle(HTTPRequest request) {
+        handleRequest(request);
+      }
+    };
   }
 
-  /**
-   * Listen for scheduler API requests at the given URI.
-   */
-  public static HTTPInterface register(Scheduler scheduler, URI uri) {
-    URI ep = uri.endpointURI().makeImmutable();
-    HTTPInterface hi = interfaces.get(ep);
-    if (hi == null)
-      interfaces.put(ep, hi = new HTTPInterface(scheduler, uri));
-    else
-      hi.sched = scheduler;
-    Router.add(new Route(hi, uri, scheduler));
-    return hi;
+  // Issue the request and relay the response to the client.
+  private void handleRequest(final HTTPRequest request) {
+    issueRequest(requestToAd(request)).new Promise() {
+      public void done(Request sr) {
+        sr.new PromiseAs<Ad>() {
+          public Ad convert(Object o) {
+            // Convert the request response into an ad.
+            return Ad.marshal(o);
+          } public Ad convert(Throwable t) {
+            // Convert an exception into an ad.
+            return new Ad("error", errorToAd(t));
+          } public void done(Ad ad) {
+            // Write the request back to the requestor.
+            request.replyWith(ad);
+          }
+        };
+      }
+    };
   }
 
-  /**
-   * Listen for static document requests at the given URI.
-   */
-  public static HTTPInterface register(String docroot, URI uri) {
-    URI ep = uri.endpointURI().makeImmutable();
-    HTTPInterface hi = interfaces.get(ep);
-    if (hi == null)
-      interfaces.put(ep, hi = new HTTPInterface(docroot, uri));
-    Router.add(new Route(hi, uri, new File(docroot)));
-    return hi;
+  // Convert an HTTP request to an ad asynchronously.
+  private Bell<Ad> requestToAd(final HTTPRequest req) {
+    return new Bell<Ad>() {{
+      Ad ad = new Ad("command", req.uri().path().name());
+
+      // Use cookie as a base.
+      if (req.cookie() != null)
+        ad.addAll(cookiesToAd(req.cookie()));
+
+      // Merge in query string.
+      if (req.uri().query() != null)
+        ad.addAll(queryToAd(req.uri().query()));
+
+      // If there's no body, we're done. Else, parse asynchronously.
+      if (!req.hasBody())
+        ring(ad);
+      else
+        handleRequestBody(ad, req).promise(this);
+    }};
+  }
+
+  // Asynchronously handle an HTTP request body.
+  private Bell<Ad> handleRequestBody(final Ad head, HTTPRequest req) {
+    // Make sure it's a type we can handle.
+    HTTPContentType type = req.type();
+
+    if (type.startsWith("application/json"))
+      
   }
 
   // Convert a cookie string into an ad.

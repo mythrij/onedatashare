@@ -62,6 +62,23 @@ public abstract class StorkInterface {
   public abstract String address();
 
   /**
+   * Used by subclasses to issue a request ad to the scheduler asynchronously.
+   * This delegates to {@code issueRequest(Ad)} asynchronously, and returns the
+   * associated {@code Request} object asynchronously through a bell.
+   *
+   * @param request (via bell) the request in the form of an ad.
+   * @return (via bell) The enqueued {@link Request} object returned by the
+   * scheduler.
+   */
+  protected Bell<Request> issueRequest(Bell<Ad> request) {
+    return request.PromiseAs<Request>() {
+      public Request convert(Ad request) {
+        return issueRequest(request);
+      }
+    };
+  }
+
+  /**
    * Used by subclasses to issue a request ad to the scheduler. The {@code
    * Request} object returned by this method is a bell which will be rung with
    * the response object. The subclass should promise the request to a handler
@@ -70,7 +87,28 @@ public abstract class StorkInterface {
    * @param request the request in the form of an ad.
    * @return The enqueued {@link Request} object returned by the scheduler.
    */
-  protected final Request issueRequest(Ad request) {
-    return putRequest(request);
+  protected Request issueRequest(Ad request) {
+    return scheduler.putRequest(request);
+  }
+
+  /**
+   * Create an ad representing a {@code Throwable}.
+   *
+   * @param throwable a {@code Throwable} to return an ad representing.
+   * @return An ad representing {@code throwable}.
+   */
+  public static final Ad errorToAd(final Throwable throwable) {
+    if (t == null) {
+      t = new NullPointerException();
+    } return Ad.marshal(new Object() {
+      String type = t.getClass().getSimpleName();
+      String message = message(throwable);
+
+      String message(Throwable t) {
+        if (t == null) return null;
+        String m = t.getLocalizedMessage();
+        return m != null ? m : message(t.getCause());
+      }
+    });
   }
 }

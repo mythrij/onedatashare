@@ -134,9 +134,9 @@ public abstract class ProxyElement {
   }
 
   /**
-   * Initialize the transfer of data for the resource specified by {@path path}
+   * Initialize the transfer of data for the resource specified by {@code path}
    * relative to the root {@code Resource}. This simply delegates to {@link
-   * #initialize(Resource)}.
+   * #initialize(RelativeResource)}.
    *
    * @param path the relative path to the resource which should be initialized.
    * @return A {@code Bell} which will ring when data for {@code path} is ready
@@ -174,20 +174,47 @@ public abstract class ProxyElement {
   }
 
   /**
-   * Drain a {@link Slice} through the pipeline. This method returns as soon as
-   * possible, with the actual I/O operation taking place asynchronously.
+   * Drain a {@link Slice} through the pipeline for the resource with the given
+   * {@code Path}. This delegates to {@link #drain(RelativeSlice)}.
    *
-   * @param resource the resource {@code slice} originated from.
-   * @param slice a slice of data being drained through the pipeline.
+   * @param path the path corresponding to the resource the slice originated
+   * from.
+   * @param slice a {@code Slice} being drained through the pipeline.
    * @throws IllegalStateException if this method is called when the pipeline
    * has not been initialized.
    */
-  protected abstract void drain(RelativeResource resource, Slice slice);
+  protected final void drain(Path path, Slice slice) {
+    drain(new RelativeResource(root, path), slice);
+  }
 
   /**
-   * Used in this package to initialize a resource.
+   * Drain a {@link Slice} through the pipeline for the given {@code
+   * RelativeResource}. This delegates to {@link #drain(RelativeSlice)}.
+   *
+   * @param resource the {@code RelativeResource} the slice originated from.
+   * @param slice a {@code Slice} being drained through the pipeline.
+   * @throws IllegalStateException if this method is called when the pipeline
+   * has not been initialized.
    */
-  final synchronized Bell<?> pkgDrain(RelativeResource resource) {
+  protected final void drain(RelativeResource resouce, Slice slice) {
+    drain(new RelativeSlice(resource, slice));
+  }
+
+  /**
+   * Drain a {@link RelativeSlice} through the pipeline. This method returns as
+   * soon as possible, with the actual I/O operation taking place
+   * asynchronously.
+   *
+   * @param slice a {@code Slice} being drained through the pipeline.
+   * @throws IllegalStateException if this method is called when the pipeline
+   * has not been initialized.
+   */
+  protected abstract void drain(RelativeSlice slice);
+
+  /**
+   * Used in this package to drain 
+   */
+  final synchronized Bell<?> pkgDrain(RelativeSlice resource) {
     if (!started || stopped)
       throw new IllegalStateException();
     return initialize(resource);

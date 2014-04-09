@@ -12,7 +12,7 @@ package stork.feather;
  * @see Tap
  * @see Slice
  */
-public abstract class Sink implements ProxyElement {
+public abstract class Sink extends ProxyElement {
   private ProxyTransfer transfer;
   private final Resource resource;
 
@@ -47,7 +47,7 @@ public abstract class Sink implements ProxyElement {
    * @throws NullPointerException if {@code tap} is {@code null}.
    * @throws IllegalStateException if a tap has already been attached.
    */
-  public final ProxyTransfer attach(Tap tap) {
+  protected final ProxyTransfer attach(Tap tap) {
     if (tap == null)
       throw new NullPointerException();
     if (transfer != null)
@@ -55,13 +55,25 @@ public abstract class Sink implements ProxyElement {
     return tap.attach(this);
   }
 
-  public Bell<?> initialize(Path path) { return null; }
+  /**
+   * This can be overridden by {@code Sink} implementations to initialize the
+   * transfer of {@code Slice}s for a {@code RelativeResource}.
+   */
+  protected Bell<?> initialize(RelativeResource resource) {
+    return null;
+  }
 
-  public Bell<?> finalize(Path path) { return null; }
+  /**
+   * This can be overridden by {@code Sink} implementations to finalize the
+   * transfer of {@code Slice}s for a {@code RelativeResource}.
+   */
+  protected Bell<?> finalize(RelativeResource resource) {
+    return null;
+  }
 
-  public boolean random() { return false; }
+  protected boolean random() { return false; }
 
-  public int concurrency() { return 1; }
+  protected int concurrency() { return 1; }
 
   /**
    * Called when an upstream tap encounters an error while downloading a {@link
@@ -72,6 +84,14 @@ public abstract class Sink implements ProxyElement {
    * contextual information
    */
   //void handle(ResourceException error);
+
+  protected final void pause() {
+    transfer().pause();
+  }
+
+  protected final void resume() {
+    transfer().resume();
+  }
 
   /**
    * Get the root {@code Resource} of the attached {@code Tap}.

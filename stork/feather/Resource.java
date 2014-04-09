@@ -171,7 +171,7 @@ public class Resource {
    * Transfer} object can be used to control and monitor the transfer.
    * @throws UnsupportedOperationException if the direction of transfer is not
    * supported by one of the resources.
-   * @throws NullPointerException if {@code resouce} is {@code null}.
+   * @throws NullPointerException if {@code resource} is {@code null}.
    */
   public Bell<Transfer> transferTo(Resource resource) {
     return session.transfer(this, resource);
@@ -212,7 +212,6 @@ public class Resource {
   }
 
   public int hashCode() {
-    return 1 + 13*uri.hashCode() +
-           (credential != null ? 17*credential.hashCode() : 0);
+    return 13*uri.hashCode() + 17*session.hashCode();
   }
 }

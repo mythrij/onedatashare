@@ -7,12 +7,14 @@ import java.util.concurrent.*;
  * A promise primitive used for stringing together the results of asynchronous
  * operations and executing asynchronous handlers. It supports callbacks
  * defined in subclasses, chaining of results, and deadlines.
+ *
+ * @param <T> the supertype of objects that can ring this bell.
  */
 public class Bell<T> implements Future<T> {
   private T object;
   private Throwable error;
   private boolean done = false;
-  private Set<Bell<? super T>> promises = Collections.emptySet();
+  private List<Bell<? super T>> promises = Collections.emptyList();
 
   // This is used to schedule bell deadlines.
   private static ScheduledExecutorService deadlineTimerPool =
@@ -82,10 +84,10 @@ public class Bell<T> implements Future<T> {
       // Discard.
     }
 
-    // Pass along to all the promises, then put an empty set back.
+    // Pass along to all the promises, then put an empty list back.
     for (Bell<? super T> b : proms)
       b.ring(object, error);
-    promises = Collections.emptySet();
+    promises = Collections.emptyList();
 
     synchronized (this) {
       notifyAll();
@@ -227,9 +229,9 @@ public class Bell<T> implements Future<T> {
   protected void always() throws Throwable { }
 
   /**
-   * Promise to ring another bell when this bell rings. The order promised
-   * bells will be rung is not specified. However, promised bells are
-   * guaranteed to be rung after this bell's handlers have been called.
+   * Promise to ring another bell when this bell rings. Promised bells will
+   * ring in the order they are promised and after this bell's handlers have
+   * been called.
    */
   public synchronized Bell<? super T> promise(Bell<? super T> bell) {
     if (bell.isDone()) {
@@ -240,15 +242,76 @@ public class Bell<T> implements Future<T> {
       // Keep going...
     } if (done) {
       bell.ring(object, error);  // We've already rung, pass it on.
-    } else if (!promises.contains(bell)) switch (promises.size()) {
-      case 0:  // This is an immutable empty set. Change to singleton.
-        promises = (Set<Bell<? super T>>)(Object) Collections.singleton(bell);
+    } else switch (promises.size()) {
+      case 0:  // This is an immutable empty list. Change to singleton.
+        promises = Collections.singletonList(bell);
         break;
-      case 1:  // This is the singleton. Make a mutable set.
+      case 1:  // This is the singleton. Make a mutable list.
         promises = new HashSet<Bell<? super T>>(promises);
       default:
         promises.add(bell);
     } return bell;
+  }
+
+  /**
+   * A bell which is promised to the parent bell on instantiation. This
+   * simplifies the construction of promised handlers. It is roughly equivalent
+   * to the code:
+   * <pre>
+   * final Bell<T> parent = this;
+   * parent.promise(new Bell<T>() {
+   *   public void 
+   * });
+   * </pre>
+   */
+  public abstract class Promise extends Bell<T> {{
+    Bell.this.promise(this);
+  }}
+
+  /**
+   * A bell which is promised to the parent bell on instantiation, and performs
+   * a conversion using the {@link PromiseAs#convert(T)} method. This
+   * simplifies the bell conversion chain pattern.
+   *
+   * @param <V> the supertype of objects this bell converts.
+   */
+  public abstract class PromiseAs<V> extends Bell<V> {
+    public PromiseAs() {
+      Bell.this.new Promise() {
+        public void done(T t) {
+          try {
+            PromiseAs.this.ring(convert(t));
+          } catch (Throwable e) {
+            PromiseAs.this.ring(convert(e));
+          }
+        } public void fail(Throwable t) {
+          try {
+            PromiseAs.this.ring(convert(t));
+          } catch (Throwable e) {
+            PromiseAs.this.ring(convert(e));
+          }
+        }
+      };
+    }
+
+    /**
+     * Convert the parent bell's ringing object into another type. Any error
+     * thrown here will cause this bell to fail with the error.
+     *
+     * @param t the object to convert.
+     * @throws Throwable an arbitrary error.
+     */
+    protected abstract V convert(T t) throws Throwable;
+
+    /**
+     * Convert an error thrown the by the parent bell into another type.
+     * Implementing this is optional, and by default will simply fail this bell
+     * with the error.
+     * 
+     * @param t the throwable to convert.
+     * @throws Throwable an arbitrary error.
+     */
+    protected V convert(Throwable t) throws Throwable { throw t; }
   }
 
   /**

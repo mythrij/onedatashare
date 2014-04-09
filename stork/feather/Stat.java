@@ -109,4 +109,22 @@ public class Stat {
 
     return this;
   }
+
+  /**
+   * Set the files underneath this tree given only their names.
+   */
+  public Stat setFiles(String[] names) {
+    if (names == null) {
+      files = null;
+    } else {
+      Stat[] stats = new Stat[names.length];
+      for (int i = 0; i < stats.length; i++)
+        stats[i] = new Stat(names[i]);
+      files = stats;
+      total_size = -1;
+      total_num  =  0;
+    }
+
+    return this;
+  }
 }

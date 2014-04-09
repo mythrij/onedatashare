@@ -30,12 +30,15 @@ import stork.scheduler.*;
  * was created primarily to simplify developer deployments and allow greater
  * flexibility in the REST interface.
  * <p/>
- * Note that this class is not related to the HTTP transfer module, and should
- * not be used directly by any module code.
+ * Note that this class is for the internal Stork HTTP server for handling
+ * incoming client connections. It is not related to the HTTP transfer module,
+ * and should not be used directly by any module code.
  */
 public class HTTPServer {
   private static Map<InetSocketAddress, HTTPServer> servers =
     new HashMap<InetSocketAddress, HTTPServer>();
+
+  // Map method and path to route handler.
   private Map<String,Map<Path,Route>> routes =
     new HashMap<String,Map<Path,Route>>();
 
@@ -60,8 +63,7 @@ public class HTTPServer {
     sb.childHandler(new ChannelInitializer<ServerSocketChannel>() {
       protected void initChannel(ServerSocketChannel ch) {
         pl.addLast(new HttpServerCodec());
-        pl.addLast(new HttpContentCompressor());
-        pl.addLast(new HTTPRouter());
+        pl.addLast(new RequestHandler());
       }
     });
 
@@ -85,20 +87,19 @@ public class HTTPServer {
   /**
    * Instantiate a {@code Route} to add a route handler.
    */
-  public abstract class Route {
+  public static abstract class Route {
     public final Path prefix;
 
     /**
      * Create a routing table entry for the given methods and prefix.
      *
-     * @param prefix the path to match this route against; if {@code null},
-     * this is assumed to be the root path.
+     * @param uri the URI to match this route against.
      * @param method the methods to match this route with; if empty or {@code
      * null}, this route is matched against any method.
      */
-    public Route(Path prefix, String... method) {
+    public Route(URI uri, String... method) {
       this.prefix = (prefix == null) ? Path.ROOT : prefix;
-      addRoute(method, this);
+      create(uri.host(), uri.port()).addRoute(method, this);
     }
 
     /**
@@ -125,93 +126,63 @@ public class HTTPServer {
         return mm.get(path);
       if (nm != null && nm.hasKey(path))
         return mm.get(path);
-      if (path.isRoot())
+      if (!path.isRoot())
+        path = path.up();
+      else
         return null;
-      path = path.up();
     }
   }
 
-  // Convert a cookie string into an ad.
-  private Ad cookiesToAd(String cookie) {
-    Ad ad = new Ad();
-    Set<Cookie> cookies = CookieDecoder.decode(cookie);
-    for (Cookie c : cookies)
-      ad.put(c.getName(), c.getValue());
-    return ad;
-  }
+  /**
+   * A channel handler for incoming HTTP requests which ties Netty to Feather.
+   */
+  private class RequestHandler extends ChannelHandlerAdapter {
+    private HTTPRequest request;
 
-  // Convert a query string into an ad.
-  private Ad queryToAd(String query) {
-    Ad ad = new Ad();
-    QueryStringDecoder qsd = new QueryStringDecoder(query, false);
-    Map<String, List<String>> map = qsd.parameters();
-    for (String k : map.keySet())
-      ad.put(k, map.get(k).get(0));
-    return ad;
-  }
-
-  // Check that the handler allows the method.
-  private boolean checkMethod(HttpMethod m, Scheduler.CommandHandler h) {
-    return m.equals(POST) || m.equals(GET) && !h.affectsState();
-  }
-
-  // Custom exception which wraps an HTTP error code.
-  private class HTTPException extends RuntimeException {
-    HttpResponseStatus status;
-    public HTTPException(HttpResponseStatus s) {
-      this(s, s.toString());
-    } public HTTPException(HttpResponseStatus s, String m) {
-      super(m);
-      status = s;
-    } public FullHttpResponse toHttpMessage() {
-      ByteBuf b = Unpooled.copiedBuffer(getMessage().getBytes());
-      FullHttpResponse r = new DefaultFullHttpResponse(HTTP_1_1, status, b);
-      r.headers().set(CONTENT_TYPE, "text/plain; charset=UTF-8");
-      return r;
+    public void channelRead(ChannelHandlerContext ctx, Object msg) {
+      if (msg instanceof HttpObject)
+        channelRead(ctx, (HttpObject) msg);
+      else
+        ctx.close();
     }
-  }
 
-  // A codec for converting HTTP requests into ads.
-  private class HTTPDecoder extends MessageToMessageDecoder<HttpObject> {
-    private HttpRequest head;  // Current request header.
-    private HttpContent body;  // Current content body.
-    private Scheduler.CommandHandler handler;
-    private String command;
-    private Ad ad = new Ad();
-    private long len = 0;
-    private boolean done = false;
-    private RouteMatch route;
+    public void channelRead(ChannelHandlerContext ctx, HttpObject msg) {
+      boolean done = false;
 
-    // Extract information from the header and put it in the ad.
-    public void handleHead(HttpRequest head) {
-      // Run the requested path through the router.
-      route = Router.route(URI.create(head.getUri()));
-      if (route == null)
-        throw new HTTPException(NOT_FOUND);
+      // Handle routing and wrapping request headers.
+      if (msg instanceof HttpRequest) {
+        HttpRequest head = (HttpRequest) msg;
+        URI uri = URI.create(head.getUri());
 
-      // If the match is for a webdoc endpoint, stop.
-      if (route.isWebDoc()) return;
+        // Run the requested path through the router.
+        route = route(uri.path());
+        if (route == null)
+          throw new HTTPException(NOT_FOUND);
 
-      // Get the body length.
-      len = getContentLength(head, 0);
+        request = new HTTPRequest(uri, ctx, head);
 
-      // Make sure the command exists and supports the method.
-      handler = sched.handler(route.path);
-      if (handler == null)
-        throw new HTTPException(NOT_FOUND);
-      if (!checkMethod(head.getMethod(), handler))
-        throw new HTTPException(METHOD_NOT_ALLOWED);
-      command = route.path;
+        done = (request.size() <= 0);
+      }
 
-      String cookie = head.headers().get("Cookie");
+      // Handle request content.
+      if (msg instanceof HttpContent) {
+        HttpContent c = (HttpContent) msg;
+        request.write(c.content());
 
-      // Use cookies as a base.
-      if (cookie != null)
-        ad.addAll(cookiesToAd(cookie));
+        if (msg instanceof LastHttpContent)
+          done = true;
+      }
 
-      // Merge in query string.
-      if (route.query != null)
-        ad.addAll(queryToAd(route.query));
+      // Finalize the request and prepare for next request.
+      if (done) {
+        request.finish();
+        request = null;
+      }
+    }
+
+    public void read(ChannelHandlerContext ctx) {
+      if (request != null && request.ready())
+        ctx.read();
     }
 
     // Parse body chunks.
@@ -230,18 +201,22 @@ public class HTTPServer {
       done = true;
     }
 
-    public void decode(ChannelHandlerContext ctx, HttpObject obj, List<Object> out) {
-      if (obj instanceof HttpRequest) {
-        handleHead(head = (HttpRequest) obj);
-      } if (obj instanceof HttpContent) {
-        handleBody(body = (HttpContent) obj);
-      } if (done) {
-        if (route.isWebDoc())
-          writeFile(route.file(), ctx);
-        else
-          out.add(ad.put("command", command));
-        ad = new Ad();
-        done = false;
+    public void decode(ChannelHandlerContext ctx, HttpObject h, List out) {
+      // Resolve route and create request object.
+      if (h instanceof HttpRequest) {
+        HttpRequest req = (HttpRequest) h;
+        route.handle(new HTTPRequest() {
+        });
+      }
+
+      // Handle body.
+      if (h instanceof HttpContent) {
+
+      }
+
+      // Handle end of request.
+      if (h instanceof LastHttpContent) {
+        
       }
     }
 
@@ -292,9 +267,6 @@ public class HTTPServer {
         r.headers().set(CONTENT_TYPE, "text/plain");
       } out.add(r);
     }
-  }
-
-  public void init(Channel ch, ChannelPipeline pl) {
   }
 
   public int defaultPort() {

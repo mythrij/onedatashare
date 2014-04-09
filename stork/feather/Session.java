@@ -95,7 +95,7 @@ public abstract class Session extends Resource {
    * @throws UnsupportedOperationException if creating directories is not
    * supported.
    */
-  protected Bell<Void> doMkdir(Resource resource) {
+  protected Bell<?> doMkdir(Resource resource) {
     throw new UnsupportedOperationException();
   }
 
@@ -110,7 +110,7 @@ public abstract class Session extends Resource {
    * @throws Exception (via bell) if the resource could not be fully removed.
    * @throws UnsupportedOperationException if removal is not supported.
    */
-  protected Bell<Void> doRm(Resource resource) {
+  protected Bell<?> doRm(Resource resource) {
     throw new UnsupportedOperationException();
   }
 
@@ -181,7 +181,7 @@ public abstract class Session extends Resource {
    * is cancelled before the session has been established, the opening
    * procedure should be terminated.
    */
-  protected Bell<Void> doOpen() { return new Bell<Void>().ring(); }
+  protected Bell<?> doOpen() { return new Bell().ring(); }
 
   /**
    * Subclasses should override this to start the cleanup procedure during
@@ -251,7 +251,7 @@ public abstract class Session extends Resource {
    * @throws IllegalArgumentException if {@code resource} cannot be accessed by
    * this session.
    */
-  public final synchronized Bell<Void> mkdir(Resource resource) {
+  public final synchronized Bell<?> mkdir(Resource resource) {
     final Resource r = resource.reselect(this);
     if (resource == null)
       throw new NullPointerException();
@@ -276,7 +276,7 @@ public abstract class Session extends Resource {
    * @throws IllegalArgumentException if {@code resource} cannot be accessed by
    * this session.
    */
-  public final synchronized Bell<Void> rm(Resource resource) {
+  public final synchronized Bell<?> rm(Resource resource) {
     final Resource r = resource.reselect(this);
     if (isClosed()) return (Bell<Void>) onClose();
     if (isOpen())   return onClose(doRm(r));

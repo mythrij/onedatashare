@@ -9,7 +9,7 @@ package stork.feather;
  * @see Sink
  * @see Slice
  */
-public abstract class Tap implements ProxyElement {
+public abstract class Tap extends ProxyElement {
   private ProxyTransfer transfer;
 
   /** The root resource of this tap. */
@@ -56,15 +56,19 @@ public abstract class Tap implements ProxyElement {
     return transfer().initialize(resource);
   }
 
-  public final synchronized void drain(Path path, Slice slice) {
-    transfer().drain(path, slice);
+  protected final void drain(RelativeSlice slice) {
+    transfer().drain(slice);
   }
 
-  public final Bell<?> finalize(Path path) {
-    transfer().finalize(path);
+  protected final void finalize(RelativeResource resource) {
+    transfer().finalize(resource);
   }
 
-  public boolean random() { return false; }
+  protected final boolean random() {
+    return transfer().random();
+  }
 
-  public int concurrency() { return 1; }
+  protected final int concurrency() {
+    return transfer().concurrency();
+  }
 }

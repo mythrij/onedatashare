@@ -1,7 +1,7 @@
 package stork.feather;
 
 /**
- * A {@code Resource} subselected from another {@code Resource} by a path.
+ * A {@code Resource} selected from another {@code Resource} by a path.
  */
 public class RelativeResource {
   private final Resource root;
