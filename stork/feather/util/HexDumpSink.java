@@ -11,7 +11,7 @@ import stork.feather.*;
  */
 public class HexDumpSink extends Sink {
   private PrintStream out;
-  private boolean first;
+  private boolean first = true;
 
   /**
    * Create a {@code HexDumpSink} that prints to {@link #System.out}.

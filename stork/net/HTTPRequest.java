@@ -170,15 +170,10 @@ public abstract class HTTPRequest extends Session {
     }
   }
 
-  // TODO
-  private String name() {
-    return "file_name";
-  }
-
   protected Bell<Stat> doStat(Resource resource) {
     if (resource != this)
       throw new RuntimeException();
-    Stat s = new Stat(name());
+    Stat s = new Stat();
     s.size = size();
     return new Bell<Stat>().ring(s);
   }
@@ -186,12 +181,12 @@ public abstract class HTTPRequest extends Session {
   protected Bell<Tap> doTap(Resource resource) {
     if (resource != this)
       throw new RuntimeException();
-    return new Bell<Tap>.ring(tap);
+    return new Bell<Tap>.ring(new HTTPTap());
   }
 
   protected Bell<Sink> doSink(Resource resource) {
     if (resource != this)
       throw new RuntimeException();
-    return new Bell<Sink>.ring(sink);
+    return new Bell<Sink>.ring(new HTTPSink());
   }
 }

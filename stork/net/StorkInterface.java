@@ -92,6 +92,13 @@ public abstract class StorkInterface {
   }
 
   /**
+   * Get the scheduler handler for a command.
+   */
+  protected Scheduler.Handler handler(String command) {
+    return scheduler.handler(command);
+  }
+
+  /**
    * Create an ad representing a {@code Throwable}.
    *
    * @param throwable a {@code Throwable} to return an ad representing.

@@ -98,45 +98,9 @@ public abstract class ProxyElement {
   public final boolean paused() { return paused && !stopped; }
 
   /**
-   * Used in this package to start the transfer.
-   */
-  final synchronized void pkgStart() {
-    if (!started && !stopped)
-      start();
-    started = true;
-  }
-
-  /**
-   * Used in this package to stop the transfer.
-   */
-  final synchronized void pkgStop() {
-    if (started && !stopped)
-      stop();
-    stopped = started;
-  }
-
-  /**
-   * Used in this package to pause the transfer.
-   */
-  final synchronized void pkgPause() {
-    if (started && !paused)
-      pause();
-    paused = started;
-  }
-
-  /**
-   * Used in this package to resume the transfer.
-   */
-  final synchronized void pkgResume() {
-    if (started && paused)
-      resume();
-    paused = false;
-  }
-
-  /**
    * Initialize the transfer of data for the resource specified by {@code path}
    * relative to the root {@code Resource}. This simply delegates to {@link
-   * #initialize(RelativeResource)}.
+   * #initialize(Relative)}.
    *
    * @param path the relative path to the resource which should be initialized.
    * @return A {@code Bell} which will ring when data for {@code path} is ready
@@ -144,7 +108,7 @@ public abstract class ProxyElement {
    * immediately.
    */
   protected final Bell<?> initialize(Path path) {
-    return initialize(new RelativeResource(root, path));
+    return initialize(root.selectRelative(path));
   }
 
   /**
@@ -161,17 +125,9 @@ public abstract class ProxyElement {
    * @return A {@code Bell} which will ring when data for {@code resource} is ready
    * to be drained, or {@code null} if data can begin being drained
    * immediately.
+   * @throws Exception (via bell) if the resource cannot be initialized.
    */
-  protected abstract Bell<?> initialize(RelativeResource resource);
-
-  /**
-   * Used in this package to initialize a resource.
-   */
-  final synchronized Bell<?> pkgInitialize(RelativeResource resource) {
-    if (!started() || stopped())
-      throw new IllegalStateException();
-    return initialize(resource);
-  }
+  protected abstract Bell<?> initialize(Relative<Resource> resource);
 
   /**
    * Drain a {@link Slice} through the pipeline for the resource with the given
@@ -212,13 +168,8 @@ public abstract class ProxyElement {
   protected abstract void drain(RelativeSlice slice);
 
   /**
-   * Used in this package to drain 
+   * Handle a {@code RelativeException} 
    */
-  final synchronized Bell<?> pkgDrain(RelativeSlice resource) {
-    if (!started || stopped)
-      throw new IllegalStateException();
-    return initialize(resource);
-  }
 
   /**
    * Finalize the transfer of data for the specified resource. This method
@@ -257,4 +208,15 @@ public abstract class ProxyElement {
    * has not been initialized.
    */
   protected abstract int concurrency();
+
+  /**
+   * Determine whether this {@code ProxyElement} is active. Every proxy
+   * pipeline must have an active element. This will be used to determine
+   * whether or not a {@code Pump} is required to extract data from the
+   * pipeline {@code Tap}.
+   *
+   * @return {@code true} if this {@code ProxyElement} is active; {@code false}
+   * otherwise.
+   */
+  protected abstract boolean isActive();
 }

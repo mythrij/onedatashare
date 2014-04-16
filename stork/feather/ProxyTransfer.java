@@ -76,42 +76,6 @@ implements Transfer, ProxyEnd {
     tap(tap).sink(sink);
   }
 
-  /**
-   * Start a {@code ProxyTransfer} between {@code tap} and {@code sink}.
-   *
-   * @param tap the {@code Tap} to transfer from.
-   * @param sink the {@code Sink} to transfer to.
-   * @throws NullPointerException if {@code tap} or {@code sink} is {@code
-   * null}.
-   */
-  public ProxyTransfer(Bell<Tap> tap, Sink sink) {
-    tap(tap).sink(sink);
-  }
-
-  /**
-   * Start a {@code ProxyTransfer} between {@code tap} and {@code sink}.
-   *
-   * @param tap the {@code Tap} to transfer from.
-   * @param sink the {@code Sink} to transfer to.
-   * @throws NullPointerException if {@code tap} or {@code sink} is {@code
-   * null}.
-   */
-  public ProxyTransfer(Bell tap, Bell<Sink> sink) {
-    tap(tap).sink(sink);
-  }
-
-  /**
-   * Start a {@code ProxyTransfer} between {@code tap} and {@code sink}.
-   *
-   * @param tap the {@code Tap} to transfer from.
-   * @param sink the {@code Sink} to transfer to.
-   * @throws NullPointerException if {@code tap} or {@code sink} is {@code
-   * null}.
-   */
-  public ProxyTransfer(Bell<Tap> tap, Bell<Sink> sink) {
-    tap(tap).sink(sink);
-  }
-
   // Internal methods which will set the sink/tap and check if the transfer can
   // start.
   private synchronized void setSink(Sink sink) {
@@ -147,7 +111,6 @@ implements Transfer, ProxyEnd {
    * already been called.
    */
   public final synchronized ProxyTransfer sink(Sink sink) {
-    // http://en.wikipedia.org/wiki/Semantic_satiation
     return sink(new Bell<Sink>().ring(sink));
   }
 

@@ -50,6 +50,9 @@ import stork.feather.util.*;
 public abstract class URI {
   private static Intern<URI> intern = new Intern<URI>();
 
+  /** An empty URI. */
+  public static final URI EMPTY = new FeatherURI();
+
   /**
    * Intern a given URI, and return an immutable canonical representation of
    * the URI. If the URI is mutable, an immutable copy is made using {@code
@@ -865,6 +868,16 @@ final class FeatherURI extends URI {
   private final Path   path;
   private final String query;
   private final String fragment;
+
+  FeatherURI() {
+    scheme   = null;
+    userinfo = null;
+    host     = null;
+    port     = -1;
+    path     = null;
+    query    = null;
+    fragment = null;
+  }
 
   FeatherURI(String uri) {
     // For now, delegate to java.net.URI...

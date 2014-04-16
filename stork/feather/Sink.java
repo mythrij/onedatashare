@@ -47,11 +47,11 @@ public abstract class Sink extends ProxyElement {
    * @throws NullPointerException if {@code tap} is {@code null}.
    * @throws IllegalStateException if a tap has already been attached.
    */
-  protected final ProxyTransfer attach(Tap tap) {
+  public final ProxyTransfer attach(Tap tap) {
     if (tap == null)
       throw new NullPointerException();
     if (transfer != null)
-      throw new IllegalStateException("a tap is already attached");
+      throw new IllegalStateException("A tap is already attached.");
     return tap.attach(this);
   }
 
@@ -71,9 +71,23 @@ public abstract class Sink extends ProxyElement {
     return null;
   }
 
+  /**
+   * {@code Sink} implementations can override this to handle initialization
+   * {@code Exception}s from upstream. By default, this method will throw the
+   * {@code Exception} back to the transfer mediator.
+   *
+   * @param path the path of the {@code Resource} which had an exception.
+   * @throws Exception if {@code error} was not handled.
+   */
+  protected initialize(RelativeException error) throws Exception {
+    throw error.getCause();
+  }
+
   protected boolean random() { return false; }
 
   protected int concurrency() { return 1; }
+  
+  protected final boolean isActive() { return false; }
 
   /**
    * Called when an upstream tap encounters an error while downloading a {@link

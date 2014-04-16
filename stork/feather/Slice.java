@@ -4,10 +4,10 @@ import io.netty.buffer.*;
 import io.netty.util.*;
 
 /**
- * A {@code Slice} represents a "piece" of a data resource emitted by a {@link
- * Tap} and is the fundamental unit of data transfer in a proxy pipeline.
- * Slices encapsulate a byte buffer and optionally an offset indicating the
- * location of the data within the originating resource.
+ * A {@code Slice} represents a concrete, contiguous segment of a data emitted
+ * by a {@link Tap}, and is the fundamental unit of data transfer in a proxy
+ * pipeline. Slices encapsulate a byte buffer and optionally an offset
+ * indicating the location of the data within the originating resource.
  */
 public class Slice {
   private final long offset;
@@ -181,12 +181,6 @@ public class Slice {
    * @return A string representation describing this slice.
    */
   public String toString() {
-    StringBuilder sb = new StringBuilder();
-    sb.append("[\n")
-    .append("  utf_8 = \"")
-      .append(asByteBuf().toString(CharsetUtil.UTF_8))
-    .append("\"\n")
-    .append("]");
-    return sb.toString();
+    return ByteBufUtil.hexDump(buffer);
   }
 }

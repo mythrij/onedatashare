@@ -1,10 +1,14 @@
 package stork.feather;
 
 /**
- * A tap emits {@link Slice}s to an attached {@link Sink}. The tap should
- * provide methods for regulating the flow of data (see {@link #pause()} and
- * {@link #resume()}) to allow attached sinks to prevent themselves from being
- * overwhelmed.
+ * A {@code Tap} emits {@link Slice}s to an attached {@link Sink}. The tap
+ * should provide methods for regulating the flow of data (see {@link #pause()}
+ * and {@link #resume()}) to allow attached sinks to prevent themselves from
+ * being overwhelmed.
+ * <p/>
+ * {@code Tap}s may be either active or passive, as declared by the return
+ * value of {@link #isActive()}. A passive {@code Tap} may be converted into an
+ * active {@code Tap} through the use of a {@code Pump}.
  *
  * @see Sink
  * @see Slice
@@ -29,8 +33,7 @@ public abstract class Tap extends ProxyElement {
 
   /**
    * Attach this tap to a sink. Once this method is called, {@link #start()}
-   * will be called and the tap may begin reading data from the upstream
-   * channel and emitting {@link Slice}s.
+   * will be called and the tap may begin emitting {@link Slice}s.
    *
    * @param sink a {@link Sink} to attach.
    * @throws NullPointerException if {@code sink} is {@code null}.
@@ -40,35 +43,39 @@ public abstract class Tap extends ProxyElement {
     if (sink == null)
       throw new NullPointerException();
     if (transfer != null)
-      throw new IllegalStateException("a sink is already attached");
-    transfer = new ProxyTransfer().tap(this).sink(sink);
+      throw new IllegalStateException("A sink is already attached.");
+    return transfer = new ProxyTransfer(this, sink);
   }
 
   // Get the transfer, or throw an IllegalStateException if the transfer is not
   // ready.
-  private final void transfer() {
+  private final ProxyTransfer transfer() {
     if (transfer == null)
       throw new IllegalStateException();
     return transfer;
   }
 
-  protected final Bell<?> initialize(RelativeResource resource) {
-    return transfer().initialize(resource);
-  }
+  /**
+   * Initialize the pipeline to transfer a {@code Resource}. Active {@code
+   * Tap}s should call this to initialize downstream elements for transfer.
+   * Passive taps will have this called to signal that a transfer should begin.
+   */
+  protected abstract Bell<?> initialize(RelativeResource resource);
 
-  protected final void drain(RelativeSlice slice) {
-    transfer().drain(slice);
-  }
+  protected abstract void drain(RelativeSlice slice);
 
-  protected final void finalize(RelativeResource resource) {
-    transfer().finalize(resource);
+  protected abstract void finalize(RelativeResource resource);
+
+  protected final void finalize(RelativeException error) {
+    transfer().finalize(error);
   }
 
   protected final boolean random() {
     return transfer().random();
   }
 
-  protected final int concurrency() {
-    return transfer().concurrency();
-  }
+  /**
+   * 
+   */
+  protected abstract int concurrency();
 }

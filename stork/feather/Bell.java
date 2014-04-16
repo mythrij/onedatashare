@@ -372,8 +372,8 @@ public class Bell<T> implements Future<T> {
         // Degenerate case...
         nonThrowingCheck(null);
         if (!isDone()) ring();
-      } else for (final Bell<I> b : bells) {
-        b.promise(new Bell<I>() {
+      } else for (final Bell<I> b : bells) 
+        b.new Promise() {
           protected void always() {
             set.remove(b);
             synchronized (MultiBell.this) {
@@ -383,7 +383,7 @@ public class Bell<T> implements Future<T> {
                 MultiBell.this.ring();
             }
           }
-        });
+        };
         if (isDone()) break;  // See if we can stop early.
       }
     }

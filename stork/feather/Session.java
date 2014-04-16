@@ -60,11 +60,6 @@ public abstract class Session extends Resource {
     this.credential = credential;
   }
 
-  // Constructor used solely by SessionDecorator.
-  private Session(Session other) {
-    this(other.uri, other.credential);
-  }
-
   /**
    * Subclasses should override this to get metadata for the given URI, which
    * includes a list of subresources. By default, this throws {@code
@@ -133,42 +128,39 @@ public abstract class Session extends Resource {
    * @throws UnsupportedOperationException if the direction of transfer is not
    * supported by one of the resources.
    */
-  protected Bell<Transfer> doTransfer(Resource source, Resource destination) {
+  protected Transfer doTransfer(Resource source, Resource destination) {
     return new ProxyTransfer(tap(), resource.sink());
   }
 
   /**
    * Subclasses should override this to open a sink to the resource at the
-   * specified Resource. Any setup operation, if necessary, should begin as soon as
-   * this method is called. The returned bell should be rung once the sink is
-   * ready to accept data. By default, this throws {@code
+   * specified Resource. Any setup operation, if necessary, should begin as
+   * soon as this method is called. By default, this throws {@code
    * UnsupportedOperationException}.
    *
    * @param resource the Resource of the resource to open a sink to.
-   * @return (via bell) A sink which drains to the named resource.
+   * @return A sink which drains to the named resource.
    * @throws ResourceException (via bell) if opening the sink fails
    * @throws UnsupportedOperationException if the resource does not support
    * writing
    */
-  protected Bell<Sink> doSink(Resource resource) {
+  protected Sink doSink(Resource resource) {
     throw new UnsupportedOperationException();
   }
 
   /**
    * Subclasses should override this to open a tap on the resource at the
-   * specified Resource. Any setup operation, if necessary, should begin, as soon as
-   * this method is called. The returned bell should be rung once the tap is
-   * ready to emit data. By default, this throws {@code
+   * specified Resource. Any setup operation, if necessary, should begin, as
+   * soon as this method is called. By default, this throws {@code
    * UnsupportedOperationException}.
    *
    * @param resource the Resource of the resource to open a tap on.
-   * @return (via bell) A tap which emits slices from this resource and its
-   * subresources.
+   * @return A tap which emits slices from this resource and its subresources.
    * @throws ResourceException (via bell) if opening the tap fails
    * @throws UnsupportedOperationException if the resource does not support
    * reading
    */
-  protected Bell<Tap> doTap(Resource resource) {
+  protected Tap doTap(Resource resource) {
     throw new UnsupportedOperationException();
   }
 

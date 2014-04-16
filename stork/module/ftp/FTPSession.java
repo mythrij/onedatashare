@@ -156,18 +156,18 @@ public class FTPSession extends Session {
     return null;
   }
 
-  public Bell<Sink> doSink(final URI uri) {
-    return (Bell<Sink>) ch.new DataChannel() {{
+  public Sink doSink(final URI uri) {
+    return (Sink) ch.new DataChannel() {{
       new Command("STOR", uri.path());
       unlock();
-    }}.bell();
+    }};
   }
 
-  public Bell<Tap> doTap(final URI uri) {
-    return (Bell<Tap>) ch.new DataChannel() {{
+  public Tap doTap(final URI uri) {
+    return (Tap) ch.new DataChannel() {{
       new Command("RETR", uri.path());
       unlock();
-    }}.bell();
+    }};
   }
 
   // Close the session and free any resources.

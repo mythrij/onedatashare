@@ -159,6 +159,22 @@ public class Resource {
   }
 
   /**
+   * Select a subresource as a {@code RelativeResource} containing relative
+   * path information. This is used during proxy transfers, and should
+   * generally not be used in applications unless maintaining relative path
+   * information across selection is necessary.
+   *
+   * @param path the path to the subresource, relative to this resource.
+   * @return A subresource relative to this {@code Resource} containing a
+   * reference to this {@code Resource}.
+   */
+  public final RelativeResource selectRelative(Path path) {
+    if (this instanceof RelativeResource) {
+      return new RelativeResource((RelativeResource) root, path);
+    return new RelativeResource(root, path);
+  }
+
+  /**
    * Initiate a transfer from this {@code Resource} to {@code resource} using
    * whatever method is deemed most appropriate by the implementation.
    * The implementation should try to transfer the resource as efficiently as
@@ -179,20 +195,18 @@ public class Resource {
 
   /**
    * Open a sink to the resource. Any connection operation, if necessary,
-   * should begin as soon as this method is called. The returned bell should be
-   * rung once the sink is ready to accept data.
+   * should begin as soon as this method is called.
    *
-   * @return (via bell) A sink which drains to the named resource.
+   * @return A sink which drains to the named resource.
    * @throws Exception (via bell) if opening the sink fails.
    * @throws UnsupportedOperationException if the resource does not support
    * writing.
    */
-  public Bell<Sink> sink() { return session.sink(uri); }
+  public Sink sink() { return session.sink(uri); }
 
   /**
    * Open a tap on the resource. Any connection operation, if necessary, should
-   * begin, as soon as this method is called. The returned bell should be rung
-   * once the tap is ready to emit data.
+   * begin, as soon as this method is called.
    *
    * @return (via bell) A tap which emits slices from this resource and its
    * subresources.
@@ -200,7 +214,7 @@ public class Resource {
    * @throws UnsupportedOperationException if the resource does not support
    * reading.
    */
-  public Bell<Tap> tap() { return session.tap(uri); }
+  public Tap tap() { return session.tap(uri); }
 
   public boolean equals(Object o) {
     if (o == this) return true;
