@@ -1,22 +1,41 @@
 package stork.feather;
 
 /**
- * A handle on a remote resource, such as a file or directory. A {@code
- * Resource} should essentially be a wrapper around a URI, and its
- * instantiation should have no side-effects. All of the methods specified by
- * this interface should return immediately. In the case of methods that return
- * {@link Bell}s, the result should be determined asynchronously and given to
- * the caller through the returned {@code Bell}. Implementations that do not
- * support certain operations are allowed to throw an {@link
- * UnsupportedOperationException}.
+ * A virtual representation of a physical resource. The resource(s) represented
+ * by a {@code Resource} object may be a single resource (such as a file or
+ * directory) or a set thereof (such as a directory tree or files matching a
+ * pattern). The existence of a {@code Resource} object does not guarantee the
+ * existence or accessibility of the resource(s) it represents.
+ * <p/>
+ * In general, a {@code Resource} represents a selection path from a top-level
+ * {@code Resource} to one or many {@code Resource}s representing subresources.
+ * This top-level {@code Resource} is known as the <i>root</i>. If a {@code
+ * Resource} represents exactly one physical resource, it is called a
+ * <i>singleton</i> {@code Resource}. The <i>trunk</i> of a {@code Resource} is
+ * the first singleton {@code Resource} encountered when traversing backwards
+ * to the root.
+ * <p/>
+ * A {@code Resource} instance may be selected through a {@code Session}, in
+ * which case it is said to be <i>active</i>. Operations performed on an active
+ * {@code Resource} are performed in the context of the {@code Session}. If a
+ * {@code Resource} is not parented to a {@code Session}, the {@code Resource}
+ * is said to be <i>inert</i>, and must be selected through a {@code Session}
+ * to be operated on.
+ * <p/>
+ * All of the methods specified by this interface should return immediately. In
+ * the case of methods that return {@link Bell}s, the result should be
+ * determined asynchronously and given to the caller through the returned
+ * {@code Bell}. Implementations that do not support certain operations are
+ * allowed to throw an {@link UnsupportedOperationException}.
  *
  * @see Session
- * @see Stat
  * @see URI
+ *
+ * @param <S> The type of {@code Session} that can operate on this {@code
+ * Resource}.
  */
-public class Resource {
-  protected final Session session;
-  protected final URI uri;
+public class Resource<S extends Session> {
+  private Resource<S> parent;
 
   /**
    * The {@code Session} class calls this constructor.
@@ -60,6 +79,91 @@ public class Resource {
   }
 
   /**
+   * Get the {@link Session) this {@code Resource} is selected on.
+   *
+   * @return The {@link Session} associated with this resource, or {@code null}
+   * if it is an inert {@code Resource}.
+   */
+  public S session() {
+    return (parent == null) ? null : parent.session();
+  }
+
+  /**
+   * Return the root {@code Resource} of this {@code Resource}. That is, the
+   * {@code Resource} in the hierarchy that has no parent. For an active {@code
+   * Resource}, this is the same as called {@link #session()}. For an inert
+   * {@code Resource}, this will return the top-level {@code Resource}. The
+   * root {@code Resource} is always a singleton.
+   *
+   * @return The root {@code Resource}.
+   */
+  public final Resource root() {
+    return (parent == null) ? this : parent.root();
+  }
+
+  /**
+   * Check if this {@code Resource} is active. That is, check that its root is
+   * a {@code Session}. An active {@code Resource} may have operations
+   * performed on it.
+   *
+   * @return {@code true} if the {@code Resource} is active; {@code false}
+   * otherwise.
+   */
+  public final boolean isActive() { return session() != null; }
+
+  /**
+   * Check if this {@code Resource} is inert. This returns {@code true} if and
+   * only if {@link #isActive()} returns {@code false}. An inert {@code
+   * Resource} must be selected through a {@code Session} in order to have have
+   * operations performed on it.
+   *
+   * @return {@code true} if the {@code Resource} is inert; {@code false}
+   * otherwise.
+   */
+  public final boolean isInert() { return !isActive(); }
+
+  /**
+   * Return the trunk of this {@code Resource}. That is, the first singleton
+   * {@code Resource} encountered when traversing back to the root. Or, in
+   * other words, the first {@code Resource} such that all segments in the
+   * selection {@code Path} are non-glob segments.
+   *
+   * @return The first singleton ancestor of this {@code Resource}.
+   */
+  public final Resource trunk() {
+    return isSingleton() ? this : parent.trunk();
+  }
+
+  /**
+   * Check if this is a singleton {@code Resource}. That is, a {@code Resource}
+   * that identifies exactly one physical resource.
+   *
+   * @return {@code true} if this is a singleton {@code Resource}; {@code
+   * false} otherwise.
+   */
+  public final boolean isSingleton() {
+    return true;
+  }
+
+  /**
+   * Get the sub-resources of this {@code Resource}. This can only be called on
+   * a singleton {@code Resource}, and returns {@code null} if this {@code
+   * Resource} cannot have sub-resources.
+   */
+  public Bell<Resource[]> subresources() {
+    return stat().new PromiseAs<Resource[]>() {
+      public Resource[] convert(Stat s) {
+        if (s.files == null)
+          return null;
+        Resource[] r = new Resource[s.files.length];
+        for (int i = 0; i < s.length; i++)
+          r[i] = select(s.name);
+        return r;
+      }
+    };
+  }
+
+  /**
    * Reselect this resource through an equivalent session. Assuming the
    * sessions are actually equivalent, the returned resource will point to the
    * same physical resource. This can, for instance, be used to select the same
@@ -75,7 +179,7 @@ public class Resource {
    * this resource's session.
    * @throws NullPointerException if {@code session} is {@code null}.
    */
-  public Resource reselect(Session session) {
+  public Resource reselectOn(S session) {
     if (session == this.session)
       return this;
     if (!session.equals(this.session))
@@ -84,15 +188,7 @@ public class Resource {
   }
 
   /**
-   * Get the {@link Session) associated with this resource.
-   *
-   * @return The {@link Session} associated with this resource.
-   * @see Session
-   */
-  public Session session() { return session; }
-
-  /**
-   * Get the {@link URI} associated with this resource.
+   * Get a {@link URI} associated with this resource.
    * 
    * @return A {@link URI} which identifies this resource.
    */
@@ -107,7 +203,9 @@ public class Resource {
    * @throws UnsupportedOperationException if metadata retrieval is not
    * supported
    */
-  public Bell<Stat> stat() { return session.stat(uri); }
+  public Bell<Stat> stat() {
+    throw new UnsupportedOperationException();
+  }
 
   /**
    * Create this resource as a directory on the storage system. If the resource
@@ -120,18 +218,22 @@ public class Resource {
    * @throws UnsupportedOperationException if creating directories is not
    * supported.
    */
-  public Bell<Void> mkdir() { return session.mkdir(uri); }
+  public Bell mkdir() {
+    throw new UnsupportedOperationException();
+  }
 
   /**
-   * Delete the resource and all subresources from the storage system. If the
-   * resource cannot be removed, the returned {@link Bell} will be resolved
-   * with an {@code Exception}.
+   * Delete the {@code Resource} from the storage system. If the resource
+   * cannot be removed, the returned {@link Bell} will be resolved with an
+   * {@code Exception}.
    *
    * @return (via bell) {@code null} if successful.
    * @throws Exception (via bell) if the resource could not be fully removed.
    * @throws UnsupportedOperationException if removal is not supported.
    */
-  public Bell<Void> rm() { return session.rm(uri); }
+  public Bell unlink() {
+    throw new UnsupportedOperationException();
+  }
 
   /**
    * Select a subresource by name relative to this resource. By default, this
@@ -142,7 +244,7 @@ public class Resource {
    * @return A subresource of this resource.
    */
   public Resource select(String name) {
-    return new Resource(uri.appendSegment(name));
+    return new Resource(this, name);
   }
 
   /**
@@ -170,8 +272,8 @@ public class Resource {
    */
   public final RelativeResource selectRelative(Path path) {
     if (this instanceof RelativeResource) {
-      return new RelativeResource((RelativeResource) root, path);
-    return new RelativeResource(root, path);
+      return new RelativeResource((RelativeResource) this, path);
+    return new RelativeResource(this, path);
   }
 
   /**
@@ -183,14 +285,14 @@ public class Resource {
    * should perform a proxy transfer as a catch-all last resort.
    *
    * @param resource the destination resource to transfer this resource to
-   * @return (via bell) A {@link Transfer} on success; the returned {@code
-   * Transfer} object can be used to control and monitor the transfer.
+   * @return A {@link Transfer} on success. The returned {@code Transfer}
+   * object can be used to control and monitor the transfer.
    * @throws UnsupportedOperationException if the direction of transfer is not
    * supported by one of the resources.
    * @throws NullPointerException if {@code resource} is {@code null}.
    */
-  public Bell<Transfer> transferTo(Resource resource) {
-    return session.transfer(this, resource);
+  public Transfer transferTo(Resource<?> resource) {
+    return tap().attach(resource.sink());
   }
 
   /**

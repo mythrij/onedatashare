@@ -13,7 +13,7 @@ package stork.feather;
  * @see Sink
  * @see Slice
  */
-public abstract class Tap extends ProxyElement {
+public abstract class Tap extends PipeElement {
   private ProxyTransfer transfer;
 
   /** The root resource of this tap. */

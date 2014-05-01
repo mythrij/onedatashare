@@ -8,11 +8,8 @@ import stork.module.*;
 import stork.scheduler.*;
 import stork.util.*;
 
-/**
- * A session with an FTP server.
- */
-public class FTPSession extends Session<FTPSession> {
-  private transient FTPChannel channel;
+public class FTPResource extends Resource<FTPSession> {
+  transient FTPChannel ch;
 
   // Listing commands in order of priority.
   private static enum ListCommand {
@@ -38,49 +35,8 @@ public class FTPSession extends Session<FTPSession> {
     super(uri, cred);
   }
 
-  public Bell<Void> doOpen() {
-    final Bell<Void> bell = new Bell<Void>();
-    String user = "anonymous";
-    String pass = "";
-
-    ch = new FTPChannel(uri) {
-      public void onClose() { FTPSession.this.close(); }
-    };
-
-    // Pull userinfo from URI.
-    if (uri.username() != null)
-      user = uri.username();
-    if (uri.password() != null)
-      pass = uri.password();
-
-    if (credential == null) {
-      // Do nothing.
-    } else if (credential instanceof StorkGSSCred) try {
-      StorkGSSCred cred = (StorkGSSCred) credential;
-      ch.authenticate(cred.data()).sync();
-      user = ":globus-mapping:";  // FIXME: This is GridFTP-specific.
-    } catch (Exception ex) {
-      // Couldn't authenticate with the given credentials...
-      throw new RuntimeException(ex);
-    } else if (credential instanceof StorkUserinfo) {
-      StorkUserinfo cred = (StorkUserinfo) credential;
-      user = cred.getUser();
-      pass = cred.getPass();
-    }
-
-    ch.authorize(user, pass).promise(new Bell() {
-      public void done() {
-        bell.ring();
-      } public void fail(Throwable t) {
-        bell.ring(t);
-      }
-    });
-
-    return bell;
-  }
-
   // Perform a listing of the given path relative to the root directory.
-  public synchronized Bell<Stat> doStat(final URI uri) {
+  public synchronized Bell<Stat> stat() {
     return doStat(uri, null);
   } private synchronized Bell<Stat> doStat(final URI uri, final Stat base) {
     final Path path = (uri.path() != null) ? uri.path() : Path.ROOT;

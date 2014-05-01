@@ -22,32 +22,33 @@ package stork.feather;
  * |__________||__________|_________|_________|
  * </pre>
  */
-public abstract class ProxyElement {
+public abstract class PipeElement {
   private boolean started = false, paused = false, stopped = false;
-  Resource root;
 
   /**
-   * Initialize a {@code ProxyElement} with the given root resource.
+   * This is called once the pipeline has been assembled to start the flow of
+   * data through this {@code PipeElement}. This method may return a {@code
+   * Bell} which will ring when this {@code PipeElement} is ready, or {@code
+   * null} to indicate that it is ready immediately.
+   * <p/>
+   * Exceptions thrown here or through the returned {@code Bell} will be
+   * propagated through the pipeline, and this 
+   * <p/>
+   * No other transfer methods will be called until this method has completed
+   * and the returned {@code Bell}, if non-{@code null}, has rung. This method
+   * will be called at most once.
    *
-   * @param root the root resource of this {@code ProxyElement}.
+   * @return A {@code Bell} which will ring when this {@code PipeElement} is
+   * ready.
    */
-  protected ProxyElement(Resource root) {
-    this.root = root;
-  }
+  protected Bell<?> start() throws Exception { return null; }
 
   /**
-   * Start the transfer. Implementors should assume no other transfer methods
-   * will be called until this has been called, and that this method will be
-   * called at most once.
-   */
-  protected abstract void start();
-
-  /**
-   * Stop the transfer permanently. Once stopped, the transfer cannot be
+   * This is called once the . Once stopped, the transfer cannot be
    * started again. This may be called before {@link #start()} if the transfer
    * is canceled before it starts.
    */
-  protected abstract void stop();
+  protected void stop() { }
 
   /**
    * Pause the transfer temporarily. {@code resume()} should be called to
@@ -210,12 +211,12 @@ public abstract class ProxyElement {
   protected abstract int concurrency();
 
   /**
-   * Determine whether this {@code ProxyElement} is active. Every proxy
+   * Determine whether this {@code PipeElement} is active. Every proxy
    * pipeline must have an active element. This will be used to determine
    * whether or not a {@code Pump} is required to extract data from the
    * pipeline {@code Tap}.
    *
-   * @return {@code true} if this {@code ProxyElement} is active; {@code false}
+   * @return {@code true} if this {@code PipeElement} is active; {@code false}
    * otherwise.
    */
   protected abstract boolean isActive();

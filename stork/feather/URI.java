@@ -1,5 +1,7 @@
 package stork.feather;
 
+import java.util.*;
+
 import stork.feather.util.*;
 
 /**
@@ -47,11 +49,18 @@ import stork.feather.util.*;
  *
  * <blockquote>{@code https://github.com/medialize/URI.js}</blockquote>
  */
-public abstract class URI {
+public abstract class URI extends Path {
   private static Intern<URI> intern = new Intern<URI>();
 
   /** An empty URI. */
   public static final URI EMPTY = new FeatherURI();
+
+  // Used to quickly determine if a character is reserved.
+  private static final BitSet RESERVED = new BitSet(128);
+  static {
+    for (char c : " !#$%&'()*+,/:;=?@[]{}".toCharArray())
+      RESERVED.set(c);
+  }
 
   /**
    * Intern a given URI, and return an immutable canonical representation of
@@ -300,8 +309,8 @@ public abstract class URI {
       return new String[2];
     int i = cs.indexOf(':');
     return new String[] {
-      unescape((i < 0) ? cs   : (i > 0) ? cs.substring(0,i) : null),
-      unescape((i < 0) ? null : cs.substring(i+1))
+      decode((i < 0) ? cs   : (i > 0) ? cs.substring(0,i) : null),
+      decode((i < 0) ? null : cs.substring(i+1))
     };
   }
 
@@ -315,7 +324,7 @@ public abstract class URI {
   public URI userPass(String... userpass) {
     String u = (userpass.length > 0) ? userpass[0] : null;
     String p = (userpass.length > 1) ? userpass[1] : null;
-    return userInfo(escape(u)+":"+escape(p));
+    return userInfo(encode(u)+":"+encode(p));
   }
 
   /**
@@ -799,16 +808,42 @@ public abstract class URI {
   }
 
   /**
-   * Return an escaped version of the given string.
+   * Return an encoded representation of {@code string}.
    *
-   * @param string an input string to escape, which may be {@code null}
-   * @return An escaped representation of {@code string}, or {@code null} if
-   * {@code string} is {@code null}.
+   * @param string an input {@code String} to encode.
+   * @return An encoded representation of {@code string}.
    */
-  public static String escape(String string) {
-    if (string == null)
-      return null;
-    return string;
+  public static String encode(String string) {
+    StringBuilder sb = new StringBuilder();
+    int length = string.length();
+    for (int offset = 0; offset < length;) {
+      int cp = string.codePointAt(offset);
+      if (shouldEncode(cp))
+      if (cp < ' ' || cp > '~' || RESERVED.get(cp))
+        sb.append(encode(cp));
+      else
+        sb.appendCodePoint(cp);
+      offset += Character.charCount(cp);
+    }
+  } private static boolean shouldEncode(int c) {
+    return c < ' ' || c > '~' || RESERVED.get(c);
+  }
+
+  /**
+   * Percent-encode a code point, regardless of whether or not it is a reserved
+   * character.
+   *
+   * @param c the code point to encode.
+   * @return The percent-encoding of {@code c}.
+   */
+  public static String encode(int c) {
+    StringBuilder sb = new StringBuilder();
+    do {
+      int b = c & 0xFF;
+      c >>>= 8;
+      sb.append("%").append(Integer.toString(b, 16).toUpperCase());
+    } while (c != 0);
+    return sb.toString();
   }
 
   /**
@@ -819,7 +854,7 @@ public abstract class URI {
    * @return An unescaped representation of {@code string}, or {@code null} if
    * {@code string} is {@code null}.
    */
-  public static String unescape(String string) {
+  public static String decode(String string) {
     if (string == null)
       return null;
     return string;
