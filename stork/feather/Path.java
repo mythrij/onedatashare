@@ -57,9 +57,9 @@ public abstract class Path {
   /**
    * Return the name of this path segment, either escaped or unescaped.
    *
-   * @param escaped whether or not the escape the segment name
+   * @param encoded whether or not to URI encode the segment name.
    */
-  public abstract String name(boolean escaped);
+  public abstract String name(boolean encoded);
 
   /**
    * Return a glob {@code Path} that matches both this {@code Path} and {@code
@@ -69,10 +69,6 @@ public abstract class Path {
    */
   //public abstract Path glob(Path path);
 
-  /**
-   * Check if the last segment of this {@code Path} and {@code path} are equal.
-   */
-  abstract boolean equals(Path path);
 
   /**
    * Return a new {@code Path} with this {@code Path} appended to the given
@@ -84,32 +80,26 @@ public abstract class Path {
   public abstract Path appendTo(Path path);
 
   /**
-   * Check if this {@code Path} segment matches the given {@code Path} segment.
-   * This will only check if the end segments match. Use {@link #matches(Path)}
-   * to test for matches over all segments.
+   * Check if the last segments of this {@code Path} and the given {@code Path}
+   * are equal. This will only check if the end segments match. Use {@link
+   * #equals(Object)} to test for matches over all segments.
    *
-   * @param path the {@code Path} to match against.
-   * @return {@code true} if this {@code Path} segment matches the given {@code
-   * Path} segment; {@code false} otherwise.
+   * @param path the {@code Path} to test last segments against.
+   * @return {@code true} if this {@code Path}'s last segment equals the given
+   * {@code Path}'s last segment; {@code false} otherwise.
    */
-  public abstract boolean segmentMatches(Path path);
+  abstract boolean segmentEquals(Path path);
 
   /**
-   * Check if this {@code Path} specifies a pattern which matches {@code path}.
-   * Note that this relation is not symmetrical. This {@code Path} 
-   * Specifically, this {@code Path} matches another {@code Path} if 
+   * Check if the last segment of {@code Path} matches the last segment of the
+   * given {@code Path}. This will only check if the end segments match. Use
+   * {@link #matches(Path)} to test for matches over all segments.
    *
-   * @param path the {@code Path} to match against.
-   * @return {@code true} if this {@code Path} matches the given {@code Path};
-   * {@code false} otherwise.
+   * @param path the {@code Path} to match last segments against.
+   * @return {@code true} if this {@code Path}'s last segment matches the given
+   * {@code Path}'s last segment; {@code false} otherwise.
    */
-  public boolean matches(Path needle) {
-    if (path == this)
-      return true;
-    if (!segmentMatches(path))
-      return false;
-    return up().matches(path.up());
-  }
+  public abstract boolean segmentMatches(Path path);
 
   /**
    * Return the {@code n}th parent of this {@code Path}. If {@code n == 0},
@@ -361,17 +351,54 @@ public abstract class Path {
    * @return A regular expression {@code String} based on {@code glob}.
    */
   public static String globToRegex(String glob) {
+    StringBuffer sb = new StringBuffer();
+    String[] sa = glob.split("*", -1);
     
+    if (sa.length != 0) {
+      sb.append(Pattern.quote(sa[0]));
+      for (int i = 1; i < sa.length; i++)
+        sb.append(".*"+Pattern.quote(sa[i]));
+    }
+
+    return sb.toString();
   }
 
   /**
-   * Return an escaped string representation of this {@code Path}.
+   * Check if this {@code Path} specifies a pattern which matches {@code path}.
+   * Note that this relation is not symmetrical. This {@code Path} 
+   * Specifically, this {@code Path} matches another {@code Path} if 
    *
-   * @return An escaped string representation of this {@code Path}.
+   * @param path the {@code Path} to match against.
+   * @return {@code true} if this {@code Path} matches the given {@code Path};
+   * {@code false} otherwise.
    */
-  public String toString() {
-    return (isRoot()) ? name() :
-           (up() == ROOT) ? "/"+name(true) : up()+"/"+name(true);
+  public boolean matches(Path needle) {
+    if (path == this)
+      return true;
+    if (!segmentMatches(path))
+      return false;
+    return up().matches(path.up());
+  }
+
+  /**
+   * Check if two {@code Path}s are equal. That is, check that two {@code
+   * Path}s are component-wise equal.
+   *
+   * @param object the object to test equality against.
+   * @return {@code true} if {@code object} is a {@code Path} and equals this
+   * {@code Path}; {@code false} otherwise.
+   */
+  public boolean equals(Object object) {
+    if (object == this)
+      return true;
+    if (!(object instanceof Path))
+      return false;
+    Path path = (Path) object;
+    if (path.hash != 0 && hash != 0 && path.hash != hash)
+      return false;
+    if (depth() != path.depth())
+      return false;
+    return segmentEquals(path) && up().equals(path.up());
   }
 
   /**
@@ -386,24 +413,13 @@ public abstract class Path {
   }
 
   /**
-   * Check if two {@code Path}s are equal. That is, check that two {@code
-   * Path}s are component-wise equal.
+   * Return an escaped string representation of this {@code Path}.
    *
-   * @param object the object to test equality against.
-   * @return {@code true} if {@code object} is a {@code Path} and equals this
-   * {@code Path}; {@code false} otherwise.
+   * @return An escaped string representation of this {@code Path}.
    */
-  public final boolean equals(Object object) {
-    if (object == this)
-      return true;
-    if (!(object instanceof Path))
-      return false;
-    Path path = (Path) object;
-    if (path.hash != 0 && hash != 0 && path.hash != hash)
-      return false;
-    if (depth() != path.depth())
-      return false;
-    return equals(path) && up().equals(path.up());
+  public String toString() {
+    return (isRoot()) ? name() :
+           (up() == ROOT) ? "/"+name(true) : up()+"/"+name(true);
   }
 
   public static void main(String args[]) throws Exception {
@@ -481,58 +497,50 @@ class DotPath extends RootPath {
 abstract class SegmentPath extends Path {
   protected final Path up;
   public SegmentPath(Path up) { this.up = up; }
-
   public Path up() { return up; }
-
-  public Path appendTo(Path path) {
-    path = up.appendTo(path);
-    return (path == up) ? this : appendCloneTo(path);
-  }
-
-  // Make a duplicate of this path with a new parent.
-  protected abstract Path appendCloneTo(Path path);
-
-  public boolean matches(Path path) {
-    if (path.isGlob() == isGlob())
-      return equals(path);
-    if (path.isGlob())
-      return path.matches(this);
-
-    // At this point, we know this is the glob and path is the non-glob.
-    return false;
-  }
 }
 
 // A path segment that matches an exact string.
 class LiteralPath extends SegmentPath {
   protected String name;
 
-  public StringPath(Path up, String name) {
+  public LiteralPath(Path up, String name) {
     super(up);
     this.name = name;
   }
 
-  protected Path appendCloneTo(Path path) {
-    return new StringPath(path, name);
+  protected Path appendTo(Path path) {
+    path = up.appendTo(path);
+    if (path.equals(up))
+      return this;
+    return Path.intern(new LiteralPath(path, name));
   }
 
   public String name(boolean encode) {
     return encode ? URI.encode(name) : name;
   }
 
-  public boolean matches(Path path) {
-    return name(true).equals(path.name(true));
+  public boolean segmentMatches(Path path) {
+    if (path instanceof LiteralPath)
+      return name.equals(path.name(false));
+    else if (path instanceof GlobPath)
+      return path.matches(this);
+    return false;
   }
 
-  public boolean equals(Path path) {
+  public boolean segmentEquals(Path path) {
+    if (path instanceof LiteralPath)
+      return name.equals(path.name(false));
     return name(true).equals(path.name(true));
   }
 }
 
 // A path whose last segment is a glob expression.
-class GlobPath extends StringPath {
-  private Pattern pattern;
+class GlobPath extends LiteralPath {
+  protected final String name;
+  protected Pattern pattern;
 
+  // Name must be unescaped.
   public GlobPath(Path up, String name) {
     super(up, name);
     this.pattern = nameToRegex(name);
@@ -543,20 +551,10 @@ class GlobPath extends StringPath {
     this.pattern = pattern;
   }
 
-  private static Pattern nameToRegex(String name) {
-    String s = "^";
-    for (int i = 0; i < name.length(); i++) {
-      char c = name.charAt(i);
-      switch (c) {
-        case '*':  s += ".*"; break;
-        case '?':  s += "."; break;
-        case '.':  s += "\\."; break;
-        case '\\': s += "\\\\"; break;
-        default:   s += c;
-      }
-    }
-    s += '$';
-    return Pattern.compile(s);
+  private synchronized Pattern pattern() {
+    if (pattern != null)
+      return pattern;
+    return pattern = Pattern.compile(Path.globToRegex(name));
   }
 
   public boolean isGlob() { return true; }
@@ -566,7 +564,7 @@ class GlobPath extends StringPath {
   }
 
   public boolean matches(Path path) {
-    return pattern.matcher(path.name(true)).matches();
+    return pattern().matcher(path.name(true)).matches();
   }
 }
 

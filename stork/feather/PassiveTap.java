@@ -18,7 +18,7 @@ public abstract class PassiveTap extends Tap {
    * @param resource the {@code Resource} this {@code Tap} emits data from.
    * @throws NullPointerException if {@code resource} is {@code null}.
    */
-  public Tap(Resource resource) {
+  public PassiveTap(Resource resource) {
     if (resource == null)
       throw new NullPointerException();
     this.resource = resource;

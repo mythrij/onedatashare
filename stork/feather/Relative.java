@@ -1,40 +1,74 @@
 package stork.feather;
 
 /**
- * An interface for objects wrapped with context regarding its origin in an
- * ongoing transfer. This wraps information such as the {@code Resource} of
- * origin, the root {@code Resource} the originating {@code Resource} is
- * relative to, and the selection path of the 
+ * An object wrapper with contextual information regarding the object's origin
+ * in some hierarchical transaction. This could be used in, for example, an
+ * ongoing transfer or crawling operation. This wraps information such as the
+ * {@code Resource} of origin (e.g., the {@code Resource} an object came from),
+ * the root {@code Resource} in the context the originating {@code Resource} is
+ * relative to (e.g., the root of the transfer), and the selection path of the
+ * origin relative to the root. This relationship can be more simply thought of
+ * as: {@code root.select(path).equals(origin)}
+ *
+ * @param <R> The type of {@code Resource} this {@code Relative} object
+ * originated from.
+ * @param <T> The type of the object wrapped by this {@code Relative} class.
  */
-public interface Relative {
-  /**
-   * Get the concrete {@code Resource} this object is relative to. This will be
-   * equalvalent to {@link #root()} if and only if {@link #isRoot()} returns
-   * {@code true}.
-   *
-   * @return the {@code Resource} this object is relative to.
-   */
-  Resource resource();
+public class Relative<R,T> {
+  /** The root {@code Resource} of the operation. */
+  public final R root;
+
+  /** The {@code Resource} that {@code object} originated from. */
+  public final R origin;
+
+  /** The selection {@code Path} from {@code root} to {@code origin}. */
+  public final Path path;
+
+  /** The wrapped object of type {@code T}. */
+  public final T object;
 
   /**
-   * Get the root {@code Resource} context of the wrapped object. This will be
-   * equalvalent to {@link #resource()} if and only if {@link #isRoot()}
-   * returns {@code true}.
+   * Wrap {@code object} with the given {@code root} and {@code path}. The
+   * {@code origin} will be selected automatically based on {@code root} and
+   * {@code path}.
+   *
+   * @param object the {@code T} to wrap.
+   * @param root the operational root.
+   * @param path the {@code Path} from {@code root} to {@code origin}.
    */
-  Resource root();
+  public Relative(T object, R root, Path path) {
+    this(object, root, path, root.select(path));
+  }
 
   /**
-   * Get the path with which the origin is relative to the transfer root.
+   * Wrap {@code object} with the given {@code root}, {@code path}, and {@code
+   * origin}. This is intended to circumvent the slight overhead of selecting
+   * {@code origin} from {@code root} and {@code path} if {@code origin} is
+   * already known. However, this means it is possible to create a {@code
+   * Relative} wrapper such that {@code !root.select(path).equals(origin)},
+   * violating the class contract. Since this class is primarily used inside
+   * this package, it shouldn't be a problem. If you're using it outside the
+   * package, just play nice.
    *
-   * @return The path of the originating resource relative to the root.
+   * @param object the {@code T} to wrap.
+   * @param root the operational root.
+   * @param path the {@code Path} from {@code root} to {@code origin}.
+   * @param origin the operation origin of {@code object}.
    */
-  Path path();
+  public Relative(T object, R root, Path path, R origin) {
+    this.root = root;
+    this.path = path;
+    this.object = object;
+    origin = origin.select(path);
+  }
 
   /**
-   * Check if this wrapped object originated from the root
+   * Check if this object originated from the root.
    *
-   * @return {@code true} if this {@code RelativeResource} is the root
-   * resource; {@code false} otherwise.
+   * @return {@code true} if {@code path} is a root path; {@code false}
+   * otherwise.
    */
-  boolean isRoot();
+  public boolean isRoot() {
+    return path.isRoot();
+  }
 }

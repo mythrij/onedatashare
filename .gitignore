@@ -2,3 +2,7 @@
 *.jar
 *.war
 *.ear
+*.swp
+*.dmp
+*.dap
+doc

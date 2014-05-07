@@ -11,19 +11,19 @@ import stork.feather.*;
 import stork.module.*;
 import stork.util.*;
 
-// A class for parsing FTP listings. Based heavily on Mozilla's own FTP
-// list parsing code, available in their mozilla-central repository,
-// under the path:
-//
-//   netwerk/streamconv/converters/ParseFTPList.cpp
-//
-// This parser will return a tree root that has its name set if and only
-// if information about the listed directory was able to be retrieved from
-// the listing results.
-//
-// TODO: Check out <http://cr.yp.to/ftpparse/ftpparse.c>.
-
+/**
+ * A class for parsing FTP listings. Based heavily on Mozilla's own FTP
+ * list parsing code, available in their mozilla-central repository,
+ * under the path:
+ * <p/>
+ *   netwerk/streamconv/converters/ParseFTPList.cpp
+ * <p/>
+ * This parser will return a tree root that has its name set if and only
+ * if information about the listed directory was able to be retrieved from
+ * the listing results.
+ */
 public class FTPListParser extends Bell<Stat> implements Sink {
+  // TODO: Check out <http://cr.yp.to/ftpparse/ftpparse.c>.
   String data = null;
   int list_type;
   StringBuilder sb = new StringBuilder();

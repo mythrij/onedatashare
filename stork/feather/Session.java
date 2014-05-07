@@ -3,136 +3,207 @@ package stork.feather;
 import java.io.*;
 
 /**
- * A {@code Session} represents a connection to a remote endpoint and all
- * associated configuration and state.
+ * A {@code Session} is a stateful context for operating on {@code Resource}s.
+ * {@code Session}s serve as a nexus for all of the stateful information
+ * related to operating on a particular class of {@code Resource}s, which may
+ * include network connections, user credentials, configuration options, and
+ * other state necessary for operating on the {@code Resource}s it supports.
+ * <p/>
+ * {@code Resource}s handled by the {@code Session} may be <i>selected</i>
+ * through the {@code Session}, in which case all operations on the {@code
+ * Resource} will be performed in the context of the {@code Session}. Whether
+ * or not a particular {@code Resource} is capable of being handled by the
+ * {@code Session} depends on the URI associated with the {@code Resource} in
+ * question.
+ * </p>
+ * {@code Session}s maintain state information regarding whether or not they
+ * are ready for operation, and can be tested for equality based the URI and
+ * user credentials used to instantiate them. This makes {@code Session}s
+ * suitable for caching and reusing. A {@code Resource} selected on an
+ * unconnected {@code Session} can, for instance, be reselected through an
+ * equivalent {@code Session} that is still "warm", allowing the {@code
+ * Session} to be reused and the initialization overhead to be avoided.
  *
- * @param <S> The equivalence class of this {@code Session} implementation.
- * Typically this will just be the implementation itself.
+ * @see Resource
+ *
+ * @param <S> The type of the subclass of this {@code Session}. This
+ * unfortunate redundancy exists solely to circumvent weaknesses in Java's
+ * typing system.
+ * @param <R> The supertype of all {@code Resource}s handled by this {@code
+ * Session}.
  */
-public abstract class Session<S extends Session> extends Resource<S> {
+public abstract class Session<S extends Session, R extends Resource> {
+  /** The root {@code Resource} of this {@code Session}. */
+  protected final R root;
+
+  /** The URI used to describe this {@code Session}. */
+  protected final URI uri;
+
   /** The authentication factor used for this endpoint. */
   protected final Credential credential;
 
-  private final Bell<S> onOpen  = new Bell<S>();
-  private final Bell<?> onClose = new Bell<?>();
+  // Rung on close. Avoid letting this leak out.
+  private final Bell<S> onFinalize = new Bell<S>();
+
+  // This mediator is used in this package only.
+  final ResourceMediator mediator = new ResourceMediator();
 
   /**
-   * Create a session with the given root URI.
+   * Create a {@code Session} with the given root URI.
    *
    * @param uri a {@link URI} representing the root of the session.
+   * @throws NullPointerException if {@code root} or {@code uri} is {@code
+   * null}.
    */
-  public Session(URI uri) {
-    super(this);
-    this(uri, null);
-  }
+  protected Session(R root, URI uri) { this(uri, null); }
 
   /**
-   * Create a session with the given root URI and credential.
+   * Create a {@code Session} with the given root URI and {@code Credential}.
    *
-   * @param uri a {@link URI} representing the root of the session.
+   * @param root the root {@code Resource} of this {@code Session}.
+   * @param uri a {@link URI} describing the {@code Session}.
    * @param credential a {@link Credential} used to authenticate with the
-   * endpoint. May be {@code null} if no additional authentication factors are
-   * required.
-   * @throws NullPointerException if {@code uri} is {@code null}.
+   * endpoint. This may be {@code null} if no additional authentication factors
+   * are required.
+   * @throws NullPointerException if {@code root} or {@code uri} is {@code
+   * null}.
    */
-  public Session(URI uri, Credential credential) {
-    super(uri);
+  protected Session(R root, URI uri, Credential credential) {
+    this.uri = uri;
     this.credential = credential;
   }
 
-  public final S session() {
-    return this;
+  /**
+   * Return the root {@code Resource} of this {@code Session}.
+   *
+   * @return The root {@code Resource} of this {@code Session}.
+   */
+  public final R root() { return root; }
+
+  /**
+   * Used internally in this package to manage resource initialization state.
+   */
+  final class ResourceMediator {
+    Map<R,Bell<S>> inits = new HashMap<R,Bell<S>>();
+
+    // Initialize the session, then initialize the resource.
+    synchronized Bell<R> initialize(final R res) {
+      if (res == Session.this)
+        return initResource(Session.this);
+  
+      final Bell<R> bell = new Bell<R>();
+      initResource(Session.this).new Promise() {
+        public void done() {
+          initResource(res).promise(bell);
+        } public void fail(Throwable t) {
+          bell.ring(t);
+        }
+      };
+      return bell;
+    }
+
+    // Initialize a resource if it hasn't been.
+    synchronized Bell<S> initResource(R res) {
+      Bell<S> bell = inits.get(res);
+
+      if (bell != null) {
+        return bell;
+      } try {
+        bell = initialize(res);
+      } catch (Exception e) {
+        bell = new Bell<S>().ring(e);
+      } if (bell == null) {
+        bell = new Bell<S>().ring(res);
+      }
+
+      inits.put(res, bell);
+      return bell;
+    }
+
+    // Finalize a resource if it's been initialized.
+    synchronized void finalize(R res) {
+      Bell<R> bell = inits.remove(res);
+      if (bell != null)
+        bell.cancel();
+      if (res == Session.this)
+        onFinalize.ring();
+    }
   }
 
   /**
-   * Perform any operations necessary to prepare the {@code Session} to perform
-   * an operation on the given {@code Resource}.
+   * Prepare the {@code Session} to perform operations on the given {@code
+   * Resource}. The exact nature of this preparation varies from implementation
+   * to implementation. The implementor may assume that this method will not
+   * be called again for the given {@code Resource} until said {@code Resource}
+   * has been finalized. If {@code resource} is this {@code Session}, this
+   * method should initialize the {@code Session} for general use, including
+   * performing any connection and authentication operations.
+   * <p/>
+   * Implementations may return {@code null} if {@code resource} does not
+   * require any asynchronous initialization. This method may also throw an
+   * {@code Exception} if {@code resource} cannot be initialized for some
+   * reason. By default, this method returns {@code null}.
    *
    * @param resource the {@code Resource} to prepare to perform an operation
    * on.
-   * @return A {@code Bell} which will ring with this {@code Session} when it
-   * is prepared to perform an operation on {@code resource}.
+   * @return A {@code Bell} which will ring with {@code resource} when this
+   * {@code Session} is prepared to perform operations on {@code resource}, or
+   * {@code null} if the {@code Resource} requires no initialization.
    */
-  public abstract Bell<? extends S> initialize(Resource<S> resource);
+  protected Bell<R> initialize(R resource) { return null; }
 
   /**
-   * Perform any operations necessary to prepare the {@code Session} to perform
-   * an operation on the given {@code Resource}.
+   * Release any resources allocated during the initialization of {@code
+   * resource}. If {@code resource} is this {@code Session}, this method should
+   * close any connections and finalize any ongoing transactions.
    *
    * @param resource the {@code Resource} to prepare to perform an operation
    * on.
-   * @return A {@code Bell} which will ring with this {@code Session} when it
-   * is prepared to perform an operation on {@code resource}.
    */
-  public abstract Bell<? extends S> finalize(Resource<S> resource);
-
-  /**
-   * Perform any operations necessary to prepare the {@code Session} to perform
-   * an operation. This 
-   * <p/>
-   * Implementations that override this method must call {@code super.open()}
-   * and return {@code super.onOpen()}.
-   *
-   * @return (via bell) Itself, once opening has completed. If this bell is
-   * cancelled before the session has been established, the opening procedure
-   * should be terminated.
-   */
-  public Bell<S> open() {
-    return openBell.ring(this);
-  }
-
-  /**
-   * Inform the session that it is no longer needed and should close any open
-   * resources. This will also cancel the opening procedure if it has begun.
-   * <p/>
-   * Implementations that override this method must call {@code super.close()}
-   * as the first line line of the method.
-   * 
-   * @return The result of {@link #onClose()}, which will have already been
-   * rung.
-   */
-  public Bell<?> close() {
-    onOpen
-    return onClose.ring();
-  }
+  protected void finalize(R resource) { }
 
   /**
    * Check if the closing procedure has begun.
    *
    * @return {@code true} if closing has begun; {@code false} otherwise.
    */
-  public final synchronized boolean isClosed() {
-    return onClose.isDone();
+  public final synchronized boolean isFinalized() {
+    return onFinalize.isDone();
   }
 
   /**
-   * Return a bell that will be rung when the {@code Session} is closed.
+   * Return a bell that will be rung with this {@code Session} when the {@code
+   * Session} is closed.
    *
    * @return A bell that will be rung when the {@code Session} is closed.
    */
-  public final Bell<?> onClose() {
-    return onClose.new Promise();
+  public final Bell<S> onFinalize() {
+    return onFinalize.new Promise();
   }
 
   /**
-   * Register a bell to be rung with a {@code IOException} when the
-   * session has begun its closing procedure.
+   * Register a {@code Bell} to be rung with this {@code Session} when the
+   * {@code Session} is closed. This is slightly more memory-efficient than
+   * promising on the {@code Bell} returned by {@link #onFinalize()}, as it
+   * gets promised to an internal {@code Bell} directly.
    *
-   * @return The value passed in for {@code bell}.
-   * @param bell the bell to ring with a {@code IOException} when
-   * the session is closed.
-   * @throws IOException (via {@code bell}) when the session has
-   * begun closing.
+   * @param bell a {@code Bell} that will be rung when the {@code Session} is
+   * closed.
+   * @return Whatever value was passed in for {@code bell}.
    */
-  public final <T> Bell<T> onClose(Bell<T> bell) {
-    return onClose
+  public final Bell<S> onFinalize(Bell<S> bell) {
+    return onFinalize.promise(bell);
   }
 
   /**
-   * If all references to this session have been lost, begin the closing
-   * procedure.
+   * Select a {@code Resource} relative to the root {@code Resource} of this
+   * {@code Session}.
+   *
+   * @param path the selection path to the {@code Resource} being selected.
    */
-  protected final void finalize() { close(); }
+  public final R select(Path path) {
+    return path.isRoot() ? root() : select(path.up()).select(path.name());
+  }
 
   public String toString() {
     return uri.toString();

@@ -71,7 +71,7 @@ public abstract class StorkInterface {
    * scheduler.
    */
   protected Bell<Request> issueRequest(Bell<Ad> request) {
-    return request.PromiseAs<Request>() {
+    return request.new PromiseAs<Request>() {
       public Request convert(Ad request) {
         return issueRequest(request);
       }

@@ -6,7 +6,8 @@ import java.util.concurrent.*;
 /**
  * A promise primitive used for stringing together the results of asynchronous
  * operations and executing asynchronous handlers. It supports callbacks
- * defined in subclasses, chaining of results, and deadlines.
+ * defined in subclasses, chaining of results, deadlines, and
+ * back-cancellation.
  *
  * @param <T> the supertype of objects that can ring this bell.
  */
@@ -254,19 +255,36 @@ public class Bell<T> implements Future<T> {
   }
 
   /**
-   * A bell which is promised to the parent bell on instantiation. This
-   * simplifies the construction of promised handlers. It is roughly equivalent
-   * to the code:
-   * <pre>
-   * final Bell<T> parent = this;
-   * parent.promise(new Bell<T>() {
-   *   public void 
-   * });
-   * </pre>
+   * A bell which is promised to the parent bell on instantiation. This may
+   * optionally be created with a delegate bell that will be rung with the
+   * result of the parent bell if no handler is defined in this bell. If a
+   * handler is overridden in this bell, it is up to the handler to ring the
+   * delegated bell or promise it to a bell which will ultimately ring it.
    */
-  public abstract class Promise extends Bell<T> {{
-    Bell.this.promise(this);
-  }}
+  public class Promise extends Bell<T> {
+    private final Bell<? super T> delegate;
+
+    /** Create a promise which does not delegate to any other bell. */
+    public Promise() { this(null); }
+
+    /**
+     * Create a promise which delegates to the given bell if none of the
+     * handlers are redefined. This allows you to essentially insert shims
+     * between two bells, or create a chain where a failure in any bell
+     * immediately rings the final bell.
+     *
+     * @param delegate the bell to delegate to if no handler is defined.
+     */
+    public Promise(Bell<? super T> delegate) {
+      Bell.this.promise(this);
+    }
+
+    public void done(T t) {
+      if (delegate != null) delegate.ring(t);
+    } public void fail(Throwable t) {
+      if (delegate != null) delegate.ring(t);
+    }
+  }
 
   /**
    * A bell which is promised to the parent bell on instantiation, and performs
@@ -315,6 +333,70 @@ public class Bell<T> implements Future<T> {
   }
 
   /**
+   * A bell which will perform some operation after the parent bell rings. This
+   * bell is very similar to a {@link ThenAs} bell, except it has the same type
+   * as its parent, and by default its {@link #then(T)} method will ring the
+   * {@code Then} bell with the parent's value. If no {@code then(...)} methods
+   * are overridden, this bell behaves identically to a {@link Promise}. This
+   * class is useful if the parent's value is desired on success, but another
+   * operation should be performed on failure.
+   */
+  public class Then extends ThenAs<T> {
+    /**
+     * This method will be called if the parent bell rings successfully. By
+     * default, this method rings this bell with {@code done}.
+     *
+     * @param done the value the parent bell rang with.
+     */
+    protected void then(T done) { ring(done); }
+  }
+
+  /**
+   * A bell which will perform some operation after the parent bell rings. When
+   * the parent bell rings, this bell's {@code then(...)} methods will be
+   * called depending on the result of the parent bell. By default, the {@code
+   * then(...)} methods will ring this bell, though these may be overridden to
+   * start another operation which will ring this bell instead. This can be
+   * used to create an asynchronous chain of commands.
+   *
+   * @param <V> the supertype of objects this bell rings with.
+   */
+  public class ThenAs<V> extends Bell<V> {
+    // Promise a bell to the parent which will cause this thing's then()
+    // methods to run.
+    {
+      Bell.this.new Promise() {
+        public void done(T t)         { then(t); }
+        public void fail(Throwable t) { then(t); }
+        public void always()          { then();  }
+      };
+    }
+
+    /**
+     * This method will be called if the parent bell rings successfully. By
+     * default, this method rings this bell with {@code null}.
+     *
+     * @param done the value the parent bell rang with.
+     */
+    protected void then(T done) { ring(); }
+
+    /**
+     * This method will be called if the parent bell rings successfully. By
+     * default, this method rings this bell with {@code fail}. This method may
+     * be left 
+     *
+     * @param fail the {@code Throwable} the parent bell failed with.
+     */
+    protected void then(Throwable fail) { ring(fail); }
+
+    /**
+     * This method will always be executed after the parent bell rings. By
+     * default, it does nothing.
+     */
+    protected void then() { }
+  }
+
+  /**
    * Set the deadline of the bell in seconds. The deadline is relative to the
    * time this method is called. If the bell is not rung in this time, it will
    * be resolved with a {@link TimeoutException}.
@@ -329,6 +411,28 @@ public class Bell<T> implements Future<T> {
       }
     }, (long)(deadline * 1E6), TimeUnit.MICROSECONDS);
     return this;
+  }
+
+  /**
+   * Check if this bell has at least one promise and all promises have
+   * completed. This can be used by subclasses to implement backward-flowing
+   * cancellations, for example for requests that are cancelled by its
+   * requestor(s) and whose operation may thus be cancelled, or for "whichever
+   * responds first" patterns.
+   * <p/>
+   * If this bell is in the process of ringing or has already rung, this method
+   * returns {@code false} regardless of the state of its promises during its
+   * lifetime.
+   *
+   * @return {@code true} if there are one or more promised bells and they have
+   * all completed; {@code false} otherwise.
+   */
+  public synchronized boolean promisesCompleted() {
+    if (promises == null || promises.size() == 0)
+      return false;
+    for (Bell b : promises)
+      if (!b.isDone()) return false;
+    return true;
   }
 
   /**
@@ -372,7 +476,7 @@ public class Bell<T> implements Future<T> {
         // Degenerate case...
         nonThrowingCheck(null);
         if (!isDone()) ring();
-      } else for (final Bell<I> b : bells) 
+      } else for (final Bell<I> b : bells) {
         b.new Promise() {
           protected void always() {
             set.remove(b);

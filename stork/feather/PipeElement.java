@@ -21,9 +21,17 @@ package stork.feather;
  * |  paused  || resume() |         | stop()  |
  * |__________||__________|_________|_________|
  * </pre>
+ *
+ * @param <R> The {@code Resource} type of this {@code PipeElement}'s {@code
+ * root}.
  */
-public abstract class PipeElement {
+public abstract class PipeElement<R extends Resource> {
   private boolean started = false, paused = false, stopped = false;
+
+  /** The root {@code Resource} of this {@code PipeElement}. */
+  public final R root;
+
+  public PipeElement(Resource root) { this.root = root; }
 
   /**
    * This is called once the pipeline has been assembled to start the flow of

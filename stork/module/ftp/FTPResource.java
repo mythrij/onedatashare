@@ -8,63 +8,58 @@ import stork.module.*;
 import stork.scheduler.*;
 import stork.util.*;
 
-public class FTPResource extends Resource<FTPSession> {
-  transient FTPChannel ch;
-
-  // Listing commands in order of priority.
-  private static enum ListCommand {
-    MLSC, STAT, MLSD, LIST(true), NLST(true);
-    private boolean dataChannel;
-
-    ListCommand() {
-      this(false);
-    } ListCommand(boolean dataChannel) {
-      this.dataChannel = dataChannel;
-    } ListCommand next() {
-      final int n = ordinal()+1;
-      return (n < values().length) ? values()[n] : null;
-    } boolean requiresDataChannel() {
-      return dataChannel;
-    }
-  }
-
-  // Transient state related to the channel configuration.
-  private transient boolean mlstOptsAreSet = false;
-
-  public FTPSession(URI uri, Credential cred) {
+public class FTPResource extends Resource<FTPSession, FTPResource> {
+  public FTPResource(URI uri, Credential cred) {
     super(uri, cred);
   }
 
-  // Perform a listing of the given path relative to the root directory.
+  // TODO: If this is a non-singleton resource, use a crawler.
   public synchronized Bell<Stat> stat() {
-    return doStat(uri, null);
-  } private synchronized Bell<Stat> doStat(final URI uri, final Stat base) {
-    final Path path = (uri.path() != null) ? uri.path() : Path.ROOT;
-    return new Bell<Stat>() {
-      { tryListing(ListCommand.values()[0]); }
-
-      // This will call itself until it finds a supported command.
-      private void tryListing(final ListCommand cmd) {
-        if (cmd == null)
-          ring(new Exception("Listing is not supported."));
-        else ch.supports(cmd.toString()).promise(new Bell<Boolean>() {
-          public void done(Boolean supported) {
-            if (supported) {
-              actuallyDoListing(cmd);
-            } else {
-              tryListing(cmd.next());
-            }
-          }
-        });
+    return initialize().new ThenAs<Stat>() {
+      // This will be called when initialization is done. It should start the
+      // chain reaction that results in listing commands being tried until we
+      // find one that works.
+      public void then(FTPSession session) {
+        tryListing(FTPListCommand.values()[0]);
       }
 
-      // This will get called to send the listing command.
-      private void actuallyDoListing(final ListCommand cmd) {
+      // This will call itself until it finds a supported command. If the
+      // command is not supported, call itself again with the next available
+      // command. If cmd is null, that means we've tried all commands.
+      private void tryListing(final FTPListCommand cmd) {
+        if (isDone()) {
+          return;
+        } if (cmd == null) {
+          ring(new Exception("Listing is not supported."));
+        } else ch.supports(cmd.toString()).new Promise() {
+          public void done(Boolean supported) {
+            if (supported)
+              sendListCommand(cmd);
+            else
+              tryListing(cmd.next());
+          }
+        };
+      }
+
+      // This will get called once we've found a command that is supported.
+      // However, if this fails, fall back to the next command.
+      private void sendListCommand(final FTPListCommand cmd) {
+        if (isDone())
+          return;
+
         char hint = cmd.toString().startsWith("M") ? 'M' : 0;
-        final FTPListParser parser = new FTPListParser(base, hint);
+        String base = path().name(false);
+        final FTPListParser parser = new FTPListParser(base, hint) {
+          // The parser should ring this bell if it's successful.
+          public void done(Stat stat) {
+            ThenAs.this.ring(stat);
+          } public void fail() {
+            // TODO: Check for permanent errors.
+            tryListing(cmd.next());
+          }
+        };
 
         parser.name(StorkUtil.basename(path.name()));
-        parser.promise(this);
 
         // When doing MLSx listings, we can reduce the response size with this.
         if (hint == 'M' && !mlstOptsAreSet) {
@@ -86,7 +81,7 @@ public class FTPResource extends Resource<FTPSession> {
 
         // Otherwise we're doing a data channel listing.
         else ch.new DataChannel() {{
-          attach(parser);
+          tap.attach(parser);
           new Command(cmd.toString(), makePath());
           unlock();
         }};
@@ -95,7 +90,7 @@ public class FTPResource extends Resource<FTPSession> {
       // Do this every time we send a command so we don't have to store a whole
       // concatenated path string for every outstanding listing command.
       private String makePath() {
-        String p = path.toString();
+        String p = path().toString();
         if (p.startsWith("/~"))
           return p.substring(1);
         else if (!p.startsWith("/") && !p.startsWith("~"))
@@ -123,14 +118,14 @@ public class FTPResource extends Resource<FTPSession> {
 
     return new Sink(this) {
       protected void start() {
-        new Command("STOR", resource.
+        new Command("STOR", resource.path());
       }
     };
   }
 
   public Tap doTap(final Resource resource) {
     return (Tap) ch.new DataChannel() {{
-      new Command("RETR", uri.path());
+      new Command("RETR", resource.path());
       unlock();
     }};
   }

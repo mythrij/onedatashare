@@ -35,7 +35,7 @@ public class FTPChannel {
   // The maximum amount of time (in ms) to wait for a connection.
   private static final int timeout = 2000;
 
-  private boolean closed = false;
+  private final Bell<?> onClose();
 
   // FIXME: We should use something system-wide.
   private static EventLoopGroup group = new NioEventLoopGroup();
@@ -455,15 +455,22 @@ public class FTPChannel {
 
   // Close the channel and run the onClose handler.
   public synchronized void close() {
-    if (closed) return;
-    closed = true;
-    channel().close();
-    onClose();
+    if (!isClosed()) {
+      channel().close();
+      onClose.ring();
+    }
+  }
+
+  // Check if the channel has been closed.
+  public synchronized boolean isClosed() {
+    return onClose.isDone();
   }
 
   // This gets called when the channel is closed by some means. Subclasses
   // should implement this.
-  protected void onClose() { }
+  public Bell<?> onClose() {
+    return onClose;
+  }
 
   // Try to authenticate using a username and password.
   public Bell<Reply> authorize() {
@@ -473,7 +480,7 @@ public class FTPChannel {
   } public Bell<Reply> authorize(final String user, final String pass) {
     final Bell<Reply> bell = new Bell<Reply>();
     new Command("USER", user) {
-      public void handle(Reply r) {
+      public void done(Reply r) {
         if (r.code == 331)
           new Command("PASS", pass).promise(bell);
         else if (r.isComplete())
@@ -497,7 +504,7 @@ public class FTPChannel {
     };
 
     new Command("AUTH GSSAPI") {
-      public void handle(Reply r) {
+      public void done(Reply r) {
         switch (r.code/100) {
           case 3:  handshake(sec, Unpooled.EMPTY_BUFFER).promise(bell);
           case 1:  return;
@@ -519,7 +526,7 @@ public class FTPChannel {
       ByteBuf ot = Base64.encode(sec.handshake(it), false);
 
       new Command("ADAT", ot.toString(data.encoding)) {
-        public void handle(Reply r) throws Exception {
+        public void done(Reply r) throws Exception {
           switch (r.code/100) {
             case 3:
               ByteBuf token = Base64.decode(r.lines[0].skipBytes(5));
@@ -566,7 +573,7 @@ public class FTPChannel {
 
       // ...and pipe all the check commands.
       new Command("HELP") {
-        public void handle(Reply r) {
+        public void done(Reply r) {
           if (!r.isComplete()) return;
           for (int i = 1; i < r.length()-1; i++)
           for (String c : r.line(i).trim().toUpperCase().split(" "))
@@ -574,7 +581,7 @@ public class FTPChannel {
         }
       };
       new Command("HELP SITE") {
-        public void handle(Reply r) {
+        public void done(Reply r) {
           if (!r.isComplete()) return;
           for (int i = 1; i < r.length()-1; i++)
             addFeature(r.line(i).trim().split(" ", 2)[0].toUpperCase());
@@ -650,7 +657,7 @@ public class FTPChannel {
 
     // If we didn't return, it's a sync. Handling a sync is fast, but we should
     // release handlers as soon as possible.
-    c.internalHandle(null);
+    c.ring();
     return true;
   }
 
@@ -687,9 +694,9 @@ public class FTPChannel {
     }
 
     // Now we can call the handlers.
-    handler.internalHandle(reply);
+    handler.ring(reply);
     if (syncs != null) for (Command sync : syncs)
-      sync.internalHandle(null);
+      sync.ring();
   }
 
   // Negotiate a type or change. Admittedly, this is a little unnecessarily
@@ -734,7 +741,7 @@ public class FTPChannel {
     final Bell<FTPHostPort> bell = new Bell<FTPHostPort>();
 
     new Command("PASV") {
-      public void handle(Reply r) {
+      public void done(Reply r) {
         if (!r.isComplete()) {
           bell.ring(r.asError());
         } try {
@@ -800,7 +807,7 @@ public class FTPChannel {
     throw new IllegalStateException("channel is not locked");
   }
 
-  // A deferred command which hold onto its arguments until it is ready to be
+  // A deferred command which holds onto its arguments until it is ready to be
   // written. Once it's ready to be written, call send(). If the view is not
   // the owner when send() is called, the command will once again be deferred.
   private class Deferred {
@@ -830,34 +837,37 @@ public class FTPChannel {
     }
   }
 
-  // This is sort of the workhorse of the channel. Instantiate one of these to
-  // send a command across this channel. The newly instantiated object will
-  // serve as a "future" for the server's ultimate reply. For example, a simple
-  // authorization routine could be written like:
-  //
-  //   FTPChannel ch = new FTPChannel(...);
-  //   Reply r = ch.new Command("USER bob") {
-  //     public void handle(Reply r) {
-  //       if (r.code == 331)
-  //         new Command("PASS monkey");
-  //     }
-  //   }.sync();
-  //
-  // This class's constructor will cause the command to be written to the
-  // channel and placed in the handler queue. This class can be anonymously
-  // subclassed to write command handlers inline, or can be subclassed normally
-  // for repeat issue of the command.
-  public class Command {
-    private Bell<Reply> bell = new Bell<Reply>();
+  /**
+   * This is sort of the workhorse of the channel. Instantiate one of these to
+   * send a command across this channel. The newly instantiated object will
+   * serve as a "future" for the server's ultimate reply. For example, a simple
+   * authorization routine could be written like:
+   *
+   *   FTPChannel ch = new FTPChannel(...);
+   *   Reply r = ch.new Command("USER bob") {
+   *     public void done(Reply r) {
+   *       if (r.code == 331)
+   *         new Command("PASS monkey");
+   *     }
+   *   }.sync();
+   *
+   * This class's constructor will cause the command to be written to the
+   * channel and placed in the handler queue. This class can be anonymously
+   * subclassed to write command handlers inline, or can be subclassed normally
+   * for repeat issue of the command.
+   */
+  public class Command extends Bell<Reply> {
     private final boolean isSync;
 
-    // Constructing this will automatically cause the given command to be
-    // written to the server. Typically, the passed cmd will be a string, but
-    // can be anything. The passed arguments will be stringified and
-    // concatenated with spaces for convenience. If cmd is null, nothing is
-    // actually written to the server and the command serves as a sort of
-    // "sync" for client code. Calling sync() on it will block until it has
-    // been reached in the pipeline.
+    /**
+     * Constructing this will automatically cause the given command to be
+     * written to the server. Typically, the passed cmd will be a string, but
+     * can be anything. The passed arguments will be stringified and
+     * concatenated with spaces for convenience. If cmd is null, nothing is
+     * actually written to the server and the command serves as a sort of
+     * "sync" for client code. Calling sync() on it will block until it has
+     * been reached in the pipeline.
+     */
     public Command(Object verb, Object... args) {
       synchronized (data) {
         isSync = (verb == null);
@@ -870,61 +880,13 @@ public class FTPChannel {
     } public synchronized final boolean isDone() {
       return bell.isDone();
     }
-
-    // Promise to ring the given bell when this command is fulfilled.
-    public synchronized Bell<Reply> promise(Bell<Reply> bell) {
-      this.bell.promise(bell);
-      return bell;
-    }
-
-    // This is called internally by the channel handler whenever a reply comes
-    // in. It handles passing the received reply to handle(). Once this is
-    // passed a non-preliminary reply, it sets the reply future
-    private void internalHandle(Reply r) {
-      try {
-        synchronized (this) { handle(r); }
-      } catch (Exception e) {
-        bell.ring(e);
-      } finally {
-        if (isSync())
-          bell.ring();
-        else if (!r.isPreliminary())
-          bell.ring(r);
-      }
-    }
-
-    // Users should subclass this and override handle() to deal with commands
-    // as they arrive. This method may be called multiple times if preliminary
-    // replies are received. A non-preliminary reply indicates that the handler
-    // will not be called again. If an exception is thrown here, it will be
-    // silently ignored. Note that the code that calls this is synchronized so that
-    // it will be called in the order replies are received and 
-    public void handle() throws Exception {
-      // The default implementation does nothing.
-    } public void handle(Reply r) throws Exception {
-      handle();
-    }
-
-    // This may be called if the command has been deferred and cancelled
-    // without ever being written, of if the caller stops caring about the
-    // command.
-    public void fail(Throwable t) {
-      bell.ring(t);
-    }
-
-    // This is used to wait until the future has been resolved. The ultimate
-    // reply will be returned, unless this was a sync command, in which case
-    // null will be returned.
-    public synchronized Reply sync() {
-      return bell.sync();
-    }
   }
 
   // Base class for a data channel connection to a remote server. This object
   // is itself a control channel lock, so commands can be pipelined in an
   // initializer. It is imperative to call unlock after initialization, even if
   // no commands are pipelined.
-  public class DataChannel extends Lock implements Tap, Sink {
+  public class DataChannel extends Lock {
     private ChannelFuture future;
     private Throwable error;
     private Bell<FTPHostPort> hpb;
@@ -932,8 +894,7 @@ public class FTPChannel {
     //private char mode = data.mode.sync();
     //private char type = data.type.sync();
 
-    private volatile Sink sink;
-    private volatile boolean corked = false;
+    protected volatile Sink sink;
 
     // Negotiate a new data channel connection.
     public DataChannel() {

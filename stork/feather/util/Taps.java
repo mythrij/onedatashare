@@ -37,7 +37,7 @@ public final class Taps {
             if (slice != null) drain(slice);
             finalize(Path.ROOT);
           }
-        }
+        };
       }
     };
   }

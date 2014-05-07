@@ -28,7 +28,7 @@ public abstract class Pump extends ProxyElement {
    * @param resource the {@code Resource} this {@code Tap} emits data from.
    * @throws NullPointerException if {@code resource} is {@code null}.
    */
-  public Tap(Resource resource) {
+  public Pump(Resource resource) {
     if (resource == null)
       throw new NullPointerException();
     this.resource = resource;

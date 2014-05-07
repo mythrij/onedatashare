@@ -11,22 +11,26 @@ package stork.feather;
  *
  * @see Tap
  * @see Slice
+ *
+ * @param <R> The destination {@code Resource} type.
  */
-public abstract class Sink extends PipeElement {
+public abstract class Sink<R extends Resource> extends PipeElement<?,R> {
   private ProxyTransfer transfer;
-  private final Resource resource;
+
+  /** The destination {@code Resource}. */
+  public final R root;
 
   /**
-   * Create a {@code Sink} with the given {@code Resource} as the root resource.
+   * Create a {@code Sink} with no root {@code Resource}.
+   */
+  public Sink(R resource) { this(null); }
+
+  /**
+   * Create a {@code Sink} with the given {@code Resource} as the root.
    *
    * @param resource the {@code Resource} this {@code Sink} receives data for.
-   * @throws NullPointerException if {@code resource} is {@code null}.
    */
-  public Sink(Resource resource) {
-    if (resource == null)
-      throw new NullPointerException();
-    this.resource = resource;
-  }
+  public Sink(R root) { this.root = root; }
 
   // Get the transfer, or throw an IllegalStateException if the transfer is not
   // ready.
@@ -36,16 +40,14 @@ public abstract class Sink extends PipeElement {
     return transfer;
   }
 
-  public Resource root() { return resource; }
-
   /**
-   * Attach this sink to a tap. Once this method is called, {@link #start()}
-   * will be called and the sink may begin draining data from the tap. This is
-   * equivalent to calling {@code tap.attach(this)}.
+   * Attach this {@code Sink} to a {@code Tap}. Once this method is called,
+   * {@link #start()} will be called and the sink may begin draining data from
+   * the tap. This is equivalent to calling {@code tap.attach(this)}.
    *
    * @param tap a {@link Tap} to attach.
    * @throws NullPointerException if {@code tap} is {@code null}.
-   * @throws IllegalStateException if a tap has already been attached.
+   * @throws IllegalStateException if a {@code Tap} has already been attached.
    */
   public final ProxyTransfer attach(Tap tap) {
     if (tap == null)
@@ -59,7 +61,7 @@ public abstract class Sink extends PipeElement {
    * This can be overridden by {@code Sink} implementations to initialize the
    * transfer of {@code Slice}s for a {@code RelativeResource}.
    */
-  protected Bell<?> initialize(RelativeResource resource) {
+  protected Bell<?> initialize(Relative<?,Resource> resource) {
     return null;
   }
 
@@ -67,7 +69,7 @@ public abstract class Sink extends PipeElement {
    * This can be overridden by {@code Sink} implementations to finalize the
    * transfer of {@code Slice}s for a {@code RelativeResource}.
    */
-  protected Bell<?> finalize(RelativeResource resource) {
+  protected Bell<?> finalize(Relative<?,Resource> resource) {
     return null;
   }
 
@@ -79,7 +81,7 @@ public abstract class Sink extends PipeElement {
    * @param path the path of the {@code Resource} which had an exception.
    * @throws Exception if {@code error} was not handled.
    */
-  protected initialize(RelativeException error) throws Exception {
+  protected Bell<?> initialize(RelativeException error) throws Exception {
     throw error.getCause();
   }
 
