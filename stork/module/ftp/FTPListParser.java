@@ -12,9 +12,8 @@ import stork.module.*;
 import stork.util.*;
 
 /**
- * A class for parsing FTP listings. Based heavily on Mozilla's own FTP
- * list parsing code, available in their mozilla-central repository,
- * under the path:
+ * A class for parsing FTP listings. Based heavily on Mozilla's own FTP list
+ * parsing code, available in their mozilla-central repository, under the path:
  * <p/>
  *   netwerk/streamconv/converters/ParseFTPList.cpp
  * <p/>
@@ -22,7 +21,7 @@ import stork.util.*;
  * if information about the listed directory was able to be retrieved from
  * the listing results.
  */
-public class FTPListParser extends Bell<Stat> implements Sink {
+public class FTPListParser extends Bell<Stat> {
   // TODO: Check out <http://cr.yp.to/ftpparse/ftpparse.c>.
   String data = null;
   int list_type;
@@ -38,6 +37,27 @@ public class FTPListParser extends Bell<Stat> implements Sink {
   } public FTPListParser(Stat r, int type) {
     root = (r != null) ? r : new Stat();
     list_type = type;
+  }
+
+  /**
+   * A sink for data channel-based listing.
+   */
+  public Sink sink() {
+    return new Sink() {
+      public void drain(Relative<Slice> slice) {
+        if (slice.isRoot())
+          write(slice.object.asBytes());
+      }
+
+      public void finalize(Relative<Resource> resource) {
+        if (resource.isRoot())
+          finish();
+      }
+
+      public void close() {
+        finish();
+      }
+    };
   }
 
   // Check if a file should be ignored.
@@ -91,20 +111,9 @@ public class FTPListParser extends Bell<Stat> implements Sink {
     } ring(root.setFiles(files));
   }
 
-  public void write(ResourceException err) {
-    ring(err.getCause());
-  }
-
-  public void drain(Slice s) {
-    if (s.isEmpty())
-      finish();
-    else
-      write(s.plain().raw());
-  }
-
   // Write a byte buffer to the file, decode as string, scan for newlines, and
-  // feed lines through parser. Assumably we're reading data where newlines are
-  // one byte so just look for newline characters.
+  // feed lines through parser. Presumably we're reading data where newlines
+  // are one byte so just look for newline characters.
   public void write(ByteBuf b) {
     byte[] bytes;
     if (b.hasArray())

@@ -1,9 +1,11 @@
 package stork.net;
 
+import java.net.*;
+
 import stork.ad.*;
 import stork.scheduler.*;
-
-import java.net.*;
+import stork.feather.*;
+import stork.feather.URI;
 
 /**
  * An interface which awaits incoming client requests and passes them on to the
@@ -105,10 +107,10 @@ public abstract class StorkInterface {
    * @return An ad representing {@code throwable}.
    */
   public static final Ad errorToAd(final Throwable throwable) {
-    if (t == null) {
-      t = new NullPointerException();
+    if (throwable == null) {
+      return errorToAd(new NullPointerException());
     } return Ad.marshal(new Object() {
-      String type = t.getClass().getSimpleName();
+      String type = throwable.getClass().getSimpleName();
       String message = message(throwable);
 
       String message(Throwable t) {

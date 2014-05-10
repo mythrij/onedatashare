@@ -10,25 +10,6 @@ import stork.feather.*;
 public final class Resources {
   private Resources() { }
 
-  private static final Session ANON_SESSION = new Session(URI.EMPTY);
-
-  /**
-   * The canonical anonymous {@code Resource}.
-   */
-  public static final Resource ANONYMOUS = new Anonymous() { };
-
-  /**
-   * A base class for anonymous {@code Resource}s.
-   */
-  public static abstract class Anonymous extends Resource {
-    public Anonymous() { super(ANON_SESSION); }
-  }
-
-  /**
-   * Get the canonical anonymous {@code Resource}.
-   */
-  public static Resource anonymous() { return ANONYMOUS; }
-
   /**
    * Get an anonymous {@code Resource} whose {@link Resource#stat()} will
    * return {@code stat}. This can be used to create, for instance, {@code
@@ -39,7 +20,7 @@ public final class Resources {
    * @return A {@code Resource} with the given {@code Stat}.
    */
   public static Resource anonymous(final Stat stat) {
-    return new Anonymous() {
+    return new AnonymousResource() {
       public Bell<Stat> stat() {
         return new Bell<Stat>().ring(stat);
       }

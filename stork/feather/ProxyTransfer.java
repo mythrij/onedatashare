@@ -5,44 +5,25 @@ import java.util.*;
 /**
  * A mediator for a locally proxied data transfer. The transfer will begin
  * automatically once both a {@link Sink} and {@link Tap} are assigned.
- * <p/>
- * This class extends {@code Bell<Transfer>}, and will ring with itself once
- * the transfer has begun, or with an exception if either this transfer's sink
- * or tap were assigned asynchronously with a bell which failed.
+ *
+ * @param <S> the source {@code Resource} type.
+ * @param <D> the destination {@code Resource} type.
  */
-public class ProxyTransfer extends Bell<Transfer>
-implements Transfer, ProxyEnd {
-  private Sink sink;
-  private Tap tap;
-
-  private Set<Controller> sources = new HashSet<Controller>();
-
-  // A tap-like object for queueing then draining slices.
-  private class QueueTap extends LinkedList<Slice> implements Controller {
-    public void start() {
-    }
-  }
-
-  // Representation of the state of a path vis a vis the sink.
-  private class PathState {
-    boolean inited = false;
-    QueueTap queue = new QueueTap();
-
-    void drain() {
-      
-    }
-  }
-
-  private Map<Path, PathState> paths = new HashMap<Path, PathState>();
+public class ProxyTransfer<S extends Resource, D extends Resource>
+implements Transfer<S,D> {
+  private Tap<S> tap;
+  private Sink<D> sink;
 
   // Used to buffer excess slices.
   private List<Slice> buffer = new LinkedList<Slice>();
+
+  private Bell<ProxyTransfer<S,D>> bell = new Bell<?>();
 
   private Bell<Sink> sinkBell = new Bell<Sink>() {
     protected void done(Sink sink) {
       setSink(sink);
     } protected void fail(Throwable t) {
-      ProxyTransfer.this.ring(t);
+      bell.ring(t);
     }
   };
 
@@ -50,14 +31,9 @@ implements Transfer, ProxyEnd {
     protected void done(Tap tap) {
       setTap(tap);
     } protected void fail(Throwable t) {
-      ProxyTransfer.this.ring(t);
+      bell.ring(t);
     }
   };
-
-  // Register a source controller for pausing, etc.
-  synchronized void registerSource(Controller controller) {
-    sources.add(Controller.decorate(controller));
-  }
 
   /**
    * Create a {@code ProxyTransfer} without a tap or sink set.
@@ -72,23 +48,23 @@ implements Transfer, ProxyEnd {
    * @throws NullPointerException if {@code tap} or {@code sink} is {@code
    * null}.
    */
-  public ProxyTransfer(Tap tap, Sink sink) {
+  public ProxyTransfer(Tap<S> tap, Sink<D> sink) {
     tap(tap).sink(sink);
   }
 
   // Internal methods which will set the sink/tap and check if the transfer can
   // start.
-  private synchronized void setSink(Sink sink) {
+  private synchronized void setSink(Sink<D> sink) {
     if (sink == null)
-      ring(new NullPointerException());
+      bell.ring(new NullPointerException());
     else
       this.sink = sink;
     if (tap != null)
-      ring(this);
+      bell.ring(this);
     checkIfWeCanStart();
-  } private synchronized void setTap(Tap tap) {
+  } private synchronized void setTap(Tap<S> tap) {
     if (tap == null)
-      ring(new NullPointerException());
+      bell.ring(new NullPointerException());
     else
       this.tap = tap;
     checkIfWeCanStart();
@@ -98,6 +74,7 @@ implements Transfer, ProxyEnd {
     if (tap != null && sink != null) {
       sink.start();
       tap.start();
+      bell.ring(this);
     }
   }
 
@@ -110,8 +87,13 @@ implements Transfer, ProxyEnd {
    * @throws IllegalStateException if either {@code sink(...)} method has
    * already been called.
    */
-  public final synchronized ProxyTransfer sink(Sink sink) {
-    return sink(new Bell<Sink>().ring(sink));
+  public final synchronized ProxyTransfer sink(Sink<D> sink) {
+    if (sink == null)
+      throw new NullPointerException();
+    if (sinkBell == null)
+      throw new IllegalStateException();
+    sinkBell.ring(sink);
+    return this;
   }
 
   /**
@@ -123,7 +105,7 @@ implements Transfer, ProxyEnd {
    * @throws IllegalStateException if either {@code sink(...)} method has
    * already been called.
    */
-  public final synchronized ProxyTransfer sink(Bell<Sink> sink) {
+  public final synchronized ProxyTransfer sink(Bell<Sink<D>> sink) {
     if (sink == null)
       throw new NullPointerException();
     if (sinkBell == null)
@@ -142,8 +124,13 @@ implements Transfer, ProxyEnd {
    * @throws IllegalStateException if either {@code tap(...)} method has
    * already been called.
    */
-  public final synchronized ProxyTransfer tap(Tap tap) {
-    return tap(new Bell<Tap>().ring(tap));
+  public final synchronized ProxyTransfer tap(Tap<S> tap) {
+    if (tap == null)
+      throw new NullPointerException();
+    if (tapBell == null)
+      throw new IllegalStateException();
+    tapBell.ring(tap);
+    return this;
   }
 
   /**
@@ -155,7 +142,7 @@ implements Transfer, ProxyEnd {
    * @throws IllegalStateException if either {@code tap(...)} method has
    * already been called.
    */
-  public final synchronized ProxyTransfer tap(Bell<Tap> tap) {
+  public final synchronized ProxyTransfer tap(Bell<Tap<S>> tap) {
     if (tap == null)
       throw new NullPointerException();
     if (tapBell == null)
@@ -171,10 +158,10 @@ implements Transfer, ProxyEnd {
    * @return The root {@code Resource} of the attached {@code Tap}.
    * @throws IllegalStateException if a tap has not been attached.
    */
-  protected final Resource source() {
+  protected final S source() {
     if (tap == null)
       throw new IllegalStateException();
-    return transfer.source();
+    return tap.root;
   }
 
   /**
@@ -185,43 +172,41 @@ implements Transfer, ProxyEnd {
    * root of the attached {@code Tap}.
    * @throws IllegalStateException if a tap has not been attached.
    */
-  protected final Resource source(Path path) {
-    if (transfer == null)
+  protected final S source(Path path) {
+    if (tap == null)
       throw new IllegalStateException();
-    return transfer.source(path);
+    return tap.root;
   }
 
-  public Bell<?> initialize(Path path) {
-    return sink.initialize(path);
+  // Called by tap.
+  public Bell<?> initialize(Relative<Resource> r) {
+    return sink.initialize(r);
   }
 
-  public Bell<?> initialize(Path path) {
-    return sink.initialize(path);
-  }
-
-  public void drain(Path path, Slice slice) {
-    // If this 
-    if (!hasSeen(path)) {
-      initialize(path);
-    }
+  // Called by tap.
+  public void drain(Relative<Slice> slice) {
     sink.drain(slice);
   }
 
+  // Called internally.
   public void start() {
-    tap.control.start();
-    sink.control.start();
+    tap.start();
+    sink.start();
   }
 
+  // Called internally.
   public void stop() {
-    tap.control.stop();
-    sink.control.stop();
+    tap.stop();
+    sink.stop();
   }
 
+  // Called by sink.
   public void pause() {
-    tap.control.pause();
+    tap.pause();
   }
 
+  // Called by sink.
   public void resume() {
-    tap.control.resume();
+    tap.resume();
   }
 }

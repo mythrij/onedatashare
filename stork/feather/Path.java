@@ -138,7 +138,7 @@ public abstract class Path {
 
   private static Path create(Path par, String path) {
     String[] ps = popSegment(path);
-    return (ps == null) ? par : create(par, ps[0]).appendSegment(ps[1]);
+    return (ps == null) ? par : create(par, ps[0]).append(ps[1]);
   }
 
   // Helper method for trimming trailing slashes and splitting the last
@@ -284,7 +284,7 @@ public abstract class Path {
   }
 
   /**
-   * Implode an array of unescaped component names into a {@code Path}.
+   * Implode an array of literal component names into a {@code Path}.
    *
    * @param names component names to implode into a {@code Path}.
    * @return {@code names} merged into a {@code Path}.
@@ -292,7 +292,7 @@ public abstract class Path {
   public static Path implode(String... names) {
     Path p = ROOT;
     for (String n : names)
-      p = p.appendSegment(n);
+      p = p.appendLiteral(n);
     return p;
   }
 
@@ -372,7 +372,7 @@ public abstract class Path {
    * @return {@code true} if this {@code Path} matches the given {@code Path};
    * {@code false} otherwise.
    */
-  public boolean matches(Path needle) {
+  public boolean matches(Path path) {
     if (path == this)
       return true;
     if (!segmentMatches(path))
@@ -395,8 +395,6 @@ public abstract class Path {
       return false;
     Path path = (Path) object;
     if (path.hash != 0 && hash != 0 && path.hash != hash)
-      return false;
-    if (depth() != path.depth())
       return false;
     return segmentEquals(path) && up().equals(path.up());
   }
@@ -493,21 +491,17 @@ class DotPath extends RootPath {
   }
 }
 
-// A path segment whose parent is some other path.
-abstract class SegmentPath extends Path {
-  protected final Path up;
-  public SegmentPath(Path up) { this.up = up; }
-  public Path up() { return up; }
-}
-
 // A path segment that matches an exact string.
-class LiteralPath extends SegmentPath {
-  protected String name;
+class LiteralPath extends Path {
+  protected final String name;
+  protected final Path up;
 
   public LiteralPath(Path up, String name) {
-    super(up);
+    this.up = up;
     this.name = name;
   }
+
+  public Path up() { return up; }
 
   protected Path appendTo(Path path) {
     path = up.appendTo(path);
@@ -536,20 +530,25 @@ class LiteralPath extends SegmentPath {
 }
 
 // A path whose last segment is a glob expression.
-class GlobPath extends LiteralPath {
+class GlobPath extends Path {
+  protected final Path up;
   protected final String name;
   protected Pattern pattern;
 
   // Name must be unescaped.
   public GlobPath(Path up, String name) {
-    super(up, name);
+    this.up = up;
+    this.name = name;
     this.pattern = nameToRegex(name);
   }
 
   public GlobPath(Path up, String name, Pattern pattern) {
-    super(up, name);
+    this.up = up;
+    this.name = name;
     this.pattern = pattern;
   }
+
+  public Path up() { return up; }
 
   private synchronized Pattern pattern() {
     if (pattern != null)

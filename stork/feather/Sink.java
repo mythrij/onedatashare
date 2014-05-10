@@ -1,40 +1,45 @@
 package stork.feather;
 
+import stork.feather.util.*;
+
 /**
- * A sink is a destination for {@link Slice}s from other {@link Resource}s. It
- * is the sink's responsibility to "drain" the slice to the associated remote
- * resource (or data consumer). That is, data should be written as soon as
- * possible to the resource connection, and be retained only if necessary. Once
- * a slice is drained to the sink, it should not be assumed the slice can be
- * requested again, and it is the sink's responsibility to guarantee that the
- * slice is eventually drained.
+ * A {@code Sink} is a destination for {@link Slice}s emitted by {@link Tap}s.
+ * It is the {@code Sink}'s responsibility to "drain" {@code Slice}s to the
+ * associated physical resource (or other data consumer). {@code Slice}s should
+ * be drained as soon as possible to, and be retained only if necessary.
+ * <p/>
+ * If a {@code Slice} cannot be drained immediately, the {@code Sink} should
+ * call {@code pause()} to prevent the attached {@code Tap} from emitting
+ * further {@code Slice}s. Once a {@code Slice} is drained to the {@code Sink},
+ * the {@code Slice} cannot be requested again, and it is the {@code Sink}'s
+ * responsibility to guarantee that the {@code Slice} is eventually drained.
  *
  * @see Tap
  * @see Slice
  *
  * @param <R> The destination {@code Resource} type.
  */
-public abstract class Sink<R extends Resource> extends PipeElement<?,R> {
-  private ProxyTransfer transfer;
+public abstract class Sink<R extends Resource> extends PipeElement<R> {
+  private ProxyTransfer<?,R> transfer;
 
   /** The destination {@code Resource}. */
   public final R root;
 
   /**
-   * Create a {@code Sink} with no root {@code Resource}.
+   * Create a {@code Sink} with an anonymous root {@code Resource}.
    */
-  public Sink(R resource) { this(null); }
+  public Sink() { this(Resources.ANONYMOUS); }
 
   /**
    * Create a {@code Sink} with the given {@code Resource} as the root.
    *
-   * @param resource the {@code Resource} this {@code Sink} receives data for.
+   * @param root the {@code Resource} this {@code Sink} receives data for.
    */
-  public Sink(R root) { this.root = root; }
+  public Sink(R root) { super(root); }
 
   // Get the transfer, or throw an IllegalStateException if the transfer is not
   // ready.
-  private final void transfer() {
+  private final ProxyTransfer<?,R> transfer() {
     if (transfer == null)
       throw new IllegalStateException();
     return transfer;
@@ -49,29 +54,42 @@ public abstract class Sink<R extends Resource> extends PipeElement<?,R> {
    * @throws NullPointerException if {@code tap} is {@code null}.
    * @throws IllegalStateException if a {@code Tap} has already been attached.
    */
-  public final ProxyTransfer attach(Tap tap) {
+  public final <S> ProxyTransfer<S,R> attach(Tap<S> tap) {
     if (tap == null)
       throw new NullPointerException();
     if (transfer != null)
-      throw new IllegalStateException("A tap is already attached.");
+      throw new IllegalStateException("A Tap is already attached.");
     return tap.attach(this);
   }
 
   /**
    * This can be overridden by {@code Sink} implementations to initialize the
-   * transfer of {@code Slice}s for a {@code RelativeResource}.
+   * transfer of {@code Slice}s for a {@code Resource}.
    */
-  protected Bell<?> initialize(Relative<?,Resource> resource) {
+  public Bell<?> initialize(Relative<Resource> resource) {
     return null;
   }
 
   /**
-   * This can be overridden by {@code Sink} implementations to finalize the
-   * transfer of {@code Slice}s for a {@code RelativeResource}.
+   * Drain a {@code Slice} to the endpoint storage system. This method returns
+   * as soon as possible, with the actual I/O operation taking place
+   * asynchronously.
+   * <p/>
+   * If the {@code Slice} cannot be drained immeditately due to congestion,
+   * {@code pause()} should be called, and {@code resume()} should be called
+   * when the channel is free to transmit data again.
+   *
+   * @param slice a {@code Slice} being drained through the pipeline.
+   * @throws IllegalStateException if this method is called when the pipeline
+   * has not been initialized.
    */
-  protected Bell<?> finalize(Relative<?,Resource> resource) {
-    return null;
-  }
+  public abstract void drain(Relative<Slice> slice);
+
+  /**
+   * This can be overridden by {@code Sink} implementations to finalize the
+   * transfer of {@code Slice}s for a {@code Resource}.
+   */
+  public void finalize(Relative<Resource> resource) { }
 
   /**
    * {@code Sink} implementations can override this to handle initialization
@@ -81,15 +99,13 @@ public abstract class Sink<R extends Resource> extends PipeElement<?,R> {
    * @param path the path of the {@code Resource} which had an exception.
    * @throws Exception if {@code error} was not handled.
    */
-  protected Bell<?> initialize(RelativeException error) throws Exception {
-    throw error.getCause();
-  }
+  //protected Bell<?> initialize(Relative<Exception> error) throws Exception {
+  //  throw error.getCause();
+  //}
 
-  protected boolean random() { return false; }
+  public boolean random() { return false; }
 
-  protected int concurrency() { return 1; }
-  
-  protected final boolean isActive() { return false; }
+  public int concurrency() { return 1; }
 
   /**
    * Called when an upstream tap encounters an error while downloading a {@link
@@ -101,11 +117,11 @@ public abstract class Sink<R extends Resource> extends PipeElement<?,R> {
    */
   //void handle(ResourceException error);
 
-  protected final void pause() {
+  public final void pause() {
     transfer().pause();
   }
 
-  protected final void resume() {
+  public final void resume() {
     transfer().resume();
   }
 
@@ -127,7 +143,7 @@ public abstract class Sink<R extends Resource> extends PipeElement<?,R> {
    * root of the attached {@code Tap}.
    * @throws IllegalStateException if a tap has not been attached.
    */
-  protected final Resource source(Path path) {
+  public final Resource source(Path path) {
     return transfer.source(path);
   }
 }

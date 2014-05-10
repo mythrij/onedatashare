@@ -21,6 +21,7 @@ import static io.netty.handler.codec.http.HttpVersion.*;
 import static io.netty.handler.codec.http.HttpMethod.*;
 
 import stork.ad.*;
+import stork.feather.*;
 import stork.feather.URI;
 import stork.feather.Path;
 import stork.scheduler.*;
@@ -30,33 +31,62 @@ import stork.scheduler.*;
  * for request metadata, as well as a tap/sink-based abstraction layer to the
  * Netty backend.
  */
-public abstract class HTTPRequest extends Session {
+public abstract class HTTPRequest extends Resource<?,HTTPRequest> {
   private HttpRequest nettyRequest;
+  protected URI uri;
 
-  /**
-   * Create and HTTPRequest from the given Netty HTTP request.
-   */
+  /** Create an HTTPRequest from the given Netty HTTP request. */
   public HTTPRequest(HttpRequest nettyRequest) {
-    super(URI.create(nettyRequest.getUri()));
+    super(Session.ANONYMOUS);
     this.nettyRequest = nettyRequest;
+    this.uri = nettyRequest.getUri();
+  }
+
+  /** Create an HTTPRequest representing a body part. */
+  private HTTPRequest(String name, HTTPRequest parent) {
+    super(name, parent);
+  }
+
+  public HTTPRequest select(String name) {
+    return new HTTPRequest(name, this);
   }
 
   /**
-   * This will emit data as it arrives from the client in the request body.
-   * Multipart requests should be emitted as a single collection resource.
+   * This will emit the content body as the data for the root resource.
    */
-  private class HTTPTap extends Tap {
-    HTTPTap() { super(HTTPRequest.this); }
+  private class HTTPTap extends Tap<HTTPRequest> {
+    HTTPTap() {
+      super(HTTPRequest.this, true);
+    }
 
-    protected void start() {
+    public void start() {
+      initialize(Path.ROOT).new Promise() {
+        public void done() {
+        } public void fail() {
+        }
+      };
+    }
+
+    public void stop() {
+      finalize(Path.ROOT);
+    }
+  };
+
+  /**
+   * Tap for multipart data. This will emit data as it arrives from the client
+   * in the request body.  Multipart requests should be treated as a single
+   * collection resource.
+   */
+  private class HTTPMultiTap extends Tap<HTTPRequest> {
+    HTTPMultiTap() {
+      super(HTTPRequest.this, true);
+    }
+
+    public void start() {
       initialize(Path.ROOT);
     }
 
-    public void publicDrain(Path path, Slice slice) {
-      drain(path, slice);
-    }
-
-    protected void stop() {
+    public void stop() {
       finalize(Path.ROOT);
     }
   };
@@ -67,11 +97,11 @@ public abstract class HTTPRequest extends Session {
    * zipped or sent using some similar archival encoding. We can't use
    * multipart responses because not all browsers support it.
    */
-  private class HTTPSink extends Sink {
+  private class HTTPSink extends Sink<HTTPRequest> {
     HTTPSink() { super(HTTPRequest.this); }
 
     // If this is the root, send a header through Netty.
-    protected Bell<?> initialize(RelativeResource resource) {
+    public Bell<?> initialize(Relative<Resource> resource) {
       Bell bell;
       if (!resource.path().isRoot())  // Sigh browsers...
         throw new RuntimeException("Cannot send multiple files.");
@@ -86,11 +116,11 @@ public abstract class HTTPRequest extends Session {
       };
     }
 
-    protected void drain(RelativeSlice slice) {
+    public void drain(Relative<Slice> slice) {
       sinkToNetty(new DefaultHttpContent(slice.asByteBuf()));
     }
 
-    protected void finalize(RelativeResource resource) {
+    public void finalize(Relative<Resource> resource) {
       sinkToNetty(new DefaultLastHttpContent());
     }
   };
@@ -145,11 +175,14 @@ public abstract class HTTPRequest extends Session {
     tap.publicDrain(new Slice(buf));
   }
 
-  /**
-   * Check for a header.
-   */
+  /** Check for a header. */
   public String header(String name) {
     return nettyRequest.headers().get(name);
+  }
+
+  public boolean isMultipart() {
+    String t = header(CONTENT_TYPE);
+    return t != null && t.startsWith("multipart/");
   }
 
   /**
@@ -170,23 +203,24 @@ public abstract class HTTPRequest extends Session {
     }
   }
 
-  protected Bell<Stat> doStat(Resource resource) {
-    if (resource != this)
-      throw new RuntimeException();
-    Stat s = new Stat();
-    s.size = size();
-    return new Bell<Stat>().ring(s);
+  public Bell<Stat> stat() {
+    if (isRoot()) {
+      Stat s = new Stat();
+      s.name = "/";
+      s.size = size();
+      s.dir = isMultipart();
+      s.file = !s.dir;
+      return new Bell<Stat>().ring(s);
+    } else {
+      return null;  // TODO
+    }
   }
 
-  protected Bell<Tap> doTap(Resource resource) {
-    if (resource != this)
-      throw new RuntimeException();
-    return new Bell<Tap>.ring(new HTTPTap());
+  public Tap<HTTPRequest> tap() {
+    return isMultipart() ? new HTTPMultiTap() : new HTTPTap();
   }
 
-  protected Bell<Sink> doSink(Resource resource) {
-    if (resource != this)
-      throw new RuntimeException();
+  public Sink<HTTPRequest> sink() {
     return new Bell<Sink>.ring(new HTTPSink());
   }
 }

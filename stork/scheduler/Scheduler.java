@@ -39,7 +39,7 @@ public class Scheduler {
   private transient StorkWorkerThread[] worker_pool;
   private transient DumpStateThread dump_state_thread;
 
-  private transient Map<String, CommandHandler> cmd_handlers;
+  private transient Map<String, Handler> cmd_handlers;
   public transient ModuleTable modules;
 
   private transient LinkedBlockingQueue<Request> req_queue =
@@ -142,11 +142,11 @@ public class Scheduler {
 
     // Continually remove jobs from the queue and start them.
     public void execute(final Request req) {
-      Log.fine("Worker pulled request from queue: ", req.cmd);
+      Log.fine("Worker pulled request from queue: ", req.command);
 
       // Try handling the command if it's not done already.
       if (!req.isDone()) try {
-        if (req.cmd == null)
+        if (req.command == null)
           throw new RuntimeException("No command specified.");
 
         // Check if user information was provided.
@@ -173,7 +173,7 @@ public class Scheduler {
             // Save state if we affected it.
             if (req.handler.affectsState(req))
               dumpState();
-            Log.fine("Done with request: ", req.cmd);
+            Log.fine("Done with request: ", req.command);
           }
         });
       } catch (Exception e) {
@@ -186,7 +186,7 @@ public class Scheduler {
   }
 
   // Stork command handlers should implement this interface.
-  public abstract class CommandHandler {
+  public abstract class Handler {
     public abstract Bell handle(Request req);
 
     // Override this for commands that either don't require logging in or
@@ -203,7 +203,7 @@ public class Scheduler {
     }
   }
 
-  class StorkQHandler extends CommandHandler {
+  class StorkQHandler extends Handler {
     public Bell handle(Request req) {
       Bell bell = new Bell();
       List l = new JobSearcher(req.user.jobs).query(req.ad);
@@ -213,7 +213,7 @@ public class Scheduler {
     }
   }
 
-  class StorkMkdirHandler extends CommandHandler {
+  class StorkMkdirHandler extends Handler {
     public Bell handle(Request req) {
       Endpoint ep = req.ad.unmarshalAs(Endpoint.class);
       return ep.select().mkdir();
@@ -224,10 +224,10 @@ public class Scheduler {
     }
   }
 
-  class StorkRmfHandler extends CommandHandler {
+  class StorkRmfHandler extends Handler {
     public Bell handle(Request req) {
       Endpoint ep = req.ad.unmarshalAs(Endpoint.class);
-      return ep.select().rm();
+      return ep.select().unlink();
     }
 
     public boolean requiresLogin() {
@@ -235,20 +235,20 @@ public class Scheduler {
     }
   }
 
-  class StorkLsHandler extends CommandHandler {
+  class StorkLsHandler extends Handler {
     public synchronized Bell handle(Request req) {
       final Endpoint ep = req.ad.unmarshalAs(Endpoint.class);
       Resource nr = ep.select();
 
       // See if there's an existing session we can reuse.
       Session session = session_pool.remove(nr.session());
-      if (session != null && !session.isClosed()) {
+      if (session != null && !session.isFinalized()) {
         Log.fine("Reusing existing session: ", session);
-        nr = nr.reselect(session);
+        nr = nr.reselectOn(session);
       } else {
         final Session s = nr.session();
         Log.fine("Using new session: ", s);
-        s.onClose(new Bell() {
+        s.onFinalize(new Bell() {
           public void always() {
             Log.fine("Removing from session pool: ", s);
             synchronized (session_pool) {
@@ -271,23 +271,23 @@ public class Scheduler {
 
       // Register the ongoing listing.
       ls_aggregator.put(res, listing);
-      listing.promise(new Bell() {
+      listing.new Promise() {
         public void always() {
           ls_aggregator.remove(res);
         }
-      });
+      };
 
       // Put the session back when we're done.
-      listing.promise(new Bell() {
+      listing.new Promise() {
         public void always() {
           Session s = res.session();
           synchronized (session_pool) {
-            if (!s.isClosed() && !session_pool.containsKey(s))
+            if (!s.isFinalized() && !session_pool.containsKey(s))
               session_pool.put(s, s);
           }
           ls_aggregator.remove(res);
         }
-      });
+      };
 
       return listing;
     }
@@ -298,7 +298,7 @@ public class Scheduler {
   }
 
   // Handle user registration.
-  class StorkUserHandler extends CommandHandler {
+  class StorkUserHandler extends Handler {
     public Bell handle(Request req) {
       Bell bell = new Bell();
       if ("register".equals(req.ad.get("action"))) {
@@ -327,7 +327,7 @@ public class Scheduler {
     }
   }
 
-  class StorkSubmitHandler extends CommandHandler {
+  class StorkSubmitHandler extends Handler {
     public Bell handle(Request req) {
       Job job = Job.create(req.user, req.ad);
 
@@ -347,7 +347,7 @@ public class Scheduler {
     }
   }
 
-  class StorkRmHandler extends CommandHandler {
+  class StorkRmHandler extends Handler {
     public Bell handle(Request req) {
       Range r = new Range(req.ad.get("range"));
       Range sdr = new Range(), cdr = new Range();
@@ -379,7 +379,7 @@ public class Scheduler {
     }
   }
 
-  class StorkInfoHandler extends CommandHandler {
+  class StorkInfoHandler extends Handler {
     // Send transfer module information.
     Ad sendModuleInfo(Request req) {
       return Ad.marshal(modules.infoAds());
@@ -424,7 +424,7 @@ public class Scheduler {
   }
 
   // Handles creating credentials.
-  class StorkCredHandler extends CommandHandler {
+  class StorkCredHandler extends Handler {
     public Bell handle(Request req) {
       String action = req.ad.get("action");
 
@@ -520,9 +520,9 @@ public class Scheduler {
     return putRequest(new Request(ad));
   } public Request putRequest(Request rb) {
     assert rb.ad != null;
-    rb.handler = handler(rb.cmd);
+    rb.handler = handler(rb.command);
     if (rb.handler == null) {
-      rb.ring(new Exception("Invalid command: "+rb.cmd));
+      rb.ring(new Exception("Invalid command: "+rb.command));
     } else try {
       Log.fine("Enqueuing request: "+rb.ad);
       req_queue.add(rb);
@@ -535,7 +535,7 @@ public class Scheduler {
   }
 
   // Get the handler for a command.
-  public CommandHandler handler(String cmd) {
+  public Handler handler(String cmd) {
     return cmd_handlers.get(cmd);
   }
 
@@ -699,7 +699,7 @@ public class Scheduler {
 
   private Scheduler init() {
     // Initialize command handlers
-    cmd_handlers = new HashMap<String, CommandHandler>();
+    cmd_handlers = new HashMap<String, Handler>();
     cmd_handlers.put("q", new StorkQHandler());
     cmd_handlers.put("ls", new StorkLsHandler());
     cmd_handlers.put("mkdir", new StorkMkdirHandler());

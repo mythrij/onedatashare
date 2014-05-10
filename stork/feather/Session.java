@@ -1,6 +1,9 @@
 package stork.feather;
 
 import java.io.*;
+import java.util.*;
+
+import stork.feather.util.*;
 
 /**
  * A {@code Session} is a stateful context for operating on {@code Resource}s.
@@ -29,10 +32,12 @@ import java.io.*;
  * @param <S> The type of the subclass of this {@code Session}. This
  * unfortunate redundancy exists solely to circumvent weaknesses in Java's
  * typing system.
- * @param <R> The supertype of all {@code Resource}s handled by this {@code
- * Session}.
+ * @param <R> The type of {@code Resource}s handled by this {@code Session}.
  */
 public abstract class Session<S extends Session, R extends Resource> {
+  /** The canonical {@code AnonymousSession}. */
+  public static final AnonymousSession ANONYMOUS = new AnonymousSession();
+
   /** The root {@code Resource} of this {@code Session}. */
   protected final R root;
 
@@ -42,11 +47,11 @@ public abstract class Session<S extends Session, R extends Resource> {
   /** The authentication factor used for this endpoint. */
   protected final Credential credential;
 
+  // If we've already started initializing, this will be non-null.
+  private volatile Bell<S> initializeBell;
+
   // Rung on close. Avoid letting this leak out.
   private final Bell<S> onFinalize = new Bell<S>();
-
-  // This mediator is used in this package only.
-  final ResourceMediator mediator = new ResourceMediator();
 
   /**
    * Create a {@code Session} with the given root URI.
@@ -55,7 +60,7 @@ public abstract class Session<S extends Session, R extends Resource> {
    * @throws NullPointerException if {@code root} or {@code uri} is {@code
    * null}.
    */
-  protected Session(R root, URI uri) { this(uri, null); }
+  protected Session(R root, URI uri) { this(root, uri, null); }
 
   /**
    * Create a {@code Session} with the given root URI and {@code Credential}.
@@ -81,86 +86,54 @@ public abstract class Session<S extends Session, R extends Resource> {
   public final R root() { return root; }
 
   /**
-   * Used internally in this package to manage resource initialization state.
+   * This is what actually gets called and returned when {@code
+   * Resource.initialize()} is called. It enforces the guarantee that {@code
+   * initialize()} will be called only once, and that the same {@code Bell}
+   * will always be returned.
    */
-  final class ResourceMediator {
-    Map<R,Bell<S>> inits = new HashMap<R,Bell<S>>();
-
-    // Initialize the session, then initialize the resource.
-    synchronized Bell<R> initialize(final R res) {
-      if (res == Session.this)
-        return initResource(Session.this);
-  
-      final Bell<R> bell = new Bell<R>();
-      initResource(Session.this).new Promise() {
-        public void done() {
-          initResource(res).promise(bell);
-        } public void fail(Throwable t) {
-          bell.ring(t);
-        }
-      };
-      return bell;
-    }
-
-    // Initialize a resource if it hasn't been.
-    synchronized Bell<S> initResource(R res) {
-      Bell<S> bell = inits.get(res);
-
-      if (bell != null) {
-        return bell;
-      } try {
-        bell = initialize(res);
-      } catch (Exception e) {
-        bell = new Bell<S>().ring(e);
-      } if (bell == null) {
-        bell = new Bell<S>().ring(res);
-      }
-
-      inits.put(res, bell);
-      return bell;
-    }
-
-    // Finalize a resource if it's been initialized.
-    synchronized void finalize(R res) {
-      Bell<R> bell = inits.remove(res);
-      if (bell != null)
-        bell.cancel();
-      if (res == Session.this)
-        onFinalize.ring();
+  final synchronized Bell<S> mediatedInitialize() {
+    if (initializeBell != null) {
+      return initializeBell;
+    } try {
+      initializeBell = initialize();
+      if (initializeBell == null)
+        initializeBell = new Bell<S>().ring(this);
+      return initializeBell;
+    } catch (Exception e) {
+      return initializeBell = new Bell<S>().ring(e);
     }
   }
 
   /**
-   * Prepare the {@code Session} to perform operations on the given {@code
-   * Resource}. The exact nature of this preparation varies from implementation
-   * to implementation. The implementor may assume that this method will not
-   * be called again for the given {@code Resource} until said {@code Resource}
-   * has been finalized. If {@code resource} is this {@code Session}, this
-   * method should initialize the {@code Session} for general use, including
-   * performing any connection and authentication operations.
+   * Prepare the {@code Session} to perform operations on its {@code
+   * Resource}s. The exact nature of this preparation varies from
+   * implementation to implementation, but generally includes establishing
+   * network connections and performing authentication. Access to this method
+   * is mediated such that the implementor may assume that this method will be
+   * called at most once.
    * <p/>
    * Implementations may return {@code null} if {@code resource} does not
    * require any asynchronous initialization. This method may also throw an
-   * {@code Exception} if {@code resource} cannot be initialized for some
-   * reason. By default, this method returns {@code null}.
+   * {@code Exception} if it is certain that initialization cannot be performed
+   * for some reason (perhaps invalid input). By default, this method returns
+   * {@code null}.
    *
-   * @param resource the {@code Resource} to prepare to perform an operation
-   * on.
-   * @return A {@code Bell} which will ring with {@code resource} when this
-   * {@code Session} is prepared to perform operations on {@code resource}, or
-   * {@code null} if the {@code Resource} requires no initialization.
+   * @return A {@code Bell} which will ring with this {@code Session} when it
+   * is prepared to perform operations on {@code resource}, or {@code null} if
+   * the {@code Resource} requires no initialization.
+   * @throws Exception either via the returned {@code Bell} or from the method
+   * itself if a problem occurs. Subclasses should only declare {@code throws
+   * Exception} in the signature if it actually does so, and should omit it
+   * otherwise.
    */
-  protected Bell<R> initialize(R resource) { return null; }
+  protected Bell<S> initialize() throws Exception { return null; }
 
   /**
    * Release any resources allocated during the initialization of {@code
    * resource}. If {@code resource} is this {@code Session}, this method should
    * close any connections and finalize any ongoing transactions.
-   *
-   * @param resource the {@code Resource} to prepare to perform an operation
-   * on.
    */
-  protected void finalize(R resource) { }
+  protected void finalize() { }
 
   /**
    * Check if the closing procedure has begun.
@@ -191,7 +164,7 @@ public abstract class Session<S extends Session, R extends Resource> {
    * closed.
    * @return Whatever value was passed in for {@code bell}.
    */
-  public final Bell<S> onFinalize(Bell<S> bell) {
+  public final Bell<S> onFinalize(Bell<? super S> bell) {
     return onFinalize.promise(bell);
   }
 

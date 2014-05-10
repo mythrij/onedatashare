@@ -10,16 +10,14 @@ package stork.feather;
  * origin relative to the root. This relationship can be more simply thought of
  * as: {@code root.select(path).equals(origin)}
  *
- * @param <R> The type of {@code Resource} this {@code Relative} object
- * originated from.
  * @param <T> The type of the object wrapped by this {@code Relative} class.
  */
-public class Relative<R,T> {
+public class Relative<T> {
   /** The root {@code Resource} of the operation. */
-  public final R root;
+  public final Resource root;
 
   /** The {@code Resource} that {@code object} originated from. */
-  public final R origin;
+  public final Resource origin;
 
   /** The selection {@code Path} from {@code root} to {@code origin}. */
   public final Path path;
@@ -36,7 +34,7 @@ public class Relative<R,T> {
    * @param root the operational root.
    * @param path the {@code Path} from {@code root} to {@code origin}.
    */
-  public Relative(T object, R root, Path path) {
+  public Relative(T object, Resource root, Path path) {
     this(object, root, path, root.select(path));
   }
 
@@ -55,11 +53,11 @@ public class Relative<R,T> {
    * @param path the {@code Path} from {@code root} to {@code origin}.
    * @param origin the operation origin of {@code object}.
    */
-  public Relative(T object, R root, Path path, R origin) {
+  public Relative(T object, Resource root, Path path, Resource origin) {
     this.root = root;
     this.path = path;
     this.object = object;
-    origin = origin.select(path);
+    origin = isRoot() ? root : origin.select(path);
   }
 
   /**
@@ -70,5 +68,16 @@ public class Relative<R,T> {
    */
   public boolean isRoot() {
     return path.isRoot();
+  }
+
+  /**
+   * Wrap another object using the same relativity information as this wrapper.
+   *
+   * @param object the new object to wrap.
+   * @return A new {@code Relative} wrapper based on this one but wrapping a
+   * different object.
+   */
+  public <S> Relative<S> wrap(S object) {
+    return new Relative<S>(object, root, path, origin);
   }
 }

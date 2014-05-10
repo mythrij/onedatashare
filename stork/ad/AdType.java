@@ -274,9 +274,9 @@ class AdType {
   protected AdMember[] methods() {
     try {
       Set<AdMember> methods = new HashSet<AdMember>();
-      for (Method m : clazz().getDeclaredMethods()) if (!m.ignore())
+      for (Method m : clazz().getDeclaredMethods()) if (!AdMember.ignore(m))
         methods.add(new AdMember(m));
-      for (Method m : clazz().getMethods()) if (!m.ignore())
+      for (Method m : clazz().getMethods()) if (!AdMember.ignore(m))
         methods.add(new AdMember(m));
       return methods.toArray(new AdMember[methods.size()]);
     } catch (Exception e) {
@@ -288,9 +288,9 @@ class AdType {
   protected AdMember[] methods(String name) {
     try {
       Set<AdMember> methods = new HashSet<AdMember>();
-      for (Method m : clazz().getDeclaredMethods()) if (!m.ignore())
+      for (Method m : clazz().getDeclaredMethods()) if (!AdMember.ignore(m))
         if (name.equals(m.getName())) methods.add(new AdMember(m));
-      for (Method m : clazz().getMethods()) if (!m.ignore())
+      for (Method m : clazz().getMethods()) if (!AdMember.ignore(m))
         if (name.equals(m.getName())) methods.add(new AdMember(m));
       return methods.toArray(new AdMember[methods.size()]);
     } catch (Exception e) {

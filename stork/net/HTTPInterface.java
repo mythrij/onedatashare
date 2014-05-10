@@ -21,6 +21,7 @@ import static io.netty.handler.codec.http.HttpVersion.*;
 import static io.netty.handler.codec.http.HttpMethod.*;
 
 import stork.ad.*;
+import stork.feather.*;
 import stork.feather.util.*;
 import stork.feather.URI;
 import stork.feather.Path;
@@ -66,7 +67,7 @@ public class HTTPInterface extends StorkInterface {
     return new Bell<Ad>() {{
       String command = req.uri().path().name();
       // Make sure the command exists and supports the method.
-      Scheduler.CommandHandler handler = handler(command);
+      Scheduler.Handler handler = handler(command);
       if (handler == null)
         return new Bell<Ad>().ring(new Exception("Not found."));
       if (!checkMethod(req.method(), handler))
@@ -140,7 +141,7 @@ public class HTTPInterface extends StorkInterface {
   }
 
   // Check that the handler allows the method.
-  private boolean checkMethod(HttpMethod m, Scheduler.CommandHandler h) {
+  private boolean checkMethod(HttpMethod m, Scheduler.Handler h) {
     return m.equals(POST) || m.equals(GET) && !h.affectsState();
   }
 

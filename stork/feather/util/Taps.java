@@ -4,7 +4,7 @@ import java.nio.*;
 import java.nio.charset.*;
 
 import io.netty.buffer.*;
-import io.netty.charset.*;
+import io.netty.util.*;
 
 import stork.feather.*;
 
@@ -27,10 +27,13 @@ public final class Taps {
     return Resources.fromSlice(slice).tap();
   }
 
-  // Used in Resources to create a Tap which emits the given slice for the
-  // given resource.
-  static Tap fromSlice(Resource resource, final Slice slice) {
-    return new Tap(resource) {
+  /**
+   * Create a {@code Tap} which emits the given {@code Slice} for the given
+   * {@code Resource} {@code root}.
+   */
+  public static <R extends Resource> Tap<R> fromSlice(R root, Slice slice) {
+    final Slice s = slice;
+    return new Tap<R>(root) {
       public void start() {
         initialize(Path.ROOT).new Promise() {
           public void done() {
@@ -43,25 +46,25 @@ public final class Taps {
   }
 
   /**
-   * Create an anonymous {@code Tap} which emits the string representation of
-   * an object encoded as UTF-8.
+   * Create an anonymous {@code Tap} which emits the {@code String}
+   * representation of an object encoded as UTF-8.
    *
    * @param object the object to stringify and emit.
    * @return An anonymous {@code Tap} which will emit {@code object} as a
-   * string.
+   * {@code String} encoded using UTF-8.
    */
   public static Tap fromString(Object object) {
     return fromString(object, CharsetUtil.UTF_8);
   }
 
   /**
-   * Create an anonymous {@code Tap} which emits the string representation of
-   * an object encoded using {@code charset}.
+   * Create an anonymous {@code Tap} which emits the {@code String}
+   * representation of an object encoded using {@code charset}.
    *
    * @param object the object to stringify and emit.
    * @param charset the {@link Charset} to use for encoding.
    * @return An anonymous {@code Tap} which will emit {@code object} as a
-   * string.
+   * {@code String} using {@code charset}.
    */
   public static Tap fromString(Object object, Charset charset) {
     if (object == null)

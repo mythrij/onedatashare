@@ -1,11 +1,9 @@
 package stork.module.ftp;
 
-import stork.ad.*;
 import stork.feather.*;
 import stork.module.*;
-import stork.scheduler.*;
 
-public class FTPModule extends Module {
+public class FTPModule extends Module<FTPSession, FTPResource> {
   public FTPModule() {
     super("Stork FTP Module", "ftp", "gsiftp", "gridftp");
     version = "1.0";
@@ -17,7 +15,7 @@ public class FTPModule extends Module {
       "GridFTP extensions.";
   }
 
-  public Resource select(URI uri, Credential credential) {
+  public FTPResource select(URI uri, Credential credential) {
     URI endpoint = uri.endpointURI(), resource = uri.resourceURI();
     return new FTPSession(endpoint, credential).select(resource);
   }

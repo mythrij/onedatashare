@@ -17,7 +17,7 @@ public class HexDumpSink extends Sink {
    * Create a {@code HexDumpSink} that prints to {@link #System.out}.
    */
   public HexDumpSink() {
-    this(System.out);
+    out = System.out;
   }
 
   /**
@@ -29,7 +29,7 @@ public class HexDumpSink extends Sink {
   public HexDumpSink(OutputStream out) {
     if (out == null)
       throw new NullPointerException();
-    this(new PrintWriter(out));
+    this.out = new PrintWriter(out);
   }
 
   /**
@@ -44,20 +44,19 @@ public class HexDumpSink extends Sink {
     this.out = out;
   }
 
-  protected Bell<?> initialize(RelativeResource resource) {
+  public Bell<?> initialize(Relative<Resource> resource) {
     if (first)
-      System.out.println();
+      out.println();
     first = false;
-    System.out.println("Beginning dump: "+resource.path());
+    out.println("Beginning dump: "+resource.path);
     return null;
   }
 
-  protected void drain(RelativeSlice slice) {
+  public void drain(Relative<Slice> slice) {
     out.println(slice);
   }
 
-  protected Bell<?> finalize(RelativeResource resource) {
-    System.out.println("End of dump: "+resource.path());
-    return null;
+  public void finalize(Relative<Resource> resource) {
+    out.println("End of dump: "+resource.path);
   }
 }

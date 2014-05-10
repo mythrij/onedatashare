@@ -3,6 +3,7 @@ package stork.scheduler;
 import java.util.*;
 
 import stork.ad.*;
+import stork.feather.*;
 
 /**
  * A request made to the scheduler. It will be rung with the response when the
@@ -12,7 +13,7 @@ public class Request extends Bell<Object> {
   public Ad ad;
   public String command;
   public User user;
-  public Scheduler.CommandHandler handler;
+  public Scheduler.Handler handler;
 
   /**
    * Create a new request based on {@code ad}.
@@ -20,7 +21,7 @@ public class Request extends Bell<Object> {
    * @param ad the {@code Ad} to create a request from.
    */
   public Request(Ad ad) {
-    cmd = ad.get("command");
+    command = ad.get("command");
     this.ad = ad.remove("command");
   }
 }

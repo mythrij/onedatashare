@@ -22,20 +22,21 @@ import stork.feather.*;
 import stork.feather.URI;
 import stork.util.*;
 
-// An abstraction of an FTP control channel. This class takes care of command
-// pipelining, extracting replies, and maintaining channel state. Right now,
-// the channel is mostly concurrency-safe, though issues could arise if
-// arbitrary commands entered the pipeline during a command sequence. A
-// simplisitic channel locking mechanism exists which can be used for
-// synchronized access to the channel, but it is still ill-advised to have more
-// than one subsystem issuing commands through the same channel at the same
-// time.
-
+/**
+ * An abstraction of an FTP control channel. This class takes care of command
+ * pipelining, extracting replies, and maintaining channel state. Right now,
+ * the channel is mostly concurrency-safe, though issues could arise if
+ * arbitrary commands entered the pipeline during a command sequence. A
+ * simplisitic channel locking mechanism exists which can be used for
+ * synchronized access to the channel, but it is still ill-advised to have more
+ * than one subsystem issuing commands through the same channel at the same
+ * time.
+ */
 public class FTPChannel {
   // The maximum amount of time (in ms) to wait for a connection.
   private static final int timeout = 2000;
 
-  private final Bell<?> onClose();
+  private final Bell<?> onClose;
 
   // FIXME: We should use something system-wide.
   private static EventLoopGroup group = new NioEventLoopGroup();
@@ -879,110 +880,6 @@ public class FTPChannel {
       return isSync;
     } public synchronized final boolean isDone() {
       return bell.isDone();
-    }
-  }
-
-  // Base class for a data channel connection to a remote server. This object
-  // is itself a control channel lock, so commands can be pipelined in an
-  // initializer. It is imperative to call unlock after initialization, even if
-  // no commands are pipelined.
-  public class DataChannel extends Lock {
-    private ChannelFuture future;
-    private Throwable error;
-    private Bell<FTPHostPort> hpb;
-
-    //private char mode = data.mode.sync();
-    //private char type = data.type.sync();
-
-    protected volatile Sink sink;
-
-    // Negotiate a new data channel connection.
-    public DataChannel() {
-      passive().promise(initBell);
-    } public DataChannel(Bell<FTPHostPort> hp) {
-      hp.promise(initBell);
-    } public DataChannel(FTPHostPort hp) {
-      initBell.ring(hp);
-    }
-
-    // A handler which passes data to the sink.
-    ChannelHandler reader = new SimpleChannelInboundHandler<ByteBuf>() {
-      public void messageReceived(ChannelHandlerContext ctx, ByteBuf m) {
-        if (sink != null) sink.drain(new Slice(m));
-      } public void exceptionCaught(ChannelHandlerContext ctx, Throwable t) {
-        //if (sink != null) sink.drain(new ResourceException(null, t));
-      } public void channelInactive(ChannelHandlerContext ctx) {
-        if (sink != null) sink.drain(new Slice());
-      } public void read(ChannelHandlerContext ctx) {
-        if (!corked && sink != null) ctx.read();
-      }
-    };
-
-    // A handler which writes slices passed to the sink.
-    ChannelHandler writer = new MessageToMessageEncoder<Slice>() {
-      public void encode(ChannelHandlerContext ctx, Slice msg, List out) {
-        out.add(msg.plain().raw());
-      }
-    };
-
-    // This bell should be rung when the channel is ready to be initialized,
-    // then unset when it is.
-    private Bell<FTPHostPort> initBell = new Bell<FTPHostPort>() {
-      protected void done(FTPHostPort hp) {
-        // Attempt to establish a channel connection to the given host/port.
-        Bootstrap boot = new Bootstrap();
-        boot.group(group).channel(NioSocketChannel.class);
-        boot.handler(new ChannelInitializer<SocketChannel>() {
-          public void initChannel(SocketChannel ch) throws Exception {
-            ch.config().setConnectTimeoutMillis(timeout);
-            ch.pipeline().addLast("reader", reader);
-            ch.pipeline().addLast("writer", writer);
-          }
-        });
-
-        future = boot.connect(hp.getAddr());
-      } protected void fail(Throwable t) {
-        synchronized (DataChannel.this) {
-          error = t;
-        }
-      } protected void always() {
-        initBell = null;
-      }
-    };
-
-    /**
-     * Get a bell that will ring when the channel is ready.
-     */
-    public Bell<? super DataChannel> bell() {
-      return new Bell<DataChannel>().ring(this);
-    }
-
-    // Attach a sink to the tap.
-    public synchronized void attach(Sink s) {
-      sink = s;
-    }
-
-    // Cork or uncork the tap.
-    public synchronized void cork() {
-      corked = true;
-    } public synchronized void uncork() {
-      corked = false;
-    }
-
-    // Write a passed slice to the channel.
-    public synchronized void drain(Slice s) {
-      if (s.isEmpty())
-        channel().close();
-      else
-        channel().writeAndFlush(s);
-      Log.finer("Writing: "+s);
-    }
-
-    // Used internally to extract the channel from the future.
-    private synchronized Channel channel() {
-      if (error != null)
-        throw new RuntimeException(error);
-      return future.syncUninterruptibly().channel();
     }
   }
 

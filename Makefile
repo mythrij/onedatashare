@@ -86,8 +86,8 @@ list-packages:
 	@echo $(subst /,.,$(call rdirs,$(PROJECT)))
 
 doc: $(JAVASRCS)
-	@$(JAVADOC) -classpath $(CLASSPATH) -d $(DOC) \
-		-sourcepath $(PROJECT) $(JAVASRCS)
+	@$(JAVADOC) -classpath $(CLASSPATH) -d $(DOC) -link \
+	  -verbose -sourcepath $(PROJECT) $(JAVASRCS)
 
 clean:
 	$(RM) -rf build lib/$(PROJECT)-*.jar $(PROJECT).tar.gz bin/$(PROJECT)_* $(DOC)

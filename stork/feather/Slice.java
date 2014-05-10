@@ -1,5 +1,7 @@
 package stork.feather;
 
+import java.nio.*;
+
 import io.netty.buffer.*;
 import io.netty.util.*;
 
@@ -96,7 +98,7 @@ public class Slice {
    *
    * @return The plaintext length in bytes.
    */
-  public long length() {
+  public int length() {
     return buffer.readableBytes();
   }
 

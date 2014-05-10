@@ -58,7 +58,7 @@ public class Bell<T> implements Future<T> {
    * @return This bell.
    */
   private Bell<T> ring(T object, Throwable error) {
-    Set<Bell<? super T>> proms;
+    List<Bell<? super T>> proms;
 
     synchronized (this) {
       if (done)
@@ -245,10 +245,10 @@ public class Bell<T> implements Future<T> {
       bell.ring(object, error);  // We've already rung, pass it on.
     } else switch (promises.size()) {
       case 0:  // This is an immutable empty list. Change to singleton.
-        promises = Collections.singletonList(bell);
+        promises = (List) Collections.singletonList(bell);
         break;
       case 1:  // This is the singleton. Make a mutable list.
-        promises = new HashSet<Bell<? super T>>(promises);
+        promises = new LinkedList<Bell<? super T>>(promises);
       default:
         promises.add(bell);
     } return bell;
@@ -276,6 +276,7 @@ public class Bell<T> implements Future<T> {
      * @param delegate the bell to delegate to if no handler is defined.
      */
     public Promise(Bell<? super T> delegate) {
+      this.delegate = delegate;
       Bell.this.promise(this);
     }
 
@@ -300,13 +301,13 @@ public class Bell<T> implements Future<T> {
           try {
             PromiseAs.this.ring(convert(t));
           } catch (Throwable e) {
-            PromiseAs.this.ring(convert(e));
+            PromiseAs.this.ring(e);
           }
         } public void fail(Throwable t) {
           try {
             PromiseAs.this.ring(convert(t));
           } catch (Throwable e) {
-            PromiseAs.this.ring(convert(e));
+            PromiseAs.this.ring(e);
           }
         }
       };

@@ -7,9 +7,13 @@ import stork.scheduler.*;
 
 import java.util.*;
 
-// Abstract base class for a Stork transfer module.
-
-public abstract class Module {
+/**
+ * Abstract base class for a Stork transfer module.
+ *
+ * @param <S> The {@code Session} type.
+ * @param <R> The {@code Resource} type.
+ */
+public abstract class Module<S extends Session, R extends Resource> {
   public final String name, handle;
   public final String[] protocols;
   protected String description = "(no description)";
@@ -73,7 +77,7 @@ public abstract class Module {
    * @throws IllegalArgumentException if the given URI does not properly
    * identify a resource or specifies a scheme not supported by this module.
    */
-  public final Resource select(String uri) {
+  public final R select(String uri) {
     return select(uri, null);
   }
 
@@ -87,7 +91,7 @@ public abstract class Module {
    * @throws IllegalArgumentException if the given URI does not properly
    * identify a resource or specifies a scheme not supported by this module.
    */
-  public final Resource select(String uri, Credential credential) {
+  public final R select(String uri, Credential credential) {
     return select(uri, credential);
   }
 
@@ -99,7 +103,7 @@ public abstract class Module {
    * @throws IllegalArgumentException if the given URI does not properly
    * identify a resource or specifies a scheme not supported by this module.
    */
-  public final Resource select(URI uri) {
+  public final R select(URI uri) {
     return select(uri, null);
   }
 
@@ -118,7 +122,7 @@ public abstract class Module {
    * @see Resource
    * @see Session
    */
-  public abstract Resource select(URI uri, Credential credential);
+  public abstract R select(URI uri, Credential credential);
 
   public String toString() {
     return handle;

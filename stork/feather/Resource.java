@@ -1,5 +1,9 @@
 package stork.feather;
 
+import java.util.*;
+
+import stork.feather.util.*;
+
 /**
  * A virtual representation of a physical resource. The resource(s) represented
  * by a {@code Resource} object may be a single resource (such as a file or
@@ -40,11 +44,11 @@ package stork.feather;
  *
  * @param <S> The type of {@code Session} that can operate on this {@code
  * Resource}.
- * @param <R> The supertype of all {@code Resource}s this {@code Resource} can
- * be selected from or produce through selection. Generally, for a subclass,
- * this is the subclass itself.
+ * @param <R> The type of {@code Resource}s this {@code Resource} can be
+ * selected from or produce through selection. Generally, for a subclass, this
+ * is the subclass itself.
  */
-public class Resource<S extends Session, R extends Resource> {
+public abstract class Resource<S extends Session, R extends Resource> {
   private final String name;
   private final R parent;
   private final S session;
@@ -74,7 +78,7 @@ public class Resource<S extends Session, R extends Resource> {
    * if it is an inert {@code Resource}.
    */
   public S session() {
-    return session == null ? parent.session() : session;
+    return parent == null ? session : (S) parent.session();
   }
 
   /**
@@ -136,7 +140,7 @@ public class Resource<S extends Session, R extends Resource> {
    *
    * @return The first singleton ancestor of this {@code Resource}.
    */
-  public final Resource trunk() {
+  public final R trunk() {
     return isSingleton() ? this : parent.trunk();
   }
 
@@ -202,7 +206,7 @@ public class Resource<S extends Session, R extends Resource> {
       return new Session();
     if (!session.equals(this.session))
       throw new IllegalArgumentException();
-    return session.select(uri);
+    return session.select(path());
   }
 
   /**
@@ -210,14 +214,24 @@ public class Resource<S extends Session, R extends Resource> {
    * 
    * @return A {@link URI} which identifies this resource.
    */
-  public URI uri() { return uri; }
+  public URI uri() {
+    return session().uri().path(path());
+  }
+
+  /**
+   * Wrap an object with a {@code Relative} with this {@code Resource} as the
+   * root and origin.
+   */
+  public <T> Relative<T> wrap(T object) {
+    return new Relative<T>(object, this, Path.ROOT);
+  }
 
   /**
    * Wrap an object with a {@code Relative} with this {@code Resource} as the
    * root.
    */
-  public <T> Relative<R,T> wrap(Path path, T object) {
-    return new Relative<R,T>(object, this, path);
+  public <T> Relative<T> wrap(Path path, T object) {
+    return new Relative<T>(object, this, path);
   }
 
   /**
@@ -225,20 +239,15 @@ public class Resource<S extends Session, R extends Resource> {
    * perform operations on this {@code Resource}. Implementors should call this
    * themselves in the method body of any operation that requires {@code
    * Session} initialization (for example, a control channel connection) to
-   * ensure that the associated {@code Session} is ready to perform operations
-   * on this {@code Resource}. This can also be used outside the framework to
-   * "warm up" the {@code Resource} in anticipation of future use. The returned
-   * {@code Bell} will ring when initialization is complete, indicating that
-   * {@code Resource} implementations are allowed to perform the operation
-   * through the {@code Session}.
+   * ensure that the associated {@code Session} is ready to operate.  This can
+   * also be used outside the framework to "warm up" the {@code Resource} in
+   * anticipation of future use. The returned {@code Bell} will ring when
+   * initialization is complete, indicating that {@code Resource}
+   * implementations are allowed to perform the operation through the {@code
+   * Session}.
    * <p/>
-   * Until {@link #finalize()} has been called, subsequent calls to this method
-   * will have no effect and will always return the same {@code Bell}. Once the
-   * {@code Resource} has been finalized, this method can be called again to
-   * re-initialize the {@code Resource}.
-   * <p/>
-   * This method has no effect if the {@code Resource} is inert, and returns
-   * {@code null}.
+   * This method has no effect if the {@code Resource} is inert, and returns a
+   * {@code Bell} rung with {@code null}.
    *
    * @return (via bell) The associated {@code Session} once it has been
    * initialized to operate on this {@code Resource}, unless the {@code
@@ -246,26 +255,11 @@ public class Resource<S extends Session, R extends Resource> {
    * already rung with {@code null}.
    */
   public final Bell<S> initialize() {
-    if (isInert())
+    if (parent != null)
+      return parent.initialize();
+    if (session == null)
       return new Bell<S>().ring();
-    return session().mediator.initialize(this);
-  }
-
-  /**
-   * Finalize any state {@code Session} associated with this {@code Resource}
-   * may have allocated in order to initialize this {@code Resource}. This
-   * method has no effect unless this {@code Resource} has been initialized and
-   * has not yet been finalized. This is also called when the {@code Resource}
-   * is garbage collected, though calling it manually before garbage collection
-   * is the preferred way of freeing any state associated with the {@code
-   * Resource} if it is known to no longer be needed.
-   * <p/>
-   * This method has no effect if the {@code Resource} is inert.
-   */
-  public final void finalize() {
-    if (isInert())
-      return;
-    return session().mediator.finalize(this);
+    return session.mediatedInitialize();
   }
 
   /**
@@ -317,9 +311,7 @@ public class Resource<S extends Session, R extends Resource> {
    * @param name the unescaped name of a subresource to select.
    * @return A subresource of this resource.
    */
-  public abstract R select(String name) {
-    return new Resource(this, name);
-  }
+  public abstract R select(String name);
 
   /**
    * Select a subresource relative to this resource using the given path.
@@ -332,7 +324,7 @@ public class Resource<S extends Session, R extends Resource> {
   }
 
   /**
-   * Select a subresource as a {@code RelativeResource} containing relative
+   * Select a subresource as a {@code Relative<Resource>} containing relative
    * path information. This is used during proxy transfers, and should
    * generally not be used in applications unless maintaining relative path
    * information across selection is necessary.
@@ -341,10 +333,9 @@ public class Resource<S extends Session, R extends Resource> {
    * @return A subresource relative to this {@code Resource} containing a
    * reference to this {@code Resource}.
    */
-  public final RelativeResource selectRelative(Path path) {
-    if (this instanceof RelativeResource)
-      return new RelativeResource((RelativeResource) this, path);
-    return new RelativeResource(this, path);
+  public final Relative<Resource> selectRelative(Path path) {
+    R r = select(path);
+    return new Relative<Resource>(r, this, path, r);
   }
 
   /**
@@ -358,11 +349,12 @@ public class Resource<S extends Session, R extends Resource> {
 
   /**
    * Initiate a transfer from this {@code Resource} to {@code resource} using
-   * whatever method is deemed most appropriate by the implementation.
-   * The implementation should try to transfer the resource as efficiently as
-   * possible, and so should inspect the destination resource to determine if
-   * more efficient alternatives to proxy transferring can be done. This method
-   * should perform a proxy transfer as a catch-all last resort.
+   * whatever method is deemed most appropriate by the implementation.  The
+   * implementation should try to transfer this {@code Resource} as efficiently
+   * as possible, and so should inspect the destination {@code Resource} to
+   * determine if more efficient alternatives to proxy transferring can be
+   * done. This method should perform a proxy transfer as a catch-all last
+   * resort.
    *
    * @param resource the destination resource to transfer this resource to
    * @return A {@link Transfer} on success. The returned {@code Transfer}
@@ -371,32 +363,35 @@ public class Resource<S extends Session, R extends Resource> {
    * supported by one of the resources.
    * @throws NullPointerException if {@code resource} is {@code null}.
    */
-  public Transfer transferTo(Resource<?> resource) {
+  public <D extends Resource> Transfer<R,D> transferTo(D resource) {
     return tap().attach(resource.sink());
   }
 
   /**
-   * Open a sink to the resource. Any connection operation, if necessary,
-   * should begin as soon as this method is called.
+   * Return a {@code Sink} that will drain data for this {@code Resource}. Any
+   * connection operation, if necessary, should begin asynchronously as soon as
+   * this method is called.
    *
-   * @return A sink which drains to the named resource.
-   * @throws Exception (via bell) if opening the sink fails.
-   * @throws UnsupportedOperationException if the resource does not support
-   * writing.
+   * @return A {@code Sink} which drains {@code Slice}s to this {@code
+   * Resource}.
+   * @throws Exception (via bell) if opening the {@code Sink} fails.
+   * @throws UnsupportedOperationException if this {@code Resource} does not
+   * support writing.
    */
-  public Sink sink() { return session.sink(uri); }
+  public Sink<R> sink() { return session.sink(uri); }
 
   /**
-   * Open a tap on the resource. Any connection operation, if necessary, should
-   * begin, as soon as this method is called.
+   * Return a {@code Tap} that will emit data from this {@code Resource}. Any
+   * connection operation, if necessary, should begin asynchronously as soon as
+   * this method is called.
    *
-   * @return (via bell) A tap which emits slices from this resource and its
-   * subresources.
-   * @throws Exception (via bell) if opening the tap fails.
-   * @throws UnsupportedOperationException if the resource does not support
-   * reading.
+   * @return (via bell) A {@code Tap} which emits {@code Slice}s from this
+   * {@code Resource}.
+   * @throws Exception (via bell) if opening the {@code Tap} fails.
+   * @throws UnsupportedOperationException if this {@code Resource} does not
+   * support reading.
    */
-  public Tap tap() { return session.tap(uri); }
+  public Tap<R> tap() { return session.tap(uri); }
 
   public boolean equals(Object o) {
     if (o == this) return true;

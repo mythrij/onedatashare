@@ -49,27 +49,27 @@ public abstract class PipeElement<R extends Resource> {
    * @return A {@code Bell} which will ring when this {@code PipeElement} is
    * ready.
    */
-  protected Bell<?> start() throws Exception { return null; }
+  public Bell<?> start() throws Exception { return null; }
 
   /**
-   * This is called once the . Once stopped, the transfer cannot be
-   * started again. This may be called before {@link #start()} if the transfer
-   * is canceled before it starts.
+   * This is called once the transfer has completed. Once stopped, the transfer
+   * cannot be started again. This may be called before {@link #start()} if the
+   * transfer is canceled before it starts.
    */
-  protected void stop() { }
+  public void stop() { }
 
   /**
    * Pause the transfer temporarily. {@code resume()} should be called to
    * resume transfer after pausing. Implementors should assume this method will
    * only be called from a running state.
    */
-  protected abstract void pause();
+  public abstract void pause();
 
   /**
    * Resume the transfer after a pause. Implementors should assume this method
    * will only be called from a paused state.
    */
-  protected abstract void resume();
+  public abstract void resume();
 
   /**
    * Check if the transfer started; that is, if {@link #start()} has been
@@ -107,16 +107,17 @@ public abstract class PipeElement<R extends Resource> {
   public final boolean paused() { return paused && !stopped; }
 
   /**
-   * Initialize the transfer of data for the resource specified by {@code path}
-   * relative to the root {@code Resource}. This simply delegates to {@link
-   * #initialize(Relative)}.
+   * Initialize the transfer of data for the {@code Resource} specified by
+   * {@code path} relative to the root {@code Resource}. This simply delegates
+   * to {@link #initialize(Relative)}.
    *
-   * @param path the relative path to the resource which should be initialized.
+   * @param path the relative path to the {@code Resource} which should be
+   * initialized.
    * @return A {@code Bell} which will ring when data for {@code path} is ready
    * to be drained, or {@code null} if data can begin being drained
    * immediately.
    */
-  protected final Bell<?> initialize(Path path) {
+  public final Bell<?> initialize(Path path) {
     return initialize(root.selectRelative(path));
   }
 
@@ -130,66 +131,75 @@ public abstract class PipeElement<R extends Resource> {
    * being drained through this endpoint. It may also return {@code null} to
    * indicate that transmission may begin immediately.
    *
-   * @param resource the resource which should be initialized.
-   * @return A {@code Bell} which will ring when data for {@code resource} is ready
-   * to be drained, or {@code null} if data can begin being drained
+   * @param resource the {@code Resource} which should be initialized, in a
+   * {@code Relative} wrapper.
+   * @return A {@code Bell} which will ring when data for {@code resource} is
+   * ready to be drained, or {@code null} if data can begin being drained
    * immediately.
    * @throws Exception (via bell) if the resource cannot be initialized.
    */
-  protected abstract Bell<?> initialize(Relative<Resource> resource);
+  public abstract Bell<?> initialize(Relative<Resource> resource);
 
   /**
-   * Drain a {@link Slice} through the pipeline for the resource with the given
-   * {@code Path}. This delegates to {@link #drain(RelativeSlice)}.
+   * Drain a {@link Slice} through the pipeline from the root {@code Resource}.
+   * This delegates to {@link #drain(Relative)}.
    *
-   * @param path the path corresponding to the resource the slice originated
+   * @param slice a {@code Slice} being drained through the pipeline.
+   * @throws IllegalStateException if this method is called when the pipeline
+   * has not been initialized.
+   */
+  public final void drain(Slice slice) {
+    drain(root.wrap(slice));
+  }
+
+  /**
+   * Drain a {@link Slice} through the pipeline for the {@code Resource} with the given
+   * {@code Path}. This delegates to {@link #drain(Relative)}.
+   *
+   * @param path the path corresponding to the {@code Resource} the slice originated
    * from.
    * @param slice a {@code Slice} being drained through the pipeline.
    * @throws IllegalStateException if this method is called when the pipeline
    * has not been initialized.
    */
-  protected final void drain(Path path, Slice slice) {
-    drain(new RelativeResource(root, path), slice);
+  public final void drain(Path path, Slice slice) {
+    drain(root.wrap(path, slice));
   }
 
   /**
    * Drain a {@link Slice} through the pipeline for the given {@code
-   * RelativeResource}. This delegates to {@link #drain(RelativeSlice)}.
+   * Relative<Resource>}. This delegates to {@link #drain(Relative<Slice>)}.
    *
-   * @param resource the {@code RelativeResource} the slice originated from.
+   * @param resource the {@code Resource} the slice originated from.
    * @param slice a {@code Slice} being drained through the pipeline.
    * @throws IllegalStateException if this method is called when the pipeline
    * has not been initialized.
    */
-  protected final void drain(RelativeResource resouce, Slice slice) {
-    drain(new RelativeSlice(resource, slice));
+  public final void drain(Relative<Resource> resource, Slice slice) {
+    drain(resource.wrap(slice));
   }
 
   /**
-   * Drain a {@link RelativeSlice} through the pipeline. This method returns as
-   * soon as possible, with the actual I/O operation taking place
+   * Drain a {@code Relative<Slice>} through the pipeline. This method
+   * returns as soon as possible, with the actual I/O operation taking place
    * asynchronously.
    *
    * @param slice a {@code Slice} being drained through the pipeline.
    * @throws IllegalStateException if this method is called when the pipeline
    * has not been initialized.
    */
-  protected abstract void drain(RelativeSlice slice);
+  public abstract void drain(Relative<Slice> slice);
 
   /**
-   * Handle a {@code RelativeException} 
-   */
-
-  /**
-   * Finalize the transfer of data for the specified resource. This method
-   * should return immediately, and finalization should take place
+   * Finalize the transfer of data for the specified {@code Resource}. This
+   * method should return immediately, and finalization should take place
    * asynchronously.
    *
-   * @param resource the resource being finalized.
+   * @param resource the {@code Resource} being finalized.
    * @throws IllegalStateException if this method is called when the pipeline
    * has not been initialized.
    */
-  protected abstract void finalize(RelativeResource resource);
+  public abstract void finalize(Relative<Resource> resource);
 
   /**
    * Check if the pipeline is capable of draining slices in arbitrary order.
@@ -200,32 +210,22 @@ public abstract class PipeElement<R extends Resource> {
    * @throws IllegalStateException if this method is called when the pipeline
    * has not been initialized.
    */
-  protected abstract boolean random();
+  public abstract boolean random();
 
   /**
-   * Get the number of distinct resources the pipeline may be in the process of
-   * transferring simultaneously. Specifically, this value limits how many
-   * times {@link #initialize(RelativeResource)} may be called before a
-   * corresponding {@link #finalize(RelativeResource)} must be called to free
-   * up a transfer slot.
+   * Get the number of distinct {@code Resource}s the pipeline may be in the
+   * process of transferring simultaneously. Specifically, this value limits
+   * how many times {@code #initialize(...)} may be called before a
+   * corresponding {@code #finalize(...)} must be called to free up a transfer
+   * slot.
    * <p/>
    * Returning a number less than or equal to zero indicates that an arbitrary
-   * number of resources may be transferred concurrently.
+   * number of {@code Resource}s may be transferred concurrently.
    *
-   * @return The number of data resources this sink can receive concurrently.
+   * @return The number of data {@code Resource}s this sink can receive
+   * concurrently.
    * @throws IllegalStateException if this method is called when the pipeline
    * has not been initialized.
    */
-  protected abstract int concurrency();
-
-  /**
-   * Determine whether this {@code PipeElement} is active. Every proxy
-   * pipeline must have an active element. This will be used to determine
-   * whether or not a {@code Pump} is required to extract data from the
-   * pipeline {@code Tap}.
-   *
-   * @return {@code true} if this {@code PipeElement} is active; {@code false}
-   * otherwise.
-   */
-  protected abstract boolean isActive();
+  public abstract int concurrency();
 }

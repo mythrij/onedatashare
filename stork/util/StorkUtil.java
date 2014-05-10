@@ -4,7 +4,6 @@ import java.util.*;
 import java.util.regex.*;
 import java.io.*;
 
-import stork.feather.Bell;
 import stork.ad.Ad;
 
 // A bunch of static utility functions, how fun!
@@ -222,15 +221,5 @@ public abstract class StorkUtil {
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
-  }
-
-  // Asynchronously convert an object into an ad.
-  public static Bell<Ad> toAdBell(final Bell bell) {
-    final Bell<Ad> bell = new Bell<Ad>();
-    bell.promise(new Bell() {
-      public void done(Object o)    { bell.ring(Ad.marshal(o)); }
-      public void fail(Throwable t) { bell.ring(t); }
-    });
-    return bell;
   }
 }

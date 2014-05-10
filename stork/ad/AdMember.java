@@ -112,7 +112,7 @@ class AdMember extends AdType {
 
   // Check if this member should be ignored for marshalling.
   public boolean ignore() {
-    return ignore(this);
+    return ignore(member);
   }
 
   // Static methods to determine whether members should be ignored for

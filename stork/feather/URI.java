@@ -49,7 +49,7 @@ import stork.feather.util.*;
  *
  * <blockquote>{@code https://github.com/medialize/URI.js}</blockquote>
  */
-public abstract class URI extends Path {
+public abstract class URI {
   private static Intern<URI> intern = new Intern<URI>();
 
   /** An empty URI. */
@@ -244,7 +244,7 @@ public abstract class URI extends Path {
 
   /**
    * Return a URI based on this one with the given username component. This
-   * is an alias for {@link username(String)}.
+   * is an alias for {@link #username(String)}.
    *
    * @param username the new username
    * @return A URI based on this one with the given username component.
@@ -286,7 +286,7 @@ public abstract class URI extends Path {
 
   /**
    * Return a URI based on this one with the given password component. This is
-   * an alias for {@link password(String)}.
+   * an alias for {@link #password(String)}.
    *
    * @param password the new password
    * @return A URI based on this one with the given password component.
@@ -527,7 +527,7 @@ public abstract class URI extends Path {
    */
   public URI appendSegment(String segment) {
     Path p = path();
-    return (p == null) ? path(Path.create(escape(segment))) :
+    return (p == null) ? path(Path.create(encode(segment))) :
                          path(p.appendSegment(segment));
   }
 
@@ -609,8 +609,8 @@ public abstract class URI extends Path {
   public String resource() {
     StringBuilder sb = new StringBuilder();
     Path p = path();
-    String q = escape(query());
-    String f = escape(fragment());
+    String q = encode(query());
+    String f = encode(fragment());
 
     if (p == null && q == null && f == null) return null;
 
@@ -657,7 +657,7 @@ public abstract class URI extends Path {
    */
   public String endpoint() {
     StringBuilder sb = new StringBuilder();
-    String s = escape(scheme());
+    String s = encode(scheme());
     String a = authority();
 
     if (s == null && a == null) return null;

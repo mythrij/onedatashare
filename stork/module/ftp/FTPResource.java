@@ -9,17 +9,30 @@ import stork.scheduler.*;
 import stork.util.*;
 
 public class FTPResource extends Resource<FTPSession, FTPResource> {
-  public FTPResource(URI uri, Credential cred) {
-    super(uri, cred);
+  public FTPResource(String name, FTPResource parent) {
+    super(name, parent);
+  }
+
+  public FTPResource(FTPSession session) {
+    super(session);
+  }
+
+  public FTPResource select(String name) {
+    return new FTPResource(name, this);
   }
 
   // TODO: If this is a non-singleton resource, use a crawler.
   public synchronized Bell<Stat> stat() {
     return initialize().new ThenAs<Stat>() {
+      private FTPChannel channel = null;
+      private FTPSession session = null;
+
       // This will be called when initialization is done. It should start the
       // chain reaction that results in listing commands being tried until we
       // find one that works.
       public void then(FTPSession session) {
+        channel = session.channel;
+        this.session = session;
         tryListing(FTPListCommand.values()[0]);
       }
 
@@ -31,7 +44,7 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
           return;
         } if (cmd == null) {
           ring(new Exception("Listing is not supported."));
-        } else ch.supports(cmd.toString()).new Promise() {
+        } else channel.supports(cmd.toString()).new Promise() {
           public void done(Boolean supported) {
             if (supported)
               sendListCommand(cmd);
@@ -62,14 +75,14 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
         parser.name(StorkUtil.basename(path.name()));
 
         // When doing MLSx listings, we can reduce the response size with this.
-        if (hint == 'M' && !mlstOptsAreSet) {
-          ch.new Command("OPTS MLST Type*;Size*;Modify*;UNIX.mode*");
+        if (hint == 'M' && !session.mlstOptsAreSet) {
+          channel.new Command("OPTS MLST Type*;Size*;Modify*;UNIX.mode*");
           mlstOptsAreSet = true;
         }
 
         // Do a control channel listing, if specified.
         if (!cmd.requiresDataChannel())
-          ch.new Command(cmd.toString(), makePath()) {
+          channel.new Command(cmd.toString(), makePath()) {
             public void handle(FTPChannel.Reply r) {
               if (r.code/100 > 2)
                 parser.ring(r.asError());
@@ -80,7 +93,7 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
           };
 
         // Otherwise we're doing a data channel listing.
-        else ch.new DataChannel() {{
+        else channel.new DataChannel() {{
           tap.attach(parser);
           new Command(cmd.toString(), makePath());
           unlock();
@@ -101,37 +114,35 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
   }
 
   // Create a directory at the end-point, as well as any parent directories.
-  public Bell<Void> doMkdir(URI uri) {
-    return null;
-  }
-
-  // Remove a file or directory.
-  public Bell<Void> doRm(URI uri) {
-    return null;
-  }
-
-  public Sink doSink(final Resource resource) {
-    return (Sink) ch.new DataChannel() {{
-      new Command("STOR", uri.path());
-      unlock();
-    }};
-
-    return new Sink(this) {
-      protected void start() {
-        new Command("STOR", resource.path());
+  public Bell<?> mkdir() {
+    if (!isSingleton())  // Unsupported.
+      return super.mkdir();
+    return initialize().new ThenAs<Reply>() {
+      public void then(FTPSession session) {
+        session.channel.new Command("MKD", path()).promise(this);
       }
     };
   }
 
-  public Tap doTap(final Resource resource) {
-    return (Tap) ch.new DataChannel() {{
-      new Command("RETR", resource.path());
-      unlock();
-    }};
+  // Remove a file or directory.
+  public Bell<?> unlink() {
+    if (!isSingleton())  // Unsupported.
+      return super.unlink();
+    return stat().new ThenAs<Reply>() {
+      public void then(Stat stat) {
+        if (stat.dir)
+          session().channel.new Command("RMD", path()).promise(this);
+        else
+          session().channel.new Command("DELE", path()).promise(this);
+      }
+    };
   }
 
-  // Close the session and free any resources.
-  public void doClose() {
-    ch.close();
+  public Sink<FTPResource> sink() {
+    return new FTPSink(this);
+  }
+
+  public Tap<FTPResource> tap() {
+    return new FTPTap(this);
   }
 }
