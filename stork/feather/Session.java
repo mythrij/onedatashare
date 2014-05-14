@@ -80,6 +80,16 @@ public abstract class Session
 
   /**
    * Select a {@code Resource} relative to the root {@code Resource} of this
+   * {@code Session} given a {@code String} representation of a {@code Path}.
+   *
+   * @param path the {@code Path} to the {@code Resource} being selected.
+   */
+  public final R select(String path) {
+    return select(Path.create(path));
+  }
+
+  /**
+   * Select a {@code Resource} relative to the root {@code Resource} of this
    * {@code Session}.
    *
    * @param path the {@code Path} to the {@code Resource} being selected.

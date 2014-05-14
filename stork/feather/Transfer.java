@@ -41,7 +41,7 @@ public abstract class Transfer<S extends Resource, D extends Resource> {
   public final Mediator mediator = new Mediator();
 
   /** State imposition and access mediator for {@code Transfer}s. */
-  public final class Mediator implements Controller {
+  public final class Mediator {
     private Bell<Transfer<S,D>> pendingPause;
 
     private Mediator() { }
@@ -222,10 +222,7 @@ public abstract class Transfer<S extends Resource, D extends Resource> {
 
   /**
    * Get the number of distinct {@code Resource}s the pipeline may be in the
-   * process of transferring simultaneously. Specifically, this value limits
-   * how many times {@code #initialize(...)} may be called before a
-   * corresponding {@code #finalize(...)} must be called to free up a transfer
-   * slot.
+   * process of transferring simultaneously.
    * <p/>
    * Returning a number less than or equal to zero indicates that an arbitrary
    * number of {@code Resource}s may be transferred concurrently.

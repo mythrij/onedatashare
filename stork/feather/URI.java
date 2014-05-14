@@ -814,6 +814,8 @@ public abstract class URI {
    * @return An encoded representation of {@code string}.
    */
   public static String encode(String string) {
+    if (string == null)
+      return null;
     StringBuilder sb = new StringBuilder();
     int length = string.length();
     for (int offset = 0; offset < length;) {

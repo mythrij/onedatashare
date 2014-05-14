@@ -96,12 +96,8 @@ public abstract class Sink<R extends Resource> extends ProxyElement<R> {
    */
   public void finalize(Relative<R> resource) { }
 
-  public boolean random() { return false; }
-
-  public int concurrency() { return 1; }
-
-  public final Bell<?> pause() {
-    return transfer().mediator.pause();
+  public final void pause() {
+    transfer().mediator.pause();
   }
 
   public final void resume() {

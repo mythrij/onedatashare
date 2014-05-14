@@ -26,7 +26,7 @@ public class LocalSession extends Session<LocalSession,LocalResource> {
 
   /** Create a {@code LocalSession} at {@code path}. */
   public LocalSession(Path path) {
-    super(URI.create("file:").path(path));
+    super(URI.create("file:///").path(path));
     this.path = path;
   }
 
@@ -60,9 +60,12 @@ public class LocalSession extends Session<LocalSession,LocalResource> {
   }
 
   public static void main(String[] args) {
-    new LocalSession().select(Path.create("/home/bwross")).stat().new Then() {
+    LocalSession s = new LocalSession();
+    LocalResource r = s.select("/home/bwross/test");
+
+    r.stat().new Then() {
       public void done(Stat stat) {
-        System.out.println(stat);
+        System.out.println(stork.ad.Ad.marshal(stat));
       } public void fail(Exception e) {
         e.printStackTrace();
       }

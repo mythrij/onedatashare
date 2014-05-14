@@ -115,12 +115,17 @@ public abstract class Tap<R extends Resource> extends ProxyElement<R> {
    * Initialize the pipeline to transfer a {@code Resource}. Active {@code
    * Tap}s should call this to initialize downstream elements for transfer.
    * Active subclasses may override this, but must return {@code
-   * super.initialize(resource)}.
+   * super.initialize(resource)}. The returned {@code Bell} will ring when the
+   * attached {@code Sink} is ready to transfer data.
    * <p/>
    * Passive {@code Tap}s will have this called to indicate that a transfer
-   * should begin. Passive {@code Tap}s must not call {@code
-   * super.initialize(...)}, or an {@code IllegalStateException} will be
-   * thrown.
+   * should begin, and must not call {@code super.initialize(...)}, or an
+   * {@code IllegalStateException} will be thrown. A {@code Bell} must be
+   * returned that will be rung when the {@code Sink} is ready to receive
+   * {@code Slice}s from {@code resource}. Once the returned {@code Bell} has
+   * been rung, and any asynchronous preparations in the {@code Tap} have
+   * completed, the {@code Tap} may begin draining {@code Slice}s for {@code
+   * resource}.
    *
    * @throws IllegalStateException if this {@code Tap} is passive and this
    * method has not been overridden.
@@ -129,7 +134,7 @@ public abstract class Tap<R extends Resource> extends ProxyElement<R> {
     // This is kind of an antipattern, maybe we should have a subclass?
     if (!active) throw new
       IllegalStateException("Passive Taps must override initialize().");
-    return transfer.initialize(resource);
+    return transfer().initialize(resource);
   }
 
   /**
@@ -197,17 +202,12 @@ public abstract class Tap<R extends Resource> extends ProxyElement<R> {
 
   /**
    * Finalize the transfer of a {@code Resource}. This method (or one of its
-   * analogues) should be called by {@code Tap}s to finalize indicate to the
-   * attached {@code Sink} that a given {@code Resource} has finished
-   * transferring.
-   *
-   * @throws IllegalStateException if this {@code Tap} is passive and this
-   * method has not been overridden.
+   * analogues) should be called by {@code Tap}s to indicate to the attached
+   * {@code Sink} that a given {@code Resource} has finished transferring.
+   * Non-data {@code Resource}s do not need to be finalized.
    */
   public final void finalize(Relative<R> resource) {
-    if (!active) throw new
-      IllegalStateException("Passive Taps must override finalize().");
-    transfer.finalize(resource);
+    transfer().finalize(resource);
   }
 
   /**

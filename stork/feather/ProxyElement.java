@@ -11,7 +11,7 @@ package stork.feather;
  *
  * @param <R> The root {@code Resource} type.
  */
-public abstract class ProxyElement<R extends Resource> implements Controller {
+public abstract class ProxyElement<R extends Resource> {
   /**
    * Prepare the pipeline for the transfer of data for {@code resource}. This
    * must be called before any data is drained for {@code resource}.
@@ -54,8 +54,48 @@ public abstract class ProxyElement<R extends Resource> implements Controller {
    */
   public abstract void finalize(Relative<R> resource);
 
-  public Bell<?> start() { return null; }
-  public void stop() { }
-  public Bell<?> pause() { return null; }
-  public void resume() { }
+  /**
+   * Check if the pipeline is capable of draining {@code Slice}s in arbitrary
+   * order. The return value of this method should remain constant across
+   * calls.
+   *
+   * @return {@code true} if transmitting slices in arbitrary order is
+   * supported.
+   * @throws IllegalStateException if this method is called when the pipeline
+   * has not been initialized.
+   */
+  public boolean random() { return false; }
+
+  /**
+   * Get the number of distinct {@code Resource}s the pipeline may be in the
+   * process of transferring simultaneously. Specifically, this value limits
+   * how many times {@code #initialize(...)} may be called before a
+   * corresponding {@code #finalize(...)} must be called to free up a transfer
+   * slot.
+   * <p/>
+   * Returning a number less than or equal to zero indicates that an arbitrary
+   * number of {@code Resource}s may be transferred concurrently.
+   *
+   * @return The number of data {@code Resource}s this sink can receive
+   * concurrently.
+   * @throws IllegalStateException if this method is called when the pipeline
+   * has not been initialized.
+   */
+  public int concurrency() { return 1; }
+
+  /**
+   * Start the flow of data.
+   *
+   * @return A {@code Bell} which will ring once the flow of data may begin.
+   */
+  protected Bell<?> start() { return new Bell().ring(); }
+
+  /** Stop the flow of data permanently. */
+  protected void stop() { }
+
+  /** Pause the transfer. */
+  protected void pause() { }
+
+  /** Resume the the flow of data after a pause. */
+  protected void resume() { }
 }

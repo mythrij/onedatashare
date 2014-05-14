@@ -162,7 +162,6 @@ public class Stork extends Command {
 
   public static void main(String[] args) {
     loadConfig(null);
-    System.out.println(Ad.marshal(settings));
     new Stork().parseAndExecute(args);
   }
 }

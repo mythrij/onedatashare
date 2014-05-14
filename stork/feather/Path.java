@@ -138,6 +138,8 @@ public abstract class Path {
 
   private static Path create(Path par, String path) {
     String[] ps = popSegment(path);
+    if (ps == null || ps[0].isEmpty())
+      return ROOT;
     return (ps == null) ? par : create(par, ps[0]).append(ps[1]);
   }
 
