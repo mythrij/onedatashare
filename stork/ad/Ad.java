@@ -693,7 +693,7 @@ public class Ad implements Serializable {
       } else {
         Ad ad = new Ad();
         for (AdMember f : t.fields())
-          ad.put(f.name(), f.get(o));
+          if (!f.ignore()) ad.put(f.name(), f.get(o));
         return ad;
       }
     } catch (RuntimeException e) {
