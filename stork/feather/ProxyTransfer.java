@@ -10,7 +10,7 @@ import java.util.*;
  * @param <D> the destination {@code Resource} type.
  */
 public class ProxyTransfer<S extends Resource, D extends Resource>
-implements Transfer<S,D> {
+extends Transfer<S,D> {
   private Tap<S> tap;
   private Sink<D> sink;
 
@@ -160,24 +160,22 @@ implements Transfer<S,D> {
    * @return The root {@code Resource} of the attached {@code Tap}.
    * @throws IllegalStateException if a tap has not been attached.
    */
-  protected final S source() {
+  public final S source() {
     if (tap == null)
       throw new IllegalStateException();
     return tap.root;
   }
 
   /**
-   * Get the {@code Resource} specified by {@code path} relative to the root of
-   * the attached {@code Tap}.
+   * Get the root {@code Resource} of the attached {@code Sink}.
    *
-   * @return The {@code Resource} specified by {@code path} relative to the
-   * root of the attached {@code Tap}.
+   * @return The root {@code Resource} of the attached {@code Sink}.
    * @throws IllegalStateException if a tap has not been attached.
    */
-  protected final S source(Path path) {
-    if (tap == null)
+  public final D destination() {
+    if (sink == null)
       throw new IllegalStateException();
-    return tap.root;
+    return sink.root;
   }
 
   // Called by tap.
@@ -202,23 +200,20 @@ implements Transfer<S,D> {
   }
 
   // Called by tap.
-  public void drain(Relative<Slice> slice) {
+  final void drain(Relative<Slice> slice) {
     sink.drain(slice);
   }
 
-  // Called internally.
-  public void stop() {
+  final protected void stop() {
     tap.stop();
     sink.stop();
   }
 
-  // Called by sink.
-  public void pause() {
+  final protected void pause() {
     tap.pause();
   }
 
-  // Called by sink.
-  public void resume() {
+  final protected void resume() {
     tap.resume();
   }
 }

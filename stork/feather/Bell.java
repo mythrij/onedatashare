@@ -98,7 +98,8 @@ public class Bell<T> implements Future<T> {
   }
 
   /**
-   * Cancel the bell, resolving it with a cancellation error.
+   * Cancel the bell, resolving it with a cancellation error. This is here to
+   * satisfy the requirements of the {@code Future} interface.
    *
    * @param mayInterruptIfRunning Ignored in this implementation.
    * @return {@code true} if the bell was cancelled as a result of this call,
@@ -110,6 +111,17 @@ public class Bell<T> implements Future<T> {
       return false;
     ring(null, new CancellationException());
     return true;
+  }
+
+  /**
+   * Cancel the bell, resolving it with a cancellation error. This returns a
+   * reference to this bell, unlike {@link #cancel(boolean)}.
+   *
+   * @return This {@code Bell}.
+   */
+  public Bell<T> cancel() {
+    cancel(true);
+    return this;
   }
 
   /**
@@ -331,6 +343,28 @@ public class Bell<T> implements Future<T> {
      * @throws Throwable an arbitrary error.
      */
     protected V convert(Throwable t) throws Throwable { throw t; }
+  }
+
+  /**
+   * Return a {@code ThenAs} bell which will ring with {@code done} when this
+   * bell rings successfully.
+   *
+   * @param done the value to ring the returned bell with when this {@code
+   * Bell} rings.
+   */
+  public final <V> ThenAs<V> thenAs(V done) {
+    return new ThenAs<V>(done);
+  }
+
+  /**
+   * Return a {@code ThenAs} bell which will ring with {@code done} if this
+   * bell rings successfully and {@code fail} if this bell fails.
+   *
+   * @param done the value to ring the returned bell with on success.
+   * @param fail the value to ring the returned bell with on failure.
+   */
+  public final <V> ThenAs<V> thenAs(V done, V fail) {
+    return new ThenAs<V>(done, fail);
   }
 
   /**

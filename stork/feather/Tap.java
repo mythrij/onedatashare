@@ -38,8 +38,11 @@ package stork.feather;
  * @see Sink
  * @see Slice
  */
-public abstract class Tap<R extends Resource> extends PipeElement<R> {
+public abstract class Tap<R extends Resource> extends ProxyElement<R> {
   private ProxyTransfer<R,?> transfer;
+
+  /** The root {@code Resource} of this {@code Tap}. */
+  public final R root;
 
   /** Whether or not this is an active {@code Tap}. */
   public final boolean active;
@@ -73,9 +76,12 @@ public abstract class Tap<R extends Resource> extends PipeElement<R> {
    * @throws NullPointerException if {@code resource} is {@code null}.
    */
   public Tap(R root, boolean active) {
-    super(root);
+    this.root = root;
     this.active = active;
   }
+
+  public final R source() { return root; }
+  public final Resource destination() { return transfer().destination(); }
 
   /**
    * Attach this tap to a {@code Sink}. Once this method is called, {@link
@@ -127,12 +133,66 @@ public abstract class Tap<R extends Resource> extends PipeElement<R> {
   }
 
   /**
+   * Initialize the transfer of data for the {@code Resource} specified by
+   * {@code path} relative to the root {@code Resource}. This simply delegates
+   * to {@link #initialize(Relative)}, and is made available as a convenience.
+   *
+   * @param path the path to the {@code Resource} which should be initialized
+   * relative to the root.
+   * @return A {@code Bell} which will ring when data for {@code path} is ready
+   * to be drained, or {@code null} if data can begin being drained
+   * immediately.
+   */
+  public final Bell<R> initialize(Path path) {
+    return initialize(root.selectRelative(path));
+  }
+
+  /**
    * Drain a {@code Slice} to the {@code Sink}. This method (or one of its
    * analogues) should be called by {@code Tap}s to drain {@code Slice}s
    * through the pipeline.
    */
   public final void drain(Relative<Slice> slice) {
     transfer().drain(slice);
+  }
+
+  /**
+   * Drain a {@link Slice} through the pipeline from the root {@code Resource}.
+   * This delegates to {@link #drain(Relative)}.
+   *
+   * @param slice a {@code Slice} being drained through the pipeline.
+   * @throws IllegalStateException if this method is called when the pipeline
+   * has not been initialized.
+   */
+  public final void drain(Slice slice) {
+    drain(root.wrap(slice));
+  }
+
+  /**
+   * Drain a {@link Slice} through the pipeline for the {@code Resource} with the given
+   * {@code Path}. This delegates to {@link #drain(Relative)}.
+   *
+   * @param path the path corresponding to the {@code Resource} the slice originated
+   * from.
+   * @param slice a {@code Slice} being drained through the pipeline.
+   * @throws IllegalStateException if this method is called when the pipeline
+   * has not been initialized.
+   */
+  public final void drain(Path path, Slice slice) {
+    drain(root.wrap(path, slice));
+  }
+
+  /**
+   * Drain a {@link Slice} through the pipeline for the given {@code
+   * Relative<R>}. This delegates to {@link #drain(Relative)}.
+   *
+   * @param resource the {@code Resource} the slice originated from.
+   * @param slice a {@code Slice} being drained through the pipeline.
+   * @throws IllegalStateException if this method is called when the pipeline
+   * has not been initialized.
+   */
+  public final void drain(Relative<R> resource, Slice slice) {
+    drain(resource.wrap(slice));
   }
 
   /**
@@ -148,5 +208,18 @@ public abstract class Tap<R extends Resource> extends PipeElement<R> {
     if (!active) throw new
       IllegalStateException("Passive Taps must override finalize().");
     transfer.finalize(resource);
+  }
+
+  /**
+   * Finalize the transfer of data for the {@code Resource} specified by {@code
+   * path}. This simply delegates to {@link #finalize(Relative)}.
+   *
+   * @param path the path to the {@code Resource} which should be finalized
+   * relative to the root.
+   * @throws IllegalStateException if this method is called when the pipeline
+   * has not been initialized.
+   */
+  public final void finalize(Path path) {
+    finalize(root.selectRelative(path));
   }
 }

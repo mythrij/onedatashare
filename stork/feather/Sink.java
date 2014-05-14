@@ -19,20 +19,23 @@ import stork.feather.util.*;
  *
  * @param <R> The destination {@code Resource} type.
  */
-public abstract class Sink<R extends Resource> extends PipeElement<R> {
+public abstract class Sink<R extends Resource> extends ProxyElement<R> {
   private ProxyTransfer<?,R> transfer;
+
+  /** The root {@code Resource} of this {@code Sink}. */
+  public final R root;
 
   /**
    * Create a {@code Sink} with an anonymous root {@code Resource}.
    */
-  public Sink() { super((R) Resource.ANONYMOUS); }
+  public Sink() { this((R) Resource.ANONYMOUS); }
 
   /**
    * Create a {@code Sink} with the given {@code Resource} as the root.
    *
    * @param root the {@code Resource} this {@code Sink} receives data for.
    */
-  public Sink(R root) { super(root); }
+  public Sink(R root) { this.root = root; }
 
   // Get the transfer, or throw an IllegalStateException if the transfer is not
   // ready.
@@ -41,6 +44,9 @@ public abstract class Sink<R extends Resource> extends PipeElement<R> {
       throw new IllegalStateException();
     return transfer;
   }
+
+  public final Resource source() { return transfer().source(); }
+  public final R destination() { return root; }
 
   /**
    * Attach this {@code Sink} to a {@code Tap}. Once this method is called,
@@ -94,33 +100,11 @@ public abstract class Sink<R extends Resource> extends PipeElement<R> {
 
   public int concurrency() { return 1; }
 
-  public final void pause() {
-    transfer().pause();
+  public final Bell<?> pause() {
+    return transfer().mediator.pause();
   }
 
   public final void resume() {
-    transfer().resume();
-  }
-
-  /**
-   * Get the root {@code Resource} of the attached {@code Tap}.
-   *
-   * @return The root {@code Resource} of the attached {@code Tap}.
-   * @throws IllegalStateException if a tap has not been attached.
-   */
-  public final Resource source() {
-    return transfer().source();
-  }
-
-  /**
-   * Get the {@code Resource} specified by {@code path} relative to the root of
-   * the attached {@code Tap}.
-   *
-   * @return The {@code Resource} specified by {@code path} relative to the
-   * root of the attached {@code Tap}.
-   * @throws IllegalStateException if a tap has not been attached.
-   */
-  public final Resource source(Path path) {
-    return transfer.source(path);
+    transfer().mediator.resume();
   }
 }
