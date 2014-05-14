@@ -352,6 +352,9 @@ public class Bell<T> implements Future<T> {
     protected void then(T done) { ring(done); }
   }
 
+  // Used in ThenAs to signal no default fail value.
+  private static final Object NO_DEFAULT_FAIL = new Object();
+
   /**
    * A bell which will perform some operation after the parent bell rings. When
    * the parent bell rings, this bell's {@code then(...)} methods will be
@@ -363,6 +366,38 @@ public class Bell<T> implements Future<T> {
    * @param <V> the supertype of objects this bell rings with.
    */
   public class ThenAs<V> extends Bell<V> {
+    private final V done, fail;
+
+    /**
+     * Create a {@code ThenAs} bell which will ring with {@code null} if {@code
+     * then(T)} is not overridden.
+     */
+    public ThenAs() { this(null, (V) NO_DEFAULT_FAIL); }
+
+    /**
+     * Create a {@code ThenAs} bell which will ring with {@code done} if {@code
+     * then(T)} is not overridden.
+     *
+     * @param done the default value to ring this bell with if {@code done(T)}
+     * is not overridden.
+     */
+    public ThenAs(V done) { this(done, (V) NO_DEFAULT_FAIL); }
+
+    /**
+     * Create a {@code ThenAs} bell which will ring with {@code done} if {@code
+     * then(T)} is not overridden, and {@code fail} if {@code then(Throwable)}
+     * is not overridden.
+     *
+     * @param done the default value to ring this bell with if {@code done(T)}
+     * is not overridden.
+     * @param fail the default value to ring this bell with if {@code
+     * done(Throwable)} is not overridden.
+     */
+    public ThenAs(V done, V fail) {
+      this.done = done;
+      this.fail = fail;
+    }
+
     // Promise a bell to the parent which will cause this thing's then()
     // methods to run.
     {
@@ -375,20 +410,30 @@ public class Bell<T> implements Future<T> {
 
     /**
      * This method will be called if the parent bell rings successfully. By
-     * default, this method rings this bell with {@code null}.
+     * default, this method rings this bell with whatever was passed in for
+     * {@code done} in the contructor, or {@code null} if the empty contructor
+     * was used.
      *
      * @param done the value the parent bell rang with.
      */
-    protected void then(T done) { ring(); }
+    protected void then(T done) {
+      ring(this.done);
+    }
 
     /**
      * This method will be called if the parent bell rings successfully. By
-     * default, this method rings this bell with {@code fail}. This method may
-     * be left 
+     * default, this method rings this bell with the {@code Throwable} {@code
+     * fail} passed to this method, or whatever was passed in for {@code fail}
+     * in the contructor if that constructor was used.
      *
      * @param fail the {@code Throwable} the parent bell failed with.
      */
-    protected void then(Throwable fail) { ring(fail); }
+    protected void then(Throwable fail) {
+      if (fail == NO_DEFAULT_FAIL)
+        ring(fail);
+      else
+        ring(this.fail);
+    }
 
     /**
      * This method will always be executed after the parent bell rings. By

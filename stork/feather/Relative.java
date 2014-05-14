@@ -35,7 +35,7 @@ public class Relative<T> {
    * @param path the {@code Path} from {@code root} to {@code origin}.
    */
   public Relative(T object, Resource root, Path path) {
-    this(object, root, path, root.select(path));
+    this(object, root, path, path.isRoot() ? root : root.select(path));
   }
 
   /**
@@ -57,7 +57,7 @@ public class Relative<T> {
     this.root = root;
     this.path = path;
     this.object = object;
-    origin = isRoot() ? root : origin.select(path);
+    this.origin = origin;
   }
 
   /**

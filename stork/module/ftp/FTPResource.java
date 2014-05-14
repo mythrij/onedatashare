@@ -9,30 +9,20 @@ import stork.scheduler.*;
 import stork.util.*;
 
 public class FTPResource extends Resource<FTPSession, FTPResource> {
-  public FTPResource(String name, FTPResource parent) {
-    super(name, parent);
-  }
-
-  public FTPResource(FTPSession session) {
-    super(session);
-  }
-
-  public FTPResource select(String name) {
-    return new FTPResource(name, this);
+  FTPResource(FTPSession session, Path path) {
+    super(session, path);
   }
 
   // TODO: If this is a non-singleton resource, use a crawler.
   public synchronized Bell<Stat> stat() {
     return initialize().new ThenAs<Stat>() {
       private FTPChannel channel = null;
-      private FTPSession session = null;
 
       // This will be called when initialization is done. It should start the
       // chain reaction that results in listing commands being tried until we
       // find one that works.
-      public void then(FTPSession session) {
+      public void then(FTPResource me) {
         channel = session.channel;
-        this.session = session;
         tryListing(FTPListCommand.values()[0]);
       }
 
@@ -61,11 +51,12 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
           return;
 
         char hint = cmd.toString().startsWith("M") ? 'M' : 0;
-        String base = path().name(false);
+        Stat base = new Stat(name());
+        final Bell<Stat> tb = this;
         final FTPListParser parser = new FTPListParser(base, hint) {
           // The parser should ring this bell if it's successful.
           public void done(Stat stat) {
-            ThenAs.this.ring(stat);
+            tb.ring(stat);
           } public void fail() {
             // TODO: Check for permanent errors.
             tryListing(cmd.next());
@@ -77,7 +68,7 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
         // When doing MLSx listings, we can reduce the response size with this.
         if (hint == 'M' && !session.mlstOptsAreSet) {
           channel.new Command("OPTS MLST Type*;Size*;Modify*;UNIX.mode*");
-          mlstOptsAreSet = true;
+          session.mlstOptsAreSet = true;
         }
 
         // Do a control channel listing, if specified.
@@ -93,17 +84,19 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
           };
 
         // Otherwise we're doing a data channel listing.
+        /*
         else channel.new DataChannel() {{
           tap.attach(parser);
           new Command(cmd.toString(), makePath());
           unlock();
         }};
+        */
       }
 
       // Do this every time we send a command so we don't have to store a whole
       // concatenated path string for every outstanding listing command.
       private String makePath() {
-        String p = path().toString();
+        String p = path.toString();
         if (p.startsWith("/~"))
           return p.substring(1);
         else if (!p.startsWith("/") && !p.startsWith("~"))
@@ -117,9 +110,9 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
   public Bell<?> mkdir() {
     if (!isSingleton())  // Unsupported.
       return super.mkdir();
-    return initialize().new ThenAs<Reply>() {
+    return initialize().new ThenAs<FTPChannel.Reply>() {
       public void then(FTPSession session) {
-        session.channel.new Command("MKD", path()).promise(this);
+        session.channel.new Command("MKD", path).promise(this);
       }
     };
   }
@@ -128,21 +121,21 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
   public Bell<?> unlink() {
     if (!isSingleton())  // Unsupported.
       return super.unlink();
-    return stat().new ThenAs<Reply>() {
+    return stat().new ThenAs<FTPChannel.Reply>() {
       public void then(Stat stat) {
         if (stat.dir)
-          session().channel.new Command("RMD", path()).promise(this);
+          session.channel.new Command("RMD", path).promise(this);
         else
-          session().channel.new Command("DELE", path()).promise(this);
+          session.channel.new Command("DELE", path).promise(this);
       }
     };
   }
 
   public Sink<FTPResource> sink() {
-    return new FTPSink(this);
+    return null;//new FTPSink(this);
   }
 
   public Tap<FTPResource> tap() {
-    return new FTPTap(this);
+    return null;//new FTPTap(this);
   }
 }

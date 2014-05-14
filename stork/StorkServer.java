@@ -54,7 +54,7 @@ public class StorkServer extends Command {
     }
 
     // Initialize web server for web documents.
-    if (web_url != null)
-      HTTPInterface.register("web", web_url).start();
+    //if (web_url != null)
+      //HTTPInterface.register("web", web_url).start();
   }
 }

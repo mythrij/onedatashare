@@ -16,18 +16,9 @@ extends Resource<AnonymousSession,AnonymousResource> {
    * Create an {@code AnonymousResource} whose parent is the canonical {@code
    * AnonymousSession}.
    */
-  public AnonymousResource() { super(Session.ANONYMOUS); }
+  public AnonymousResource() { super((AnonymousSession) Session.ANONYMOUS); }
 
-  // Used in AnonymousSession to create a root.
-  AnonymousResource(AnonymousSession session) {
-    super(session);
-  }
-
-  private AnonymousResource(String name, AnonymousResource parent) {
-    super(name, parent);
-  }
-
-  public AnonymousResource select(String name) {
-    return new AnonymousResource(name, this);
+  AnonymousResource(AnonymousSession session, Path path) {
+    super(session, path);
   }
 }

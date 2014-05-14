@@ -47,14 +47,14 @@ public abstract class Tap<R extends Resource> extends PipeElement<R> {
   /**
    * Create a {@code Tap} with an anonymous root {@code Resource}.
    */
-  public Tap() { this(Resources.ANONYMOUS); }
+  public Tap() { this((R) Resource.ANONYMOUS); }
 
   /**
    * Create a {@code Tap} with an anonymous root {@code Resource}.
    *
    * @param active whether or not this {@code Tap} is active.
    */
-  public Tap(boolean active) { this(Resources.ANONYMOUS, active); }
+  public Tap(boolean active) { this((R) Resource.ANONYMOUS, active); }
 
   /**
    * Create an active {@code Tap} with {@code root} as the root {@code
@@ -86,17 +86,20 @@ public abstract class Tap<R extends Resource> extends PipeElement<R> {
    * @throws NullPointerException if {@code sink} is {@code null}.
    * @throws IllegalStateException is a {@code Sink} has already been attached.
    */
-  public final synchronized <D> ProxyTransfer<R,D> attach(Sink<D> sink) {
+  public final <D extends Resource> ProxyTransfer<R,D> attach(Sink<D> sink) {
     if (sink == null)
       throw new NullPointerException();
-    if (transfer != null)
-      throw new IllegalStateException("A Sink is already attached.");
-    return transfer = new ProxyTransfer<R,D>(this, sink);
+    synchronized (this) {
+      if (transfer != null)
+        throw new IllegalStateException("A Sink is already attached.");
+      transfer = new ProxyTransfer<R,D>(this, sink);
+      return (ProxyTransfer<R,D>) transfer;
+    }
   }
 
   // Get the transfer, or throw an IllegalStateException if the transfer is not
   // ready.
-  private final ProxyTransfer<R,?> transfer() {
+  private synchronized final ProxyTransfer<R,?> transfer() {
     if (transfer == null)
       throw new IllegalStateException();
     return transfer;
@@ -117,8 +120,9 @@ public abstract class Tap<R extends Resource> extends PipeElement<R> {
    * method has not been overridden.
    */
   public Bell<R> initialize(Relative<R> resource) {
+    // This is kind of an antipattern, maybe we should have a subclass?
     if (!active) throw new
-      IllegalStateException("Passive Taps must override initialize()");
+      IllegalStateException("Passive Taps must override initialize().");
     return transfer.initialize(resource);
   }
 
@@ -136,15 +140,13 @@ public abstract class Tap<R extends Resource> extends PipeElement<R> {
    * analogues) should be called by {@code Tap}s to finalize indicate to the
    * attached {@code Sink} that a given {@code Resource} has finished
    * transferring.
+   *
+   * @throws IllegalStateException if this {@code Tap} is passive and this
+   * method has not been overridden.
    */
   public final void finalize(Relative<R> resource) {
-  }
-
-  public final boolean random() {
-    return transfer().random();
-  }
-
-  public final int concurrency() {
-    return transfer().concurrency();
+    if (!active) throw new
+      IllegalStateException("Passive Taps must override finalize().");
+    transfer.finalize(resource);
   }
 }

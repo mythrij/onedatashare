@@ -1,5 +1,7 @@
 package stork.feather.util;
 
+import java.util.*;
+
 import stork.feather.*;
 
 /**
@@ -10,7 +12,7 @@ import stork.feather.*;
  *
  * @param <R> The {@code Resource} type this {@code Crawler} operates on.
  */
-public abstract class Crawler<R extends Resource> extends Bell<R> {
+public abstract class Crawler<R extends Resource<?,R>> extends Bell<R> {
   private final R root;
   private final Path pattern;
   private int mode = 0;
@@ -38,7 +40,7 @@ public abstract class Crawler<R extends Resource> extends Bell<R> {
    */
   public Crawler(R resource, boolean recursive) {
     root = resource.trunk();
-    pattern = recursive ? resource.path().append("**") : resource.path();
+    pattern = recursive ? resource.path.append("**") : resource.path;
   }
 
   /**
@@ -52,7 +54,7 @@ public abstract class Crawler<R extends Resource> extends Bell<R> {
 
   private void crawl(final R resource) {
     if (!isDone()) resource.subresources().new Promise() {
-      public void done(Resource[] subs) {
+      public void done(Map<String,R> subs) {
         // Don't continue if crawling has completed.
         if (Crawler.this.isDone())
           return;
@@ -60,9 +62,11 @@ public abstract class Crawler<R extends Resource> extends Bell<R> {
         // Perform the operation on the resource.
         operate(resource);
 
+        Path tp = pattern.truncate(resource.path.length());
+
         // Crawl subresources that match the path.
-        if (subs != null) for (Resource s : subs)
-          if (pattern.intersects(s.path())) crawl(s);
+        if (subs != null) for (R s : subs.values())
+          if (tp.matches(s.path)) crawl(s);
       } public void fail(Throwable t) {
         Crawler.this.ring(t);
       }

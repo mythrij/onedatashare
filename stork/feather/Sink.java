@@ -22,13 +22,10 @@ import stork.feather.util.*;
 public abstract class Sink<R extends Resource> extends PipeElement<R> {
   private ProxyTransfer<?,R> transfer;
 
-  /** The destination {@code Resource}. */
-  public final R root;
-
   /**
    * Create a {@code Sink} with an anonymous root {@code Resource}.
    */
-  public Sink() { this(Resources.ANONYMOUS); }
+  public Sink() { super((R) Resource.ANONYMOUS); }
 
   /**
    * Create a {@code Sink} with the given {@code Resource} as the root.
@@ -39,7 +36,7 @@ public abstract class Sink<R extends Resource> extends PipeElement<R> {
 
   // Get the transfer, or throw an IllegalStateException if the transfer is not
   // ready.
-  private final ProxyTransfer<?,R> transfer() {
+  private final synchronized ProxyTransfer<?,R> transfer() {
     if (transfer == null)
       throw new IllegalStateException();
     return transfer;
@@ -54,7 +51,7 @@ public abstract class Sink<R extends Resource> extends PipeElement<R> {
    * @throws NullPointerException if {@code tap} is {@code null}.
    * @throws IllegalStateException if a {@code Tap} has already been attached.
    */
-  public final <S> ProxyTransfer<S,R> attach(Tap<S> tap) {
+  public final <S extends Resource> ProxyTransfer<S,R> attach(Tap<S> tap) {
     if (tap == null)
       throw new NullPointerException();
     if (transfer != null)
@@ -64,9 +61,11 @@ public abstract class Sink<R extends Resource> extends PipeElement<R> {
 
   /**
    * This can be overridden by {@code Sink} implementations to initialize the
-   * transfer of {@code Slice}s for a {@code Resource}.
+   * transfer of {@code Slice}s for a {@code Resource}. {@code resource.object}
+   * will contain the destination {@code Resource} to be initialized, and
+   * {@code resource.origin} will contain the matching source {@code Resource}.
    */
-  public Bell<?> initialize(Relative<Resource> resource) {
+  public Bell<R> initialize(Relative<R> resource) {
     return null;
   }
 
@@ -89,7 +88,7 @@ public abstract class Sink<R extends Resource> extends PipeElement<R> {
    * This can be overridden by {@code Sink} implementations to finalize the
    * transfer of {@code Slice}s for a {@code Resource}.
    */
-  public void finalize(Relative<Resource> resource) { }
+  public void finalize(Relative<R> resource) { }
 
   /**
    * {@code Sink} implementations can override this to handle initialization
@@ -106,16 +105,6 @@ public abstract class Sink<R extends Resource> extends PipeElement<R> {
   public boolean random() { return false; }
 
   public int concurrency() { return 1; }
-
-  /**
-   * Called when an upstream tap encounters an error while downloading a {@link
-   * Resource}. Depending on the nature of the error, the sink should decide to
-   * either abort the transfer, omit the file, or take some other action.
-   *
-   * @param error the error that occurred during transfer, along with
-   * contextual information
-   */
-  //void handle(ResourceException error);
 
   public final void pause() {
     transfer().pause();

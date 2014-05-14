@@ -17,6 +17,6 @@ public class FTPModule extends Module<FTPSession, FTPResource> {
 
   public FTPResource select(URI uri, Credential credential) {
     URI endpoint = uri.endpointURI(), resource = uri.resourceURI();
-    return new FTPSession(endpoint, credential).select(resource);
+    return new FTPSession(endpoint, credential).select(resource.path());
   }
 }

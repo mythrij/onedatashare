@@ -36,7 +36,7 @@ public class FTPChannel {
   // The maximum amount of time (in ms) to wait for a connection.
   private static final int timeout = 2000;
 
-  private final Bell<?> onClose;
+  private final Bell<Void> onClose = new Bell<Void>();
 
   // FIXME: We should use something system-wide.
   private static EventLoopGroup group = new NioEventLoopGroup();
@@ -122,6 +122,7 @@ public class FTPChannel {
   // allow the channel to assume control when it is reached.
   private FTPChannel(FTPChannel parent) {
     data = parent.data;
+    host = parent.host;
   }
 
   // Handles initializing the control channel connection and attaching the
@@ -495,27 +496,25 @@ public class FTPChannel {
   }
 
   // Try to authenticate with a GSS credential.
-  public Bell<Reply> authenticate(GSSCredential cred) throws Exception {
-    final GSSSecurityContext sec = new GSSSecurityContext(cred);
-    final Bell<Reply> bell = new Bell<Reply>() {
-      protected void done(Reply r) {
-        if (r.isComplete())
-          data.security = sec;
-      }
-    };
+  public Bell<Reply> authenticate(GSSCredential cred) {
+    final GSSSecurityContext sec;
 
-    new Command("AUTH GSSAPI") {
-      public void done(Reply r) {
+    try {
+      sec = new GSSSecurityContext(cred);
+    } catch (Exception e) {
+      return new Bell<Reply>().ring(e);
+    }
+
+    return new Command("AUTH GSSAPI").new ThenAs<Reply>() {
+      public void then(Reply r) {
         switch (r.code/100) {
-          case 3:  handshake(sec, Unpooled.EMPTY_BUFFER).promise(bell);
-          case 1:  return;
-          case 2:  promise(bell); return;
+          case 3:  handshake(sec, Unpooled.EMPTY_BUFFER).promise(this);
+          case 1:  ring(r); return;
+          case 2:  data.security = sec; ring(r); return;
           default: throw r.asError();
         }
       }
     };
-
-    return bell;
   }
 
   // Handshake procedure for all authentication types. The input byte buffer
@@ -878,8 +877,6 @@ public class FTPChannel {
 
     public synchronized final boolean isSync() {
       return isSync;
-    } public synchronized final boolean isDone() {
-      return bell.isDone();
     }
   }
 

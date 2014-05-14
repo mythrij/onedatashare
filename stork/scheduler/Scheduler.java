@@ -241,14 +241,14 @@ public class Scheduler {
       Resource nr = ep.select();
 
       // See if there's an existing session we can reuse.
-      Session session = session_pool.remove(nr.session());
-      if (session != null && !session.isFinalized()) {
+      Session session = session_pool.remove(nr.session);
+      if (session != null && !session.isClosed()) {
         Log.fine("Reusing existing session: ", session);
         nr = nr.reselectOn(session);
       } else {
-        final Session s = nr.session();
+        final Session s = nr.session;
         Log.fine("Using new session: ", s);
-        s.onFinalize(new Bell() {
+        s.onClose(new Bell() {
           public void always() {
             Log.fine("Removing from session pool: ", s);
             synchronized (session_pool) {
@@ -280,9 +280,9 @@ public class Scheduler {
       // Put the session back when we're done.
       listing.new Promise() {
         public void always() {
-          Session s = res.session();
+          Session s = res.session;
           synchronized (session_pool) {
-            if (!s.isFinalized() && !session_pool.containsKey(s))
+            if (!s.isClosed() && !session_pool.containsKey(s))
               session_pool.put(s, s);
           }
           ls_aggregator.remove(res);

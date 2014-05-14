@@ -34,38 +34,38 @@ import stork.feather.util.*;
  * typing system.
  * @param <R> The type of {@code Resource}s handled by this {@code Session}.
  */
-public abstract class Session<S extends Session, R extends Resource> {
+public abstract class Session
+  <S extends Session<S,R>, R extends Resource<S,R>>
+{
   /** The canonical {@code AnonymousSession}. */
-  public static final AnonymousSession ANONYMOUS = new AnonymousSession();
-
-  /** The root {@code Resource} of this {@code Session}. */
-  protected final R root;
+  public static final Session ANONYMOUS = new AnonymousSession();
 
   /** The URI used to describe this {@code Session}. */
-  protected final URI uri;
+  public final URI uri;
 
   /** The authentication factor used for this endpoint. */
-  protected final Credential credential;
+  public final Credential credential;
 
   // If we've already started initializing, this will be non-null.
   private volatile Bell<S> initializeBell;
 
   // Rung on close. Avoid letting this leak out.
-  private final Bell<S> onFinalize = new Bell<S>();
+  private final Bell<S> onClose = new Bell<S>() {
+    public void always() { Session.this.finalize(); }
+  };
 
   /**
    * Create a {@code Session} with the given root URI.
    *
-   * @param uri a {@link URI} representing the root of the session.
+   * @param uri a {@link URI} representing the root of the {@code Session}.
    * @throws NullPointerException if {@code root} or {@code uri} is {@code
    * null}.
    */
-  protected Session(R root, URI uri) { this(root, uri, null); }
+  protected Session(URI uri) { this(uri, null); }
 
   /**
    * Create a {@code Session} with the given root URI and {@code Credential}.
    *
-   * @param root the root {@code Resource} of this {@code Session}.
    * @param uri a {@link URI} describing the {@code Session}.
    * @param credential a {@link Credential} used to authenticate with the
    * endpoint. This may be {@code null} if no additional authentication factors
@@ -73,17 +73,25 @@ public abstract class Session<S extends Session, R extends Resource> {
    * @throws NullPointerException if {@code root} or {@code uri} is {@code
    * null}.
    */
-  protected Session(R root, URI uri, Credential credential) {
+  protected Session(URI uri, Credential credential) {
     this.uri = uri;
     this.credential = credential;
   }
+
+  /**
+   * Select a {@code Resource} relative to the root {@code Resource} of this
+   * {@code Session}.
+   *
+   * @param path the {@code Path} to the {@code Resource} being selected.
+   */
+  public abstract R select(Path path);
 
   /**
    * Return the root {@code Resource} of this {@code Session}.
    *
    * @return The root {@code Resource} of this {@code Session}.
    */
-  public final R root() { return root; }
+  public final R root() { return select(Path.ROOT); }
 
   /**
    * This is what actually gets called and returned when {@code
@@ -97,7 +105,7 @@ public abstract class Session<S extends Session, R extends Resource> {
     } try {
       initializeBell = initialize();
       if (initializeBell == null)
-        initializeBell = new Bell<S>().ring(this);
+        initializeBell = new Bell<S>().ring((S)this);
       return initializeBell;
     } catch (Exception e) {
       return initializeBell = new Bell<S>().ring(e);
@@ -129,19 +137,26 @@ public abstract class Session<S extends Session, R extends Resource> {
   protected Bell<S> initialize() throws Exception { return null; }
 
   /**
-   * Release any resources allocated during the initialization of {@code
-   * resource}. If {@code resource} is this {@code Session}, this method should
-   * close any connections and finalize any ongoing transactions.
+   * Release any resources allocated during the initialization of this {@code
+   * Session}. This method should close any connections and finalize any
+   * ongoing transactions.
    */
   protected void finalize() { }
+
+  /**
+   * Close this {@code Session} and call {@code finalize()}.
+   */
+  public final synchronized void close() {
+    onClose.ring((S) this);
+  }
 
   /**
    * Check if the closing procedure has begun.
    *
    * @return {@code true} if closing has begun; {@code false} otherwise.
    */
-  public final synchronized boolean isFinalized() {
-    return onFinalize.isDone();
+  public final synchronized boolean isClosed() {
+    return onClose.isDone();
   }
 
   /**
@@ -150,32 +165,22 @@ public abstract class Session<S extends Session, R extends Resource> {
    *
    * @return A bell that will be rung when the {@code Session} is closed.
    */
-  public final Bell<S> onFinalize() {
-    return onFinalize.new Promise();
+  public final Bell<S> onClose() {
+    return onClose.new Promise();
   }
 
   /**
    * Register a {@code Bell} to be rung with this {@code Session} when the
    * {@code Session} is closed. This is slightly more memory-efficient than
-   * promising on the {@code Bell} returned by {@link #onFinalize()}, as it
+   * promising on the {@code Bell} returned by {@link #onClose()}, as it
    * gets promised to an internal {@code Bell} directly.
    *
    * @param bell a {@code Bell} that will be rung when the {@code Session} is
    * closed.
    * @return Whatever value was passed in for {@code bell}.
    */
-  public final Bell<S> onFinalize(Bell<? super S> bell) {
-    return onFinalize.promise(bell);
-  }
-
-  /**
-   * Select a {@code Resource} relative to the root {@code Resource} of this
-   * {@code Session}.
-   *
-   * @param path the selection path to the {@code Resource} being selected.
-   */
-  public final R select(Path path) {
-    return path.isRoot() ? root() : select(path.up()).select(path.name());
+  public final Bell<? super S> onClose(Bell<? super S> bell) {
+    return onClose.promise(bell);
   }
 
   public String toString() {

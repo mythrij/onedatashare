@@ -12,13 +12,6 @@ import stork.feather.util.*;
  * existence or accessibility of the resource(s) it represents. In particular,
  * creating a {@code Resource} object does not 
  * <p/>
- * A {@code Resource} instance may be selected through a {@code Session}, in
- * which case it is said to be <i>active</i>. Operations performed on an active
- * {@code Resource} are performed in the context of the associated {@code
- * Session}. If a {@code Resource} is not parented to a {@code Session}, the
- * {@code Resource} is said to be <i>inert</i>.  An inert {@code Resource} must
- * be selected through a {@code Session} to be operated on.
- * <p/>
  * A {@code Resource} should be thought of as a placeholder for or reference to
  * a physical resource, with a {@code Session} as the entity responsible for
  * providing access it to the concrete resource(s) it represents. A {@code
@@ -48,58 +41,31 @@ import stork.feather.util.*;
  * selected from or produce through selection. Generally, for a subclass, this
  * is the subclass itself.
  */
-public abstract class Resource<S extends Session, R extends Resource> {
-  private final String name;
-  private final R parent;
-  private final S session;
+public class Resource
+  <S extends Session<S,R>, R extends Resource<S,R>>
+{
+  /** The canonical anonymous {@code Resource}. */
+  public static final Resource ANONYMOUS = Session.ANONYMOUS.root();
 
-  // Create a resource with the given parent and name.
-  protected Resource(String name, R parent) {
-    if (name == null || parent == null)
-      throw new NullPointerException();
-    this.name = name;
-    this.parent = parent;
-    session = null;
-  }
+  /** The selection {@code Path} of this {@code Resource}. */
+  public final Path path;
+  /** The {@code Session} associated with this {@code Resource}. */
+  public final S session;
 
-  // Used to create root {@code Resource}s.
-  protected Resource(S session) {
-    if (parent == null)
-      throw new NullPointerException();
-    name = null;
-    parent = null;
+  protected Resource(S session, Path path) {
+    if (path == null)
+      path = Path.ROOT;
+    this.path = path;
     this.session = session;
   }
 
-  /**
-   * Get the {@link Session} this {@code Resource} is selected on.
-   *
-   * @return The {@link Session} associated with this resource, or {@code null}
-   * if it is an inert {@code Resource}.
-   */
-  public S session() {
-    return parent == null ? session : (S) parent.session();
+  protected Resource(S session) {
+    this(session, null);
   }
 
-  /**
-   * Get the name of this {@code Resource}. This may be {@code null} if this is
-   * a root {@code Resource}.
-   *
-   * @return The name of this {@code Resource}.
-   */
-  public String name() { return name; }
-
-  /**
-   * Return the root {@code Resource} of this {@code Resource}. That is, the
-   * {@code Resource} in the hierarchy that has no parent. For an active {@code
-   * Resource}, this is the same as called {@link #session()}. For an inert
-   * {@code Resource}, this will return the top-level {@code Resource}. The
-   * root {@code Resource} is always a singleton.
-   *
-   * @return This {@code Resource}'s root {@code Resource}.
-   */
-  public final R root() {
-    return parent == this ? this : parent.root();
+  /** Get the unencoded name of this {@code Resource}. */
+  public String name() {
+    return path.name(false);
   }
 
   /**
@@ -108,40 +74,16 @@ public abstract class Resource<S extends Session, R extends Resource> {
    * @return {@code true} if this is a root {@code Resource}; {@code false}
    * otherwise.
    */
-  public final boolean isRoot() { return parent == this; }
+  public final boolean isRoot() { return path.isRoot(); }
 
   /**
-   * Check if this {@code Resource} is active. That is, check that its root is
-   * a {@code Session}. An active {@code Resource} may have operations
-   * performed on it. This does not mean that the {@code Resource} is
-   * initialized or that the resource is represents exists.
-   *
-   * @return {@code true} if the {@code Resource} is active; {@code false}
-   * otherwise.
-   */
-  public final boolean isActive() { return session() != null; }
-
-  /**
-   * Check if this {@code Resource} is inert. This returns {@code true} if and
-   * only if {@link #isActive()} returns {@code false}. An inert {@code
-   * Resource} must be selected through a {@code Session} in order to have have
-   * operations performed on it.
-   *
-   * @return {@code true} if the {@code Resource} is inert; {@code false}
-   * otherwise.
-   */
-  public final boolean isInert() { return !isActive(); }
-
-  /**
-   * Return the trunk of this {@code Resource}. That is, the first singleton
-   * {@code Resource} encountered when traversing back to the root. Or, in
-   * other words, the first {@code Resource} such that all segments in the
-   * selection {@code Path} are non-glob segments.
+   * Return the trunk of this {@code Resource}. That is, the nearest singleton
+   * parent {@code Resource}.
    *
    * @return The first singleton ancestor of this {@code Resource}.
    */
   public final R trunk() {
-    return isSingleton() ? this : parent.trunk();
+    return (isSingleton()) ? (R) this : session.select(path.trunk());
   }
 
   /**
@@ -152,7 +94,7 @@ public abstract class Resource<S extends Session, R extends Resource> {
    * false} otherwise.
    */
   public final boolean isSingleton() {
-    return true;
+    return !path.isGlob();
   }
 
   /**
@@ -169,12 +111,12 @@ public abstract class Resource<S extends Session, R extends Resource> {
    */
   public Bell<Map<String,R>> subresources() {
     return stat().new PromiseAs<Map<String,R>>() {
-      public Map<String,Resource> convert(Stat s) {
+      public Map<String,R> convert(Stat s) {
         if (s.files == null)
           return null;
-        Map<String,R> map = new HashMash<String,R>();
-        for (Stat s : s.files)
-          map.put(s.name, select(s.name));
+        Map<String,R> map = new HashMap<String,R>();
+        for (Stat ss : s.files)
+          map.put(ss.name, select(ss.name));
         return map;
       }
     };
@@ -185,28 +127,23 @@ public abstract class Resource<S extends Session, R extends Resource> {
    * Assuming {@code session} is actually equivalent to this {@code Resource}'s
    * {@code Session}, the returned {@code Resource} will refer to the same
    * physical resource. This can, for instance, be used to select the same
-   * resource through an already established session.
-   * <p/>
-   * If this {@code Resource} is already selected through {@code session} (or
-   * is {@code null} and this {@code Resource} is inert), this {@code Resource}
-   * is returned as-is.
-   * <p/>
-   * If {@code resource} is {@code null}, an inert equivalent
+   * {@code Resource} through an already established {@code Session}.
    *
    * @param session the session to reselect this resource on.
    * @return An equivalent {@code Resource} which can be accessed through
    * {@code session}.
+   * @throws NullPointerException if {@code session} is {@code null}.
    * @throws IllegalArgumentException if {@code session} is not equivalent to
    * this {@code Resource}'s {@code Session}.
    */
   public R reselectOn(S session) {
-    if (session == session())
-      return this;
     if (session == null)
-      return new Session();
+      throw new IllegalArgumentException();
+    if (session == this.session)
+      return (R) this;
     if (!session.equals(this.session))
       throw new IllegalArgumentException();
-    return session.select(path());
+    return session.select(path);
   }
 
   /**
@@ -215,7 +152,7 @@ public abstract class Resource<S extends Session, R extends Resource> {
    * @return A {@link URI} which identifies this resource.
    */
   public URI uri() {
-    return session().uri().path(path());
+    return session.uri.append(path);
   }
 
   /**
@@ -235,6 +172,42 @@ public abstract class Resource<S extends Session, R extends Resource> {
   }
 
   /**
+   * Select a subresource relative to this resource.
+   *
+   * @param name the literal name of a subresource to select.
+   * @return A subresource of this resource.
+   */
+  public final R select(String name) {
+    return session.select(path.appendLiteral(name));
+  }
+
+  /**
+   * Select a subresource relative to this {@code Resource} using {@code path}.
+   *
+   * @param path the path to the subresource, relative to this {@code
+   * Resource}.
+   * @return A subresource relative to this {@code Resource}.
+   */
+  public final R select(Path path) {
+    return session.select(path.append(path));
+  }
+
+  /**
+   * Select a subresource as a {@code Relative<Resource>} containing relative
+   * path information. This is used during proxy transfers, and should
+   * generally not be used in applications unless maintaining relative path
+   * information across selection is necessary.
+   *
+   * @param path the path to the subresource, relative to this resource.
+   * @return A subresource relative to this {@code Resource} containing a
+   * reference to this {@code Resource}.
+   */
+  public final Relative<Resource> selectRelative(Path path) {
+    R r = select(path);
+    return new Relative<Resource>(r, this, path, r);
+  }
+
+  /**
    * Initialize the {@code Session} associated with this {@code Resource} to
    * perform operations on this {@code Resource}. Implementors should call this
    * themselves in the method body of any operation that requires {@code
@@ -245,21 +218,12 @@ public abstract class Resource<S extends Session, R extends Resource> {
    * initialization is complete, indicating that {@code Resource}
    * implementations are allowed to perform the operation through the {@code
    * Session}.
-   * <p/>
-   * This method has no effect if the {@code Resource} is inert, and returns a
-   * {@code Bell} rung with {@code null}.
    *
-   * @return (via bell) The associated {@code Session} once it has been
-   * initialized to operate on this {@code Resource}, unless the {@code
-   * Resource} is inert. If it is insert, this method returns a {@code Bell}
-   * already rung with {@code null}.
+   * @return (via bell) This {@code Resource} once it has been initialized to
+   * operate on this {@code Resource}.
    */
-  public final Bell<S> initialize() {
-    if (parent != null)
-      return parent.initialize();
-    if (session == null)
-      return new Bell<S>().ring();
-    return session.mediatedInitialize();
+  public final Bell<R> initialize() {
+    return session.mediatedInitialize().new ThenAs<R>((R)this);
   }
 
   /**
@@ -304,47 +268,33 @@ public abstract class Resource<S extends Session, R extends Resource> {
   }
 
   /**
-   * Select a subresource by name relative to this resource. By default, this
-   * simply appends {@code name} to the URI of this resource. Subclasses may
-   * override this to introduce special behavior.
+   * Return a {@code Sink} that will drain data for this {@code Resource}. Any
+   * connection operation, if necessary, should begin asynchronously as soon as
+   * this method is called.
    *
-   * @param name the unescaped name of a subresource to select.
-   * @return A subresource of this resource.
+   * @return A {@code Sink} which drains {@code Slice}s to this {@code
+   * Resource}.
+   * @throws Exception (via bell) if opening the {@code Sink} fails.
+   * @throws UnsupportedOperationException if this {@code Resource} does not
+   * support writing.
    */
-  public abstract R select(String name);
-
-  /**
-   * Select a subresource relative to this resource using the given path.
-   *
-   * @param path the path to the subresource, relative to this resource.
-   * @return A subresource relative to this resource.
-   */
-  public final R select(Path path) {
-    root().select(path().append(path));
+  public Sink<R> sink() {
+    throw new UnsupportedOperationException();
   }
 
   /**
-   * Select a subresource as a {@code Relative<Resource>} containing relative
-   * path information. This is used during proxy transfers, and should
-   * generally not be used in applications unless maintaining relative path
-   * information across selection is necessary.
+   * Return a {@code Tap} that will emit data from this {@code Resource}. Any
+   * connection operation, if necessary, should begin asynchronously as soon as
+   * this method is called.
    *
-   * @param path the path to the subresource, relative to this resource.
-   * @return A subresource relative to this {@code Resource} containing a
-   * reference to this {@code Resource}.
+   * @return (via bell) A {@code Tap} which emits {@code Slice}s from this
+   * {@code Resource}.
+   * @throws Exception (via bell) if opening the {@code Tap} fails.
+   * @throws UnsupportedOperationException if this {@code Resource} does not
+   * support reading.
    */
-  public final Relative<Resource> selectRelative(Path path) {
-    R r = select(path);
-    return new Relative<Resource>(r, this, path, r);
-  }
-
-  /**
-   * Get the selection path of this {@code Resource} relative to the root.
-   *
-   * @return The selection path of this {@code Resource} relative to the root.
-   */
-  public Path path() {
-    return (name == null) ? Path.ROOT : parent.path().appendLiteral(name);
+  public Tap<R> tap() {
+    throw new UnsupportedOperationException();
   }
 
   /**
@@ -364,45 +314,18 @@ public abstract class Resource<S extends Session, R extends Resource> {
    * @throws NullPointerException if {@code resource} is {@code null}.
    */
   public <D extends Resource> Transfer<R,D> transferTo(D resource) {
-    return tap().attach(resource.sink());
+    Sink sink = resource.sink();
+    return tap().attach(sink);
   }
-
-  /**
-   * Return a {@code Sink} that will drain data for this {@code Resource}. Any
-   * connection operation, if necessary, should begin asynchronously as soon as
-   * this method is called.
-   *
-   * @return A {@code Sink} which drains {@code Slice}s to this {@code
-   * Resource}.
-   * @throws Exception (via bell) if opening the {@code Sink} fails.
-   * @throws UnsupportedOperationException if this {@code Resource} does not
-   * support writing.
-   */
-  public Sink<R> sink() { return session.sink(uri); }
-
-  /**
-   * Return a {@code Tap} that will emit data from this {@code Resource}. Any
-   * connection operation, if necessary, should begin asynchronously as soon as
-   * this method is called.
-   *
-   * @return (via bell) A {@code Tap} which emits {@code Slice}s from this
-   * {@code Resource}.
-   * @throws Exception (via bell) if opening the {@code Tap} fails.
-   * @throws UnsupportedOperationException if this {@code Resource} does not
-   * support reading.
-   */
-  public Tap<R> tap() { return session.tap(uri); }
 
   public boolean equals(Object o) {
     if (o == this) return true;
     if (!(o instanceof Resource)) return false;
     Resource r = (Resource) o;
-    if (!uri.equals(r.uri))
-      return false;
-    return true;
+    return path.equals(r.path) && session.equals(r.session);
   }
 
   public int hashCode() {
-    return 13*uri.hashCode() + 17*session.hashCode();
+    return 13*path.hashCode() + 17*session.hashCode();
   }
 }

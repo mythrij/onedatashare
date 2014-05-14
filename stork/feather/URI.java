@@ -525,10 +525,10 @@ public abstract class URI {
    * @param segment the path segment to append, as an unescaped string
    * @return A URI based on this one with the given path segment appended.
    */
-  public URI appendSegment(String segment) {
+  public URI appendLiteral(String name) {
     Path p = path();
-    return (p == null) ? path(Path.create(encode(segment))) :
-                         path(p.appendSegment(segment));
+    return (p == null) ? path(Path.create(encode(name))) :
+                         path(p.appendLiteral(name));
   }
 
   /**
@@ -825,6 +825,7 @@ public abstract class URI {
         sb.appendCodePoint(cp);
       offset += Character.charCount(cp);
     }
+    return sb.toString();
   } private static boolean shouldEncode(int c) {
     return c < ' ' || c > '~' || RESERVED.get(c);
   }

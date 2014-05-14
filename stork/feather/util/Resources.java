@@ -53,18 +53,18 @@ public final class Resources {
    * slice} and whose {@code Tap} emits {@code slice}.
    */
   public static Resource fromSlice(final Slice slice) {
-    Stat stat = new Stat();
+    final Stat stat = new Stat();
     stat.file = true;
-    stat.size = (slice != null) ? slice.size() : 0;
+    stat.size = (slice != null) ? slice.length() : 0;
 
     if (slice.offset() > 0)
       stat.size += slice.offset();
 
-    return new Anonymous() {
+    return new AnonymousResource() {
       public Bell<Stat> stat() {
         return new Bell<Stat>().ring(stat);
-      } public Bell<Tap> tap() {
-        return new Bell<Tap>().ring(Taps.fromSlice(this, slice));
+      } public Tap<AnonymousResource> tap() {
+        return (Tap<AnonymousResource>) Taps.fromSlice(this, slice);
       }
     };
   }

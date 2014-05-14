@@ -12,10 +12,12 @@ import stork.feather.*;
  */
 public class AnonymousSession
 extends Session<AnonymousSession,AnonymousResource> {
-  /**
-   * Create a new {@code AnonymousSession} with an empty URI.
-   */
+  /** Create a new {@code AnonymousSession} with an empty URI. */
   public AnonymousSession() {
-    super(new AnonymousResource(this), URI.EMPTY, null);
+    super(URI.EMPTY, null);
+  }
+
+  public AnonymousResource select(Path path) {
+    return new AnonymousResource(this, path);
   }
 }

@@ -2,6 +2,7 @@ package stork.net;
 
 import java.net.*;
 
+import io.netty.bootstrap.*;
 import io.netty.buffer.*;
 import io.netty.handler.codec.*;
 import io.netty.channel.*;
@@ -18,7 +19,7 @@ import stork.scheduler.*;
  * A base implementation of {@code StorkInterface} which is based on a TCP
  * socket.
  */
-public class BaseTCPInterface extends StorkInterface {
+public abstract class BaseTCPInterface extends StorkInterface {
   protected final URI uri;
   private final SocketAddress address;
   private static final NioEventLoopGroup acceptor = new NioEventLoopGroup();
@@ -51,7 +52,12 @@ public class BaseTCPInterface extends StorkInterface {
     sb.option(ChannelOption.SO_KEEPALIVE, true);
 
     // Determine host and port from uri.
-    InetAddress ia = InetAddress.getByName(uri.host());
+    InetAddress ia;
+    try {
+      ia = InetAddress.getByName(uri.host());
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
     int p = uri.port();
     if (p <= 0) p = port(uri);
     InetSocketAddress addr = new InetSocketAddress(ia, p);

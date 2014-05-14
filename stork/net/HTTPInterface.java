@@ -31,17 +31,31 @@ import stork.scheduler.*;
  * A basic HTTP interface to tie the scheduler into the HTTP server.
  */
 public class HTTPInterface extends StorkInterface {
+  private final String host;
+  private final int port;
+
   private static Map<URI, HTTPInterface> interfaces =
     new HashMap<URI, HTTPInterface>();
 
   public HTTPInterface(Scheduler s, URI uri) {
-    super(s, uri);
+    super(s);
+
+    host = (uri.host() != null) ? uri.host() : "localhost";
+    port = uri.port();
 
     new HTTPServer.Route(uri, "GET", "POST") {
       public void handle(HTTPRequest request) {
         handleRequest(request);
       }
     };
+  }
+
+  public String name() { return "HTTP"; }
+
+  public String address() {
+    String a = host;
+    if (port > 0) a += ":"+port;
+    return a;
   }
 
   // Issue the request and relay the response to the client.
@@ -53,9 +67,9 @@ public class HTTPInterface extends StorkInterface {
             return Ad.marshal(o);
           } public void done(Ad ad) {
             // Write the request back to the requestor.
-            Taps.fromString(ad).attach(request.sink());
+            Taps.fromString(ad).attach(request.root().sink());
           } public void fail(Throwable t) {
-            Taps.fromError(t).attach(request.sink());
+            //Taps.fromError(t).attach(request.root().sink());
           }
         };
       }
@@ -64,58 +78,58 @@ public class HTTPInterface extends StorkInterface {
 
   // Convert an HTTP request to an ad asynchronously.
   private Bell<Ad> requestToAd(final HTTPRequest req) {
-    return new Bell<Ad>() {{
-      String command = req.uri().path().name();
-      // Make sure the command exists and supports the method.
-      Scheduler.Handler handler = handler(command);
-      if (handler == null)
-        return new Bell<Ad>().ring(new Exception("Not found."));
-      if (!checkMethod(req.method(), handler))
-        return new Bell<Ad>().ring(new Exception("Method not allowed."));
-      command = route.path;
+    Bell<Ad> bell = new Bell<Ad>();
 
-      Ad ad = new Ad("command", command);
+    String command = req.uri.path().name();
+    // Make sure the command exists and supports the method.
+    Scheduler.Handler handler = handler(command);
+    if (handler == null)
+      return bell.ring(new HTTPException(404));
+    if (!checkMethod(req.method(), handler))
+      return bell.ring(new HTTPException(405));
 
-      // Use cookie as a base.
-      if (req.cookie() != null)
-        ad.addAll(cookiesToAd(req.cookie()));
+    Ad ad = new Ad("command", command);
 
-      // Merge in query string.
-      if (req.uri().query() != null)
-        ad.addAll(queryToAd(req.uri().query()));
+    // Use cookie as a base.
+    if (req.cookie() != null)
+      ad.addAll(cookiesToAd(req.cookie()));
 
-      // If there's no body, we're done. Else, parse asynchronously.
-      if (!req.hasBody())
-        ring(ad);
-      else
-        handleRequestBody(ad, req).promise(this);
-    }};
+    // Merge in query string.
+    if (req.uri.query() != null)
+      ad.addAll(queryToAd(req.uri.query()));
+
+    // If there's no body, we're done. Else, parse asynchronously.
+    if (!req.hasBody())
+      bell.ring(ad);
+    else
+      handleRequestBody(ad, req).promise(bell);
+    return bell;
   }
 
   // Asynchronously handle an HTTP request body.
   private Bell<Ad> handleRequestBody(final Ad head, HTTPRequest req) {
     // Make sure it's a type we can handle.
-    HTTPContentType type = req.type();
+    String type = req.type();
     AggregatorSink sink = new AggregatorSink();
     Bell<Ad> bell;
 
     if (type == null || type.startsWith("application/json")) {
       bell = sink.bell().new PromiseAs<Ad>() {
         public Ad convert(Slice slice) {
-          return Ad.parse(new ByteBufInputStream(slice.buffer()));
+          return Ad.parse(new ByteBufInputStream(slice.asByteBuf()));
         }
       };
     } else if (type.startsWith("application/x-www-form-urlencoded")) {
       bell = sink.bell().new PromiseAs<Ad>() {
         public Ad convert(Slice slice) {
-          return queryToAd(slice.buffer.toString(CharsetUtil.UTF_8));
+          return queryToAd(slice.asByteBuf().toString(CharsetUtil.UTF_8));
         }
       };
     } else {
       return new Bell<Ad>().ring(new Exception(type+" is unsupported."));
     }
 
-    req.tap().attach(sink);
+    req.root().tap().attach(sink);
     return bell.new PromiseAs<Ad>() {
       public Ad convert(Ad body) { return head.merge(body); }
     };
@@ -166,7 +180,6 @@ public class HTTPInterface extends StorkInterface {
   public void init(Channel ch, ChannelPipeline pl) {
     pl.addLast(new HttpServerCodec());
     pl.addLast(new HttpContentCompressor());
-    pl.addLast(new HTTPDecoder());
     pl.addLast(new HTTPAdEncoder());
   }
 }

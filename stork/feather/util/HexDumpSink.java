@@ -9,7 +9,7 @@ import stork.feather.*;
  * an {@link OutputStream} or, by default, to {@link #System.out}. This is used
  * for testing Feather {@code Tap}s.
  */
-public class HexDumpSink extends Sink {
+public class HexDumpSink extends Sink<Resource> {
   private PrintStream out;
   private boolean first = true;
 
@@ -17,6 +17,7 @@ public class HexDumpSink extends Sink {
    * Create a {@code HexDumpSink} that prints to {@link #System.out}.
    */
   public HexDumpSink() {
+    super(Resource.ANONYMOUS);
     out = System.out;
   }
 
@@ -27,9 +28,10 @@ public class HexDumpSink extends Sink {
    * @throws NullPointerException if {@code out} is {@code null}.
    */
   public HexDumpSink(OutputStream out) {
+    super(Resource.ANONYMOUS);
     if (out == null)
       throw new NullPointerException();
-    this.out = new PrintWriter(out);
+    this.out = new PrintStream(out);
   }
 
   /**
@@ -38,13 +40,14 @@ public class HexDumpSink extends Sink {
    * @param out the {@code PrintWriter} to write to.
    * @throws NullPointerException if {@code out} is {@code null}.
    */
-  public HexDumpSink(PrintWriter out) {
+  public HexDumpSink(PrintStream out) {
+    super(Resource.ANONYMOUS);
     if (out == null)
       throw new NullPointerException();
     this.out = out;
   }
 
-  public Bell<?> initialize(Relative<Resource> resource) {
+  public Bell<Resource> initialize(Relative<Resource> resource) {
     if (first)
       out.println();
     first = false;

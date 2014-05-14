@@ -15,17 +15,22 @@ import stork.scheduler.*;
 // Basic TCP interface.
 
 public class TCPInterface extends StorkInterface {
+  private URI uri;
+
   public TCPInterface(Scheduler s, URI uri) {
-    super(s, uri);
+    super(s);
+    this.uri = uri;
   }
+
+  public String address() { return uri.host(); }
 
   public String name() { return "TCP"; }
 
   public void init(ServerChannel channel) {
-    channel.pipeline().addLast(new AdCodec());
+    channel.pipeline().addLast(new AdDecoder());
   }
 
   public int port(URI uri) {
-    return 57024;
+    return uri.port() > 0 ? uri.port() : 57024;
   }
 }

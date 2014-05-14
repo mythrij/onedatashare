@@ -31,7 +31,7 @@ public abstract class PipeElement<R extends Resource> {
   /** The root {@code Resource} of this {@code PipeElement}. */
   public final R root;
 
-  public PipeElement(Resource root) { this.root = root; }
+  public PipeElement(R root) { this.root = root; }
 
   /**
    * This is called once the pipeline has been assembled to start the flow of
@@ -63,13 +63,13 @@ public abstract class PipeElement<R extends Resource> {
    * resume transfer after pausing. Implementors should assume this method will
    * only be called from a running state.
    */
-  public abstract void pause();
+  public void pause() { }
 
   /**
    * Resume the transfer after a pause. Implementors should assume this method
    * will only be called from a paused state.
    */
-  public abstract void resume();
+  public void resume() { }
 
   /**
    * Check if the transfer started; that is, if {@link #start()} has been
@@ -111,8 +111,8 @@ public abstract class PipeElement<R extends Resource> {
    * {@code path} relative to the root {@code Resource}. This simply delegates
    * to {@link #initialize(Relative)}.
    *
-   * @param path the relative path to the {@code Resource} which should be
-   * initialized.
+   * @param path the path to the {@code Resource} which should be initialized
+   * relative to the root.
    * @return A {@code Bell} which will ring when data for {@code path} is ready
    * to be drained, or {@code null} if data can begin being drained
    * immediately.
@@ -138,7 +138,7 @@ public abstract class PipeElement<R extends Resource> {
    * immediately.
    * @throws Exception (via bell) if the resource cannot be initialized.
    */
-  public abstract Bell<?> initialize(Relative<Resource> resource);
+  public abstract Bell<?> initialize(Relative<R> resource);
 
   /**
    * Drain a {@link Slice} through the pipeline from the root {@code Resource}.
@@ -168,14 +168,14 @@ public abstract class PipeElement<R extends Resource> {
 
   /**
    * Drain a {@link Slice} through the pipeline for the given {@code
-   * Relative<Resource>}. This delegates to {@link #drain(Relative<Slice>)}.
+   * Relative<R>}. This delegates to {@link #drain(Relative<Slice>)}.
    *
    * @param resource the {@code Resource} the slice originated from.
    * @param slice a {@code Slice} being drained through the pipeline.
    * @throws IllegalStateException if this method is called when the pipeline
    * has not been initialized.
    */
-  public final void drain(Relative<Resource> resource, Slice slice) {
+  public final void drain(Relative<R> resource, Slice slice) {
     drain(resource.wrap(slice));
   }
 
@@ -199,18 +199,32 @@ public abstract class PipeElement<R extends Resource> {
    * @throws IllegalStateException if this method is called when the pipeline
    * has not been initialized.
    */
-  public abstract void finalize(Relative<Resource> resource);
+  public abstract void finalize(Relative<R> resource);
 
   /**
-   * Check if the pipeline is capable of draining slices in arbitrary order.
-   * The return value of this method should remain constant across calls.
+   * Finalize the transfer of data for the {@code Resource} specified by {@code
+   * path}. This simply delegates to {@link #finalize(Relative)}.
+   *
+   * @param path the path to the {@code Resource} which should be finalized
+   * relative to the root.
+   * @throws IllegalStateException if this method is called when the pipeline
+   * has not been initialized.
+   */
+  public final void finalize(Path path) {
+    finalize(root.selectRelative(path));
+  }
+
+  /**
+   * Check if the pipeline is capable of draining {@code Slice}s in arbitrary
+   * order. The return value of this method should remain constant across
+   * calls.
    *
    * @return {@code true} if transmitting slices in arbitrary order is
    * supported.
    * @throws IllegalStateException if this method is called when the pipeline
    * has not been initialized.
    */
-  public abstract boolean random();
+  public boolean random() { return false; }
 
   /**
    * Get the number of distinct {@code Resource}s the pipeline may be in the
@@ -227,5 +241,5 @@ public abstract class PipeElement<R extends Resource> {
    * @throws IllegalStateException if this method is called when the pipeline
    * has not been initialized.
    */
-  public abstract int concurrency();
+  public int concurrency() { return 1; }
 }

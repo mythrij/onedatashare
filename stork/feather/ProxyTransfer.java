@@ -17,7 +17,7 @@ implements Transfer<S,D> {
   // Used to buffer excess slices.
   private List<Slice> buffer = new LinkedList<Slice>();
 
-  private Bell<ProxyTransfer<S,D>> bell = new Bell<?>();
+  private Bell<ProxyTransfer<S,D>> bell = new Bell();
 
   private Bell<Sink> sinkBell = new Bell<Sink>() {
     protected void done(Sink sink) {
@@ -71,10 +71,12 @@ implements Transfer<S,D> {
   }
 
   private final void checkIfWeCanStart() {
-    if (tap != null && sink != null) {
+    if (tap != null && sink != null) try {
       sink.start();
       tap.start();
       bell.ring(this);
+    } catch (Exception e) {
+      bell.ring(e);
     }
   }
 
@@ -179,19 +181,29 @@ implements Transfer<S,D> {
   }
 
   // Called by tap.
-  public Bell<?> initialize(Relative<Resource> r) {
-    return sink.initialize(r);
+  public Bell<S> initialize(Relative<S> r) {
+    try {
+      Bell<D> bell = sink.initialize((Relative<D>) r.wrap(sink.root));
+      if (bell == null)
+        return new Bell<S>().ring(r.object);
+      return bell.new ThenAs<S>(r.object);
+    } catch (Exception e) {
+      return new Bell<S>().ring(e);
+    }
+  }
+
+  // Called by tap.
+  public void finalize(Relative<S> r) {
+    try {
+      sink.finalize(r.wrap((D) sink.root));
+    } catch (Exception e) {
+      // TODO: How should we handle this?
+    }
   }
 
   // Called by tap.
   public void drain(Relative<Slice> slice) {
     sink.drain(slice);
-  }
-
-  // Called internally.
-  public void start() {
-    tap.start();
-    sink.start();
   }
 
   // Called internally.

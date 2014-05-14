@@ -17,26 +17,26 @@ import stork.feather.*;
  * operations concurrently, and ideal implementations would use an alternative
  * method.
  */
-public class LocalSession extends Session {
-  private ThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(10);
+public class LocalSession extends Session<LocalSession,LocalResource> {
+  private ThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(4);
+  final Path path;
 
-  /**
-   * Create a {@code LocalSession} with the system root as the session root.
-   */
-  public LocalSession() {
-    this(Path.ROOT);
+  /** Create a {@code LocalSession} at the system root. */
+  public LocalSession() { this(Path.ROOT); }
+
+  /** Create a {@code LocalSession} at {@code path}. */
+  public LocalSession(Path path) {
+    super(URI.create("file:").path(path));
+    this.path = path;
   }
 
-  /**
-   * Create a {@code LocalSession} with {@code path} as the session root.
-   */
-  public LocalSession(Path path) {
-    super(new URIBuilder().scheme("file").path(path));
+  public LocalResource select(Path path) {
+    return new LocalResource(this, path);
   }
 
   // A special runnable bell that will be scheduled with the executor, and will
   // cancel the queued task if the bell is cancelled.
-  private abstract class TaskBell<T> extends Bell<T> {
+  abstract class TaskBell<T> extends Bell<T> {
     private final Future future = executor.submit(new Runnable() {
       public final void run() {
         try {
@@ -59,67 +59,13 @@ public class LocalSession extends Session {
     }
   }
 
-  public Bell doMkdir(Resource resource) {
-    final File file = new File(resource.uri().path().toString());
-    return new TaskBell() {
-      public void task() {
-        if (file.exists() && file.isDirectory())
-          throw new RuntimeException("Resource is a file.");
-        else if (!file.mkdirs())
-          throw new RuntimeException("Could not create directory.");
-      }
-    };
-  }
-
-  public Bell doRm(Resource resource) {
-    final File root = new File(resource.uri().path().toString());
-    return new TaskBell() {
-      public void task() {
-        remove(root);
-      }
-
-      // Recursively remove files.
-      private void remove(File file) {
-        if (isCancelled()) {
-          throw new CancellationException();
-        } if (!file.exists()) {
-          if (file == root)
-            throw new RuntimeException("Resource does not exist.");
-        } else {
-          // If not a symlink and is a directory, delete contents.
-          if (file.getCanonicalFile().equals(file) && file.isDirectory())
-            for (File f : file.listFiles()) delete(f);
-          if (!file.delete() && file == root)
-            throw new RuntimeException("Resource could not be deleted.");
-        }
-      }
-    };
-  }
-
-  public Bell doStat(Resource resource) {
-    final File file = new File(resource.uri().path().toString());
-    return new TaskBell<Stat>() {
-      public void task() {
-        if (!file.exists())
-          throw new RuntimeException("Resource does not exist.");
-
-        Stat stat = new Stat(file.getName());
-        stat.size = file.length();
-        stat.setFiles(file.list());
-        stat.time = file.lastModified();
-
-        ring(stat);
-      }
-    };
-  }
-
   public static void main(String[] args) {
-    new LocalSession().stat("/home/bwross").promise(new Bell<Stat>() {
+    new LocalSession().select(Path.create("/home/bwross")).stat().new Then() {
       public void done(Stat stat) {
-        System.out.println(stork.ad.Ad.marshal(stat));
+        System.out.println(stat);
       } public void fail(Exception e) {
         e.printStackTrace();
       }
-    });
+    };
   }
 }

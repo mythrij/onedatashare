@@ -24,8 +24,8 @@ import stork.feather.util.*;
 public abstract class Path {
   private transient int hash = 0;
 
-  private static final Intern<Path> INTERN = new Intern<Path>();
-  private static final String[] EMPTY_SEGMENT_ARRAY = new String[0];
+  static final Intern<Path> INTERN = new Intern<Path>();
+  static final String[] EMPTY_SEGMENT_ARRAY = new String[0];
 
   // Paths can only be constructed in this package. This isn't class private
   // because URI extends Path and is in a separate source file.
@@ -308,10 +308,8 @@ public abstract class Path {
   }
 
   /**
-   * Return the first glob segment of this {@code Path}. That is, return the
-   * longest prefix of this {@code Path} that is not a glob {@code Path}. If
-   * the {@code Path} is already a non-glob {@code Path}, this {@code Path} is
-   * returned.
+   * Return the first glob segment of this {@code Path}.  If the {@code Path}
+   * is a trunk {@code Path}, this {@code Path} is returned.
    *
    * @return The non-glob prefix {@code Path} of this {@code Path}.
    */
@@ -323,13 +321,28 @@ public abstract class Path {
   }
 
   /**
+   * Return the trunk of this {@code Path}. That is, return the longest prefix
+   * of this {@code Path} that is not a glob {@code Path}. If the {@code Path}
+   * is already a trunk {@code Path}, this {@code Path} is returned.
+   *
+   * @return The trunk of this {@code Path}.
+   */
+  public Path trunk() {
+    if (isRoot())
+      return this;
+    Path trunk = up().trunk();
+    return (isGlob()) ? trunk : this;
+  }
+
+  /**
    * Check if this {@code Path} covers the given {@code Path}.
    *
    * @return {@code true} if this {@code Path} covers {@code path}; {@code
    * false} otherwise.
    */
   public boolean covers(Path path) {
-    
+    // TODO
+    return false;
   }
 
   /**
@@ -339,6 +352,22 @@ public abstract class Path {
    * @return The number of segments in the {@code Path}.
    */
   public int length() { return up().length()+1; }
+
+  /**
+   * Truncate the {@code Path} to the given {@code length}.
+   */
+  public Path truncate(int length) {
+    if (length < 0)
+      throw new IllegalArgumentException();
+    if (length == 0)
+      return root();
+    int pos = length();
+    if (length >= pos)
+      return this;
+    return up().truncate(length, pos-1);
+  } private Path truncate(int length, int pos) {
+    return (length >= pos) ? this : truncate(length, pos-1);
+  }
 
   /**
    * Convert an escaped glob {@code String} into a regular expression. The
@@ -448,8 +477,8 @@ class RootPath extends Path {
   public boolean isRoot() { return true; }
   public boolean isAbsolute() { return true; }
   public Path appendTo(Path path) { return path; }
-  public boolean matches(Path p) { return p == this; }
-  public boolean equals(Path p) { return p == this; }
+  public boolean segmentMatches(Path p) { return p == this; }
+  public boolean segmentEquals(Path p) { return p == this; }
 }
 
 class DotPath extends RootPath {
@@ -477,9 +506,9 @@ class DotPath extends RootPath {
   public String name(boolean e) { return ".."; }
   public boolean isAbsolute() { return false; }
   public Path appendTo(Path path) { return path.up(depth); }
-  public boolean matches(Path p) { return equals(p); }
+  public boolean segmentMatches(Path p) { return equals(p); }
 
-  public boolean equals(Path p) {
+  public boolean segmentEquals(Path p) {
     return (p instanceof DotPath) && ((DotPath)p).depth == depth;
   }
 
@@ -496,6 +525,7 @@ class LiteralPath extends Path {
   protected final String name;
   protected final Path up;
 
+  // Name must be unescaped.
   public LiteralPath(Path up, String name) {
     this.up = up;
     this.name = name;
@@ -503,11 +533,9 @@ class LiteralPath extends Path {
 
   public Path up() { return up; }
 
-  protected Path appendTo(Path path) {
-    path = up.appendTo(path);
-    if (path.equals(up))
-      return this;
-    return Path.intern(new LiteralPath(path, name));
+  public Path appendTo(Path path) {
+    path = new LiteralPath(up, name);
+    return Path.INTERN.intern(path);
   }
 
   public String name(boolean encode) {
@@ -535,11 +563,10 @@ class GlobPath extends Path {
   protected final String name;
   protected Pattern pattern;
 
-  // Name must be unescaped.
+  // Name must be escaped.
   public GlobPath(Path up, String name) {
     this.up = up;
     this.name = name;
-    this.pattern = nameToRegex(name);
   }
 
   public GlobPath(Path up, String name, Pattern pattern) {
@@ -550,6 +577,10 @@ class GlobPath extends Path {
 
   public Path up() { return up; }
 
+  public String name(boolean encode) {
+    return encode ? name: URI.decode(name);
+  }
+
   private synchronized Pattern pattern() {
     if (pattern != null)
       return pattern;
@@ -558,12 +589,19 @@ class GlobPath extends Path {
 
   public boolean isGlob() { return true; }
 
-  protected Path appendCloneTo(Path path) {
-    return new GlobPath(path, name, pattern);
+  public Path appendTo(Path path) {
+    path = new GlobPath(up, name);
+    return Path.INTERN.intern(path);
   }
 
-  public boolean matches(Path path) {
+  public boolean segmentMatches(Path path) {
     return pattern().matcher(path.name(true)).matches();
+  }
+
+  public boolean segmentEquals(Path path) {
+    if (path instanceof GlobPath)
+      return name.equals(path.name(false));
+    return name(true).equals(path.name(true));
   }
 }
 

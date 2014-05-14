@@ -119,7 +119,7 @@ public class Slice {
    * @param offset the offset to set.
    * @return A {@code Slice} based on this one positioned at {@code offset}.
    */
-  public long offset(long offset) {
+  public Slice offset(long offset) {
     return (offset == this.offset) ? this : new Slice(buffer, offset);
   }
 

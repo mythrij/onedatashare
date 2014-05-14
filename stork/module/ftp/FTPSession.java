@@ -13,8 +13,6 @@ import stork.util.*;
  */
 public class FTPSession extends Session<FTPSession, FTPResource> {
   transient FTPChannel channel;
-
-  // Transient state related to the channel configuration.
   transient boolean mlstOptsAreSet = false;
 
   /**
@@ -22,53 +20,53 @@ public class FTPSession extends Session<FTPSession, FTPResource> {
    * and the authentication factor {@code cred}.
    */
   public FTPSession(URI uri, Credential cred) {
-    super(new FTPResource(this), uri, cred);
+    super(uri, cred);
+  }
+
+  public FTPResource select(Path path) {
+    return new FTPResource(this, path);
   }
 
   public Bell<FTPSession> initialize() {
-    final Bell bell = new Bell();
+    return new Bell<Object>() {{
+      String user = "anonymous";
+      String pass = "";
 
-    String user = "anonymous";
-    String pass = "";
+      // Initialize connection to server.
+      channel = new FTPChannel(uri);
 
-    // Initialize connection to server.
-    channel = new FTPChannel(uri);
-
-    // If the channel is closed by the server, finalize the session.
-    channel.onClose().new Promise() {
-      public void always() { FTPSession.this.finalize(); }
-    };
-
-    // Pull userinfo from URI.
-    if (uri.username() != null)
-      user = uri.username();
-    if (uri.password() != null)
-      pass = uri.password();
-
-    // Act depending on the credential type.
-    if (credential == null) {
-      channel.authorize(user, pass).promise(bell);
-    } else if (credential instanceof StorkGSSCred) {
-      StorkGSSCred cred = (StorkGSSCred) credential;
-      channel.authenticate(cred.data()).new Promise(bell) {
-        public void done() {
-          channel.authorize(":globus-mapping:", pass).promise(bell);
-        }
+      // If the channel is closed by the server, finalize the session.
+      channel.onClose().new Promise() {
+        public void always() { FTPSession.this.finalize(); }
       };
-    } else if (credential instanceof StorkUserinfo) {
-      StorkUserinfo cred = (StorkUserinfo) credential;
-      user = cred.getUser();
-      pass = cred.getPass();
-      channel.authorize(user, pass).promise(bell);
-    } else {
-      // Unsupported credential...
-      bell.ring(new IllegalArgumentException());
-    }
 
-    // When the bell is rung, ring the returned bell with this session.
-    return bell.new PromiseAs<FTPSession>() {
-      public FTPSession convert(Object o) { return FTPSession.this; }
-    };
+      // Pull userinfo from URI.
+      if (uri.username() != null)
+        user = uri.username();
+      if (uri.password() != null)
+        pass = uri.password();
+
+      // Act depending on the credential type.
+      if (credential == null) {
+        channel.authorize(user, pass).promise(this);
+      } else if (credential instanceof StorkGSSCred) {
+        StorkGSSCred cred = (StorkGSSCred) credential;
+        final String p = pass;
+        channel.authenticate(cred.data()).new Promise() {
+          public void done() {
+            channel.authorize(":globus-mapping:", p).promise(this);
+          }
+        };
+      } else if (credential instanceof StorkUserinfo) {
+        StorkUserinfo cred = (StorkUserinfo) credential;
+        user = cred.getUser();
+        pass = cred.getPass();
+        channel.authorize(user, pass).promise(this);
+      } else {
+        // Unsupported credential...
+        ring(new IllegalArgumentException());
+      }
+    }}.new ThenAs<FTPSession>(FTPSession.this);
   }
 
   public void finalize() {

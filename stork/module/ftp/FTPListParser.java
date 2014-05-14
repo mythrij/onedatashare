@@ -42,8 +42,8 @@ public class FTPListParser extends Bell<Stat> {
   /**
    * A sink for data channel-based listing.
    */
-  public Sink sink() {
-    return new Sink() {
+  public Sink<Resource> sink() {
+    return new Sink<Resource>(Resource.ANONYMOUS) {
       public void drain(Relative<Slice> slice) {
         if (slice.isRoot())
           write(slice.object.asBytes());

@@ -44,8 +44,8 @@ public abstract class StorkInterface {
     if (proto.equals("tcp"))
       return new TCPInterface(scheduler, uri);
     if (proto.equals("http") || proto.equals("https"))
-      return HTTPInterface.register(scheduler, uri);
-    throw new RuntimeException("Unsupported interface scheme: "+p);
+      return new HTTPInterface(scheduler, uri);
+    throw new RuntimeException("Unsupported interface scheme: "+proto);
   }
 
   /**
@@ -106,7 +106,7 @@ public abstract class StorkInterface {
    * @param throwable a {@code Throwable} to return an ad representing.
    * @return An ad representing {@code throwable}.
    */
-  public static final Ad errorToAd(final Throwable throwable) {
+  public static Ad errorToAd(final Throwable throwable) {
     if (throwable == null) {
       return errorToAd(new NullPointerException());
     } return Ad.marshal(new Object() {

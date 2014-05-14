@@ -5,9 +5,12 @@ import java.util.*;
 import java.io.*;
 import java.nio.file.*;
 
+import io.netty.bootstrap.*;
 import io.netty.buffer.*;
 import io.netty.channel.*;
 import io.netty.channel.socket.*;
+import io.netty.channel.socket.nio.*;
+import io.netty.channel.nio.*;
 import io.netty.handler.codec.*;
 import io.netty.handler.codec.http.*;
 import io.netty.handler.ssl.*;
@@ -39,8 +42,8 @@ public class HTTPServer {
     new HashMap<InetSocketAddress, HTTPServer>();
 
   // Map method and path to route handler.
-  private Map<String,Map<Path,Route>> routes =
-    new HashMap<String,Map<Path,Route>>();
+  private Map<HttpMethod,Map<Path,Route>> routes =
+    new HashMap<HttpMethod,Map<Path,Route>>();
 
   /**
    * Return an {@code HTTPServer} bound to the given host and port. If an
@@ -59,9 +62,10 @@ public class HTTPServer {
   private HTTPServer(InetSocketAddress isa) {
     ServerBootstrap sb = new ServerBootstrap();
     sb.channel(NioServerSocketChannel.class);
-    sb.group(acceptor, new NioEventLoopGroup());
+    sb.group(new NioEventLoopGroup());
     sb.childHandler(new ChannelInitializer<ServerSocketChannel>() {
       protected void initChannel(ServerSocketChannel ch) {
+        ChannelPipeline pl = ch.pipeline();
         pl.addLast(new HttpServerCodec());
         pl.addLast(new RequestHandler());
       }
@@ -76,10 +80,11 @@ public class HTTPServer {
   private synchronized void addRoute(String[] methods, Route route) {
     if (methods == null || methods.length == 0) {
       methods = new String[] { null };
-    } for (String m : methods) {
-      List<Route> rm = routes.get(m);
+    } for (String ms : methods) {
+      HttpMethod m = HttpMethod.valueOf(ms);
+      Map<Path,Route> rm = routes.get(m);
       if (rm == null)
-        routes.add(method, rm = new HashMap<Path,Route>());
+        routes.put(m, rm = new HashMap<Path,Route>());
       rm.put(route.prefix, route);
     }
   }
@@ -98,8 +103,8 @@ public class HTTPServer {
      * null}, this route is matched against any method.
      */
     public Route(URI uri, String... method) {
-      this.prefix = (prefix == null) ? Path.ROOT : prefix;
-      create(uri.host(), uri.port()).addRoute(method, this);
+      this.prefix = (uri.path() == null) ? Path.ROOT : uri.path();
+      create(uri.host(), port(uri)).addRoute(method, this);
     }
 
     /**
@@ -115,16 +120,16 @@ public class HTTPServer {
    * found, it repeats the procedure for the parent of the path. This is done
    * until a route is found or the path has no parent.
    */
-  private Route route(String method, Path path) {
+  private Route route(HttpMethod method, Path path) {
     Map<Path,Route> mm = routes.get(method);
     Map<Path,Route> nm = routes.get(null);
 
     if (mm == null && nm == null) {
       return null;
     } while (true) {
-      if (mm != null && mm.hasKey(path))
+      if (mm != null && mm.containsKey(path))
         return mm.get(path);
-      if (nm != null && nm.hasKey(path))
+      if (nm != null && nm.containsKey(path))
         return mm.get(path);
       if (!path.isRoot())
         path = path.up();
@@ -146,7 +151,7 @@ public class HTTPServer {
         ctx.close();
     }
 
-    public void channelRead(ChannelHandlerContext ctx, HttpObject msg) {
+    public void channelRead(final ChannelHandlerContext ctx, HttpObject msg) {
       boolean done = false;
 
       // Handle routing and wrapping request headers.
@@ -155,11 +160,15 @@ public class HTTPServer {
         URI uri = URI.create(head.getUri());
 
         // Run the requested path through the router.
-        route = route(uri.path());
+        Route route = route(head.getMethod(), uri.path());
         if (route == null)
           throw new HTTPException(NOT_FOUND);
 
-        request = new HTTPRequest(uri, ctx, head);
+        request = new HTTPRequest(head) {
+          public void toNetty(HttpObject o) {
+            ctx.write(o);
+          }
+        };
 
         done = (request.size() <= 0);
       }
@@ -167,79 +176,21 @@ public class HTTPServer {
       // Handle request content.
       if (msg instanceof HttpContent) {
         HttpContent c = (HttpContent) msg;
-        request.write(c.content());
+        request.translate(c.content());
 
-        if (msg instanceof LastHttpContent)
-          done = true;
+        done = done || (msg instanceof LastHttpContent);
       }
 
       // Finalize the request and prepare for next request.
       if (done) {
-        request.finish();
+        request.close();
         request = null;
       }
     }
 
     public void read(ChannelHandlerContext ctx) {
-      if (request != null && request.ready())
+      if (request == null || request.ready)
         ctx.read();
-    }
-
-    // Parse body chunks.
-    public void handleBody(HttpContent body) {
-      String type = head.headers().get("Content-Type");
-      String data = body.content().toString(CharsetUtil.UTF_8);
-      System.out.println("DATA: "+data);
-      if (type == null)
-        ad.addAll(Ad.parse(data));
-      else if (type.startsWith("application/x-www-form-urlencoded"))
-        ad.addAll(queryToAd(data));
-      else if (type.startsWith("multipart"))
-        throw new RuntimeException("multipart messages are not supported");
-      else
-        ad.addAll(Ad.parse(data));
-      done = true;
-    }
-
-    public void decode(ChannelHandlerContext ctx, HttpObject h, List out) {
-      // Resolve route and create request object.
-      if (h instanceof HttpRequest) {
-        HttpRequest req = (HttpRequest) h;
-        route.handle(new HTTPRequest() {
-        });
-      }
-
-      // Handle body.
-      if (h instanceof HttpContent) {
-
-      }
-
-      // Handle end of request.
-      if (h instanceof LastHttpContent) {
-        
-      }
-    }
-
-    private void writeFile(File file, ChannelHandlerContext ctx) {
-      if (file.isDirectory()) {
-        file = new File(file, "index.html");
-      } if (!file.exists()) {
-        ctx.writeAndFlush(new DefaultFullHttpResponse(HTTP_1_1, NOT_FOUND));
-      } else try {
-        HttpResponse r = new DefaultHttpResponse(HTTP_1_1, OK);
-        RandomAccessFile raf = new RandomAccessFile(file, "r");
-        setContentLength(r, raf.length());
-
-        String mt = Files.probeContentType(Paths.get(file.getPath()));
-        if (mt != null) r.headers().set(CONTENT_TYPE, mt);
-
-        ctx.write(r);
-        ctx.write(new DefaultFileRegion(raf.getChannel(), 0, raf.length()));
-        ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
-      } catch (Exception e) {
-        e.printStackTrace();
-        ctx.writeAndFlush(new DefaultFullHttpResponse(HTTP_1_1, INTERNAL_SERVER_ERROR));
-      }
     }
 
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable t) {
@@ -269,7 +220,9 @@ public class HTTPServer {
     }
   }
 
-  public int defaultPort() {
-    return https ? 443 : 80;
+  public static int port(URI uri) {
+    if (uri.port() > 0)
+      return uri.port();
+    return "https".equals(uri.scheme()) ? 443 : 80;
   }
 }
