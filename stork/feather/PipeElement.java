@@ -168,7 +168,7 @@ public abstract class PipeElement<R extends Resource> {
 
   /**
    * Drain a {@link Slice} through the pipeline for the given {@code
-   * Relative<R>}. This delegates to {@link #drain(Relative<Slice>)}.
+   * Relative<R>}. This delegates to {@link #drain(Relative)}.
    *
    * @param resource the {@code Resource} the slice originated from.
    * @param slice a {@code Slice} being drained through the pipeline.

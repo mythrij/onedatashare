@@ -88,7 +88,7 @@ list-packages:
 doc: $(JAVASRCS)
 	@$(JAVADOC) -classpath $(CLASSPATH) -d $(DOC) \
 	  -link http://docs.oracle.com/javase/7/docs/api \
-	  -verbose -sourcepath $(PROJECT) $(JAVASRCS)
+	  -sourcepath $(PROJECT) $(JAVASRCS)
 
 clean:
 	#$(RM) -rf build lib/$(PROJECT)-*.jar $(PROJECT).tar.gz bin/$(PROJECT)_* $(DOC)

@@ -160,7 +160,8 @@ public abstract class Path {
    * Path}.
    *
    * @param path an escaped {@code String} representation of a {@code Path}.
-   * @return 
+   * @return A {@code Path} with the {@code Path} represented by {@code path}
+   * appended.
    */
   public final Path append(String path) {
     return create(this, path);

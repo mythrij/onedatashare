@@ -6,7 +6,7 @@ import stork.feather.*;
 
 /**
  * A {@code Sink} which prints a hexadecimal representation of incoming data to
- * an {@link OutputStream} or, by default, to {@link #System.out}. This is used
+ * an {@link OutputStream} or, by default, to {@code System.out}. This is used
  * for testing Feather {@code Tap}s.
  */
 public class HexDumpSink extends Sink<Resource> {
@@ -14,7 +14,7 @@ public class HexDumpSink extends Sink<Resource> {
   private boolean first = true;
 
   /**
-   * Create a {@code HexDumpSink} that prints to {@link #System.out}.
+   * Create a {@code HexDumpSink} that prints to {@code System.out}.
    */
   public HexDumpSink() {
     super(Resource.ANONYMOUS);

@@ -90,18 +90,6 @@ public abstract class Sink<R extends Resource> extends PipeElement<R> {
    */
   public void finalize(Relative<R> resource) { }
 
-  /**
-   * {@code Sink} implementations can override this to handle initialization
-   * {@code Exception}s from upstream. By default, this method will throw the
-   * {@code Exception} back to the transfer mediator.
-   *
-   * @param path the path of the {@code Resource} which had an exception.
-   * @throws Exception if {@code error} was not handled.
-   */
-  //protected Bell<?> initialize(Relative<Exception> error) throws Exception {
-  //  throw error.getCause();
-  //}
-
   public boolean random() { return false; }
 
   public int concurrency() { return 1; }

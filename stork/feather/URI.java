@@ -522,7 +522,7 @@ public abstract class URI {
   /**
    * Return a URI based on this one with the given path segment appended.
    *
-   * @param segment the path segment to append, as an unescaped string
+   * @param name the literal name of the segment to append.
    * @return A URI based on this one with the given path segment appended.
    */
   public URI appendLiteral(String name) {

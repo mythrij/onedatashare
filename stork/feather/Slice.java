@@ -64,7 +64,6 @@ public class Slice {
    * offset.
    *
    * @param buffer a {@code ByteBuf} to wrap in a {@code Slice}.
-   * @param offset the offset of the {@code Slice}.
    */
   public Slice(ByteBuf buffer) {
     this(buffer, -1);

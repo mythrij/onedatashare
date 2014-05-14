@@ -1,4 +1,4 @@
-package stork.feather;
+package stork.feather.util;
 
 import java.lang.ref.*;
 import java.util.*;

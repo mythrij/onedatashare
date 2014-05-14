@@ -289,7 +289,7 @@ public class Bell<T> implements Future<T> {
 
   /**
    * A bell which is promised to the parent bell on instantiation, and performs
-   * a conversion using the {@link PromiseAs#convert(T)} method. This
+   * a conversion using the {@code convert(T)} method. This
    * simplifies the bell conversion chain pattern.
    *
    * @param <V> the supertype of objects this bell converts.
@@ -336,7 +336,7 @@ public class Bell<T> implements Future<T> {
   /**
    * A bell which will perform some operation after the parent bell rings. This
    * bell is very similar to a {@link ThenAs} bell, except it has the same type
-   * as its parent, and by default its {@link #then(T)} method will ring the
+   * as its parent, and by default its {@code then(T)} method will ring the
    * {@code Then} bell with the parent's value. If no {@code then(...)} methods
    * are overridden, this bell behaves identically to a {@link Promise}. This
    * class is useful if the parent's value is desired on success, but another
@@ -484,12 +484,11 @@ public class Bell<T> implements Future<T> {
   /**
    * Base class for bells whose resolution value depends on the resolution
    * values of a collection of other bells. Every time a wrapped bell rings,
-   * the method {@link MultiBell#check(Bell)} is called, which should return
-   * {@code true} if the passed bell should ring the multi-bell. If all the
-   * passed bells have rung and {@link MultiBell#check(Bell)} hasn't rung this
-   * bell, {@link MultiBell#end(Bell)} will be called, and is passed the last
-   * bell to ring.  If it does not ring the bell, this bell will be rung with
-   * {@code null}.
+   * the method {@code check(Bell)} is called, which should return {@code true}
+   * if the passed bell should ring the multi-bell. If all the passed bells
+   * have rung and {@code check(Bell)} hasn't rung this bell, {@code end(Bell)}
+   * will be called, and is passed the last bell to ring.  If it does not ring
+   * the bell, this bell will be rung with {@code null}.
    *
    * The default implementation rings with {@code null} when all of the wrapped
    * bells have rung.
@@ -555,7 +554,7 @@ public class Bell<T> implements Future<T> {
     protected void check(Bell<I> one) throws Throwable { }
 
     /**
-     * Used inside {@link #check(boolean)} to determine if all the bells have
+     * Used inside {@code check(Bell)} to determine if all the bells have
      * rung.
      *
      * @return {@code true} if all the bells have rung; {@code false} otherwise
