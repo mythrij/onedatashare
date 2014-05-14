@@ -8,6 +8,7 @@ import java.io.*;
 import io.netty.buffer.*;
 
 import stork.feather.*;
+import stork.feather.util.*;
 import stork.module.*;
 import stork.util.*;
 
