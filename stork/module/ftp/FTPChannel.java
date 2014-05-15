@@ -39,7 +39,7 @@ public class FTPChannel {
   private final Bell<Void> onClose = new Bell<Void>();
 
   // FIXME: We should use something system-wide.
-  private static EventLoopGroup group = new NioEventLoopGroup();
+  static EventLoopGroup group = new NioEventLoopGroup();
 
   // Used for GSS authentication.
   private final String host;
@@ -756,14 +756,16 @@ public class FTPChannel {
     return bell;
   }
 
-  // This method requests a lock on the channel and returns a special view of
-  // the channel once the lock request is satisfied. The special channel view
-  // will have exclusive use of the channel until unlocked (after which the
-  // channel lock will become unusable) or garbage collected. The channel
-  // should be unlocked as soon as the command sequence requiring synchronicity
-  // has been issued. Commands written to any other channels during this time
-  // will have their commands deferred and sent after the channel has been
-  // unlocked.
+  /**
+   * Instantiaing this class requests a lock on the channel and returns a
+   * special view of the channel once the lock request is satisfied. The
+   * special channel view will have exclusive use of the channel until unlocked
+   * (after which the channel lock will become unusable) or garbage collected.
+   * The channel should be unlocked as soon as the command sequence requiring
+   * synchronicity has been issued. Commands written to any other channels
+   * during this time will have their commands deferred and sent after the
+   * channel has been unlocked.
+   */
   public class Lock extends FTPChannel {
     public Lock() {
       super(FTPChannel.this);
@@ -863,10 +865,9 @@ public class FTPChannel {
      * Constructing this will automatically cause the given command to be
      * written to the server. Typically, the passed cmd will be a string, but
      * can be anything. The passed arguments will be stringified and
-     * concatenated with spaces for convenience. If cmd is null, nothing is
-     * actually written to the server and the command serves as a sort of
-     * "sync" for client code. Calling sync() on it will block until it has
-     * been reached in the pipeline.
+     * concatenated with spaces for convenience. If {@code verb} is {@code
+     * null}, nothing is actually written to the server, and the command bell
+     * will ring when all commands piped prior to the sync have completed.
      */
     public Command(Object verb, Object... args) {
       synchronized (data) {
@@ -878,6 +879,11 @@ public class FTPChannel {
     public synchronized final boolean isSync() {
       return isSync;
     }
+  }
+
+  /** Open a data channel using whatever method is appropriate. */
+  public Bell<FTPDataChannel> dataChannel() {
+    return null;
   }
 
   public static void main(String[] args) throws Exception {
