@@ -6,3 +6,5 @@
 *.dmp
 *.dap
 doc
+build
+bin/stork_*

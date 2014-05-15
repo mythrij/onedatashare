@@ -45,7 +45,7 @@ public class StorkServer extends Command {
     for (URI u : listen) try {
       // Fix shorthand URIs.
       if (u.scheme() == null)
-        u = new URI.Builder().scheme(u.path().name()).port(-1);
+        u = URI.EMPTY.scheme(u.path().name());
       StorkInterface si = StorkInterface.create(s, u);
       Log.info("Listening for ", si.name(), " connections on: "+si.address());
     } catch (Exception e) {

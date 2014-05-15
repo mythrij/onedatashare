@@ -34,18 +34,18 @@ public abstract class StorkInterface {
    * URI.
    */
   public static StorkInterface create(Scheduler scheduler, URI uri) {
-    uri = uri.makeImmutable();
     String proto = uri.scheme();
 
     if (proto == null)  // Hack for standalone scheme names.
-      proto = (uri = URI.create(uri+":")).scheme();
+      proto = (uri = URI.create(uri+"://")).scheme();
     if (proto == null)
       throw new RuntimeException("Invalid interface descriptor: "+uri);
     if (proto.equals("tcp"))
       return new TCPInterface(scheduler, uri);
     if (proto.equals("http") || proto.equals("https"))
       return new HTTPInterface(scheduler, uri);
-    throw new RuntimeException("Unsupported interface scheme: "+proto);
+    throw new RuntimeException(
+      "Unsupported interface scheme ("+proto+") in "+uri);
   }
 
   /**

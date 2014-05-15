@@ -377,6 +377,8 @@ public class Bell<T> implements Future<T> {
    * operation should be performed on failure.
    */
   public class Then extends ThenAs<T> {
+    public Then() { Bell.this.super(); }
+
     /**
      * This method will be called if the parent bell rings successfully. By
      * default, this method rings this bell with {@code done}.
