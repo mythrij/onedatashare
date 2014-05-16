@@ -227,7 +227,8 @@ public class Resource
   }
 
   /**
-   * Get metadata for this resource, which includes a list of subresources.
+   * Get metadata for this {@code Resource}, which includes a list of
+   * subresources.
    *
    * @return (via bell) A {@link Stat} containing resource metadata.
    * @throws Exception (via bell) if there was an error retrieving
@@ -244,13 +245,13 @@ public class Resource
    * cannot be created, or already exists and is not a directory, the returned
    * {@link Bell} will be resolved with an {@link Exception}.
    *
-   * @return (via bell) {@code null} if successful.
+   * @return (via bell) this {@code Resource} if successful.
    * @throws Exception (via bell) if the directory could not be created or
    * already exists and is not a directory.
    * @throws UnsupportedOperationException if creating directories is not
    * supported.
    */
-  public Bell mkdir() {
+  public Bell<R> mkdir() {
     throw new UnsupportedOperationException();
   }
 
@@ -263,7 +264,7 @@ public class Resource
    * @throws Exception (via bell) if the resource could not be fully removed.
    * @throws UnsupportedOperationException if removal is not supported.
    */
-  public Bell unlink() {
+  public Bell<R> unlink() {
     throw new UnsupportedOperationException();
   }
 
