@@ -90,7 +90,7 @@ public class LocalResource extends Resource<LocalSession,LocalResource> {
     };
   }
 
-  public LocalTap tap() {
+  public Tap<LocalResource> tap() {
     return new LocalTap(this);
   }
 }
