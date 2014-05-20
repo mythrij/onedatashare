@@ -189,7 +189,7 @@ public class Resource
    * @return A subresource relative to this {@code Resource}.
    */
   public final R select(Path path) {
-    return session.select(path.append(path));
+    return session.select(this.path.append(path));
   }
 
   /**
@@ -317,6 +317,10 @@ public class Resource
   public <D extends Resource<?,D>> Transfer<R,D> transferTo(D resource) {
     Sink sink = resource.sink();
     return tap().attach(sink);
+  }
+
+  public String toString() {
+    return session + " -> " + path;
   }
 
   public boolean equals(Object o) {

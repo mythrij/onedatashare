@@ -22,7 +22,7 @@ public class LocalResource extends Resource<LocalSession,LocalResource> {
   }
 
   // Get the File based on the path.
-  protected File file() {
+  public File file() {
     Path p = session.path.append(path);
     return new File(p.toString());
   }
@@ -53,13 +53,13 @@ public class LocalResource extends Resource<LocalSession,LocalResource> {
           throw new java.util.concurrent.CancellationException();
         } if (!file.exists()) {
           if (file == root)
-            throw new RuntimeException("Resource does not exist.");
+            throw new RuntimeException("Resource does not exist: "+file);
         } else try {
           // If not a symlink and is a directory, delete contents.
           if (file.getCanonicalFile().equals(file) && file.isDirectory())
             for (File f : file.listFiles()) remove(f);
           if (!file.delete() && file == root)
-            throw new RuntimeException("Resource could not be deleted.");
+            throw new RuntimeException("Resource could not be deleted: "+file);
         } catch (Exception e) {
           throw new RuntimeException(e);
         }
@@ -73,7 +73,7 @@ public class LocalResource extends Resource<LocalSession,LocalResource> {
         File file = file();
 
         if (!file.exists())
-          throw new RuntimeException("Resource does not exist.");
+          throw new RuntimeException("Resource does not exist: "+file);
 
         Stat stat = new Stat(file.getName());
         stat.size = file.length();

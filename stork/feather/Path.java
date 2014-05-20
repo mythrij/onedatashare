@@ -126,40 +126,43 @@ public abstract class Path {
   public Path root() { return isRoot() ? this : up().root(); }
 
   /**
-   * {@code Path}s should be created using this static method, which will take care of
-   * interning segments and unescaping segment names.
+   * Create a {@code Path} from an escaped {@code String}.
    *
-   * @param path an escaped string representation of a path. 
+   * @param path an escaped {@code String} representation of a {@code Path}.
    * @return The {@code Path} represented by {@code path}.
    */
   public static Path create(String path) {
-    return create(ROOT, path);
+    return create(null, path);
   }
 
-  private static Path create(Path par, String path) {
-    String[] ps = popSegment(path);
-    if (ps == null || ps[0].isEmpty())
-      return ROOT;
-    return (ps == null) ? par : create(par, ps[0]).append(ps[1]);
+  // Return an interned path based on an escaped path string.
+  private static Path create(Path parent, String path) {
+    String[] s = path.split("/+");
+    if (s.length == 0)
+      return (parent == null) ? ROOT : parent;
+    if (parent == null)
+      parent = (s[0].equals(".") || s[0].equals("..")) ? DOT : ROOT;
+    for (String ss : s)
+      parent = INTERN.intern(createSegment(parent, Intern.string(ss)));
+    return parent;
   }
 
-  // Helper method for trimming trailing slashes and splitting the last
-  // segment. This method returns null if the path represents the root
-  // directory. Otherwise, it returns an array containing the remaining path
-  // string and the last segment.
-  private static String[] popSegment(String p) {
-    int s, e = p.length()-1;
-    while (e > 0 && p.charAt(e) == '/') e--;  // Trim slashes.
-    if (e <= 0) return null;  // All slashes (or empty).
-    s = p.lastIndexOf('/', e);
-    if (s < 0)
-      return new String[] { "", p.substring(0, e+1) };
-    return new String[] { p.substring(0, s), p.substring(s+1, e+1) };
+  // Return an uninterned segment with the given parent.
+  private static Path createSegment(Path parent, String name) {
+    if (name.isEmpty())
+      return parent;
+    if (name.equals("."))
+      return parent;
+    if (name.equals(".."))
+      return parent.up();
+    if (name.contains("*"))
+      return new GlobPath(parent, name);
+    return new LiteralPath(parent, URI.decode(name));
   }
 
   /**
-   * Parse {@code path} as an escaped path string and append it to this {@code
-   * Path}.
+   * Parse {@code path} as an escaped {@code Path} {@code String} and append it
+   * to this {@code Path}.
    *
    * @param path an escaped {@code String} representation of a {@code Path}.
    * @return A {@code Path} with the {@code Path} represented by {@code path}
@@ -195,7 +198,7 @@ public abstract class Path {
       return this;
     if (name.equals(".."))
       return up();
-    return append(URI.encode(name));
+    return new LiteralPath(this, name);
   }
 
   /**
@@ -443,41 +446,31 @@ public abstract class Path {
   }
 
   /**
-   * Return an escaped string representation of this {@code Path}.
+   * Return an escaped {@code String} representation of this {@code Path}.
    *
-   * @return An escaped string representation of this {@code Path}.
+   * @return An escaped {@code String} representation of this {@code Path}.
    */
   public String toString() {
-    return (isRoot()) ? name() :
-           (up() == ROOT) ? "/"+name(true) : up()+"/"+name(true);
+    Path up = up();
+    if (!up.isRoot())
+      return up+"/"+name(false);
+    if (up.isAbsolute())
+      return "/"+name(false);
+    return up+"/"+name(false);
   }
 
   public static void main(String args[]) throws Exception {
-    Path p1 = Path.create("/home/globus");
-    while (true) {
-      p1 = p1.append(p1);
-      System.out.println(p1.length());
-    }
-
-    /*
-    BufferedReader r = new BufferedReader(new InputStreamReader(System.in));
-
-    String sp = r.readLine();
-    Path p = Path.create(sp);
-    while (true) {
-      sp = r.readLine();
-      p = p.append(Path.create(sp));
-      System.out.println(p);
-    }
-    */
+    System.out.println(Path.create(args[0]));
   }
 }
 
 class RootPath extends Path {
   public Path up() { return this; }
   public String name(boolean e) { return "/"; }
+  public String toString() { return "/"; }
   public int length() { return 0; }
   public boolean isRoot() { return true; }
+  public boolean isGlob() { return false; }
   public boolean isAbsolute() { return true; }
   public Path appendTo(Path path) { return path; }
   public boolean segmentMatches(Path p) { return p == this; }
@@ -508,6 +501,7 @@ class DotPath extends RootPath {
   public int length() { return depth; }
   public String name(boolean e) { return ".."; }
   public boolean isAbsolute() { return false; }
+  public boolean isGlob() { return false; }
   public Path appendTo(Path path) { return path.up(depth); }
   public boolean segmentMatches(Path p) { return equals(p); }
 
@@ -537,7 +531,7 @@ class LiteralPath extends Path {
   public Path up() { return up; }
 
   public Path appendTo(Path path) {
-    path = new LiteralPath(up, name);
+    path = new LiteralPath(up.appendTo(path), name);
     return Path.INTERN.intern(path);
   }
 
@@ -593,7 +587,7 @@ class GlobPath extends Path {
   public boolean isGlob() { return true; }
 
   public Path appendTo(Path path) {
-    path = new GlobPath(up, name);
+    path = new GlobPath(up.appendTo(path), name);
     return Path.INTERN.intern(path);
   }
 

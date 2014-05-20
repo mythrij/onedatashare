@@ -26,12 +26,16 @@ public class LocalSession extends Session<LocalSession,LocalResource> {
 
   /** Create a {@code LocalSession} at {@code path}. */
   public LocalSession(Path path) {
-    super(URI.create("file:///").path(path));
+    super(URI.create("file:"+path));
     this.path = path;
   }
 
   public LocalResource select(Path path) {
     return new LocalResource(this, path);
+  }
+
+  protected void finalize() {
+    executor.shutdown();
   }
 
   // A special runnable bell that will be scheduled with the executor, and will
@@ -57,19 +61,5 @@ public class LocalSession extends Session<LocalSession,LocalResource> {
       if (t instanceof CancellationException)
         future.cancel(false);
     }
-  }
-
-  public static void main(String[] args) {
-    String sp = args.length > 0 ? args[0] : "/home/bwross/test";
-    final Path path = Path.create(sp);
-    LocalSession s = new LocalSession(path);
-
-    s.root().stat().new Then() {
-      public void done(Stat stat) {
-        System.out.println(stork.ad.Ad.marshal(stat));
-      } public void fail(Exception e) {
-        System.out.println(path+" does not exist.");
-      }
-    };
   }
 }

@@ -15,8 +15,10 @@ import stork.feather.*;
 public abstract class Crawler<R extends Resource<?,R>> extends Bell<R> {
   private final R root;
   private final Path pattern;
+  private final boolean recursive;
   private int mode = 0;
   private boolean started = false;
+  private volatile int count = 0;
 
   /**
    * Create a {@code Crawler} which will perform operations on the physical
@@ -40,7 +42,8 @@ public abstract class Crawler<R extends Resource<?,R>> extends Bell<R> {
    */
   public Crawler(R resource, boolean recursive) {
     root = resource.trunk();
-    pattern = recursive ? resource.path.append("**") : resource.path;
+    pattern = resource.path;
+    this.recursive = recursive;
   }
 
   /** Start the crawling process. */
@@ -50,7 +53,8 @@ public abstract class Crawler<R extends Resource<?,R>> extends Bell<R> {
     started = true;
   }
 
-  private void crawl(final Relative<R> resource) {
+  private synchronized void crawl(final Relative<R> resource) {
+    count++;
     if (!isDone()) resource.object.stat().new Promise() {
       public void done(Stat stat) {
         // Don't continue if crawling has completed.
@@ -60,17 +64,20 @@ public abstract class Crawler<R extends Resource<?,R>> extends Bell<R> {
         // Perform the operation on the resource.
         operate(resource);
 
-        // The pattern we'll use for matching below.
-        Path tp = pattern.truncate(resource.path.length()+1);
+        // The pattern we'll use for matching below. TODO
+        //Path tp = pattern.truncate(resource.path.length()+1);
 
         // Crawl subresources that match the path.
         if (stat.files != null) for (Stat s : stat.files) {
-          Path sp = resource.path.append(s.name);
-          if (tp.matches(sp))
-            crawl(root.selectRelative(sp));
+          Path sp = resource.path.appendLiteral(s.name);
+          crawl(root.selectRelative(sp));
         }
       } public void fail(Throwable t) {
         Crawler.this.ring(t);
+      } public void always() {
+        count--;
+        if (count == 0)
+          Crawler.this.ring(root);
       }
     };
   }
@@ -82,4 +89,23 @@ public abstract class Crawler<R extends Resource<?,R>> extends Bell<R> {
    * @param resource the {@code Resource} to operate one.
    */
   protected abstract void operate(Relative<R> resource);
+
+  public static void main(String[] args) {
+    String sp = args.length > 0 ? args[0] : "/home/bwross/test";
+    final Path path = Path.create(sp);
+    final LocalSession s = new LocalSession(path);
+
+    new Crawler<LocalResource>(s.root(), true) {
+      public void operate(Relative<LocalResource> r) {
+        System.out.println("Crawling: "+r.object.file());
+      } public void done() {
+        System.out.println("Done crawling.");
+      } public void fail(Throwable t) {
+        System.out.println("Crawling failed: "+t);
+        t.printStackTrace();
+      } public void always() {
+        s.close();
+      }
+    }.start();
+  }
 }

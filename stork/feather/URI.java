@@ -754,7 +754,6 @@ public class URI {
     for (int offset = 0; offset < length;) {
       int cp = string.codePointAt(offset);
       if (shouldEncode(cp))
-      if (cp < ' ' || cp > '~' || RESERVED.get(cp))
         sb.append(encode(cp));
       else
         sb.appendCodePoint(cp);
