@@ -40,27 +40,6 @@ public class FTPListParser extends Bell<Stat> {
     list_type = type;
   }
 
-  /**
-   * A sink for data channel-based listing.
-   */
-  public Sink<Resource> sink() {
-    return new Sink<Resource>(Resource.ANONYMOUS) {
-      public void drain(Relative<Slice> slice) {
-        if (slice.isRoot())
-          write(slice.object.asBytes());
-      }
-
-      public void finalize(Relative<Resource> resource) {
-        if (resource.isRoot())
-          finish();
-      }
-
-      public void stop() {
-        finish();
-      }
-    };
-  }
-
   // Check if a file should be ignored.
   public boolean ignoreName(String name) {
     return name == null || name.equals(".") || name.equals("..");

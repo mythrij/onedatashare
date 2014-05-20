@@ -9,7 +9,7 @@ import java.util.*;
  * @param <S> the source {@code Resource} type.
  * @param <D> the destination {@code Resource} type.
  */
-public class ProxyTransfer<S extends Resource, D extends Resource>
+public class ProxyTransfer<S extends Resource<?,S>, D extends Resource<?,D>>
 extends Transfer<S,D> {
   private Tap<S> tap;
   private Sink<D> sink;

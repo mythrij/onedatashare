@@ -64,7 +64,7 @@ public final class Resources {
       public Bell<Stat> stat() {
         return new Bell<Stat>().ring(stat);
       } public Tap<AnonymousResource> tap() {
-        return (Tap<AnonymousResource>) Taps.fromSlice(this, slice);
+        return Taps.fromSlice((AnonymousResource) this, slice);
       }
     };
   }

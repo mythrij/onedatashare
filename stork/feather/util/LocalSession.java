@@ -60,14 +60,15 @@ public class LocalSession extends Session<LocalSession,LocalResource> {
   }
 
   public static void main(String[] args) {
-    LocalSession s = new LocalSession();
-    LocalResource r = s.select("/home/bwross/test");
+    String sp = args.length > 0 ? args[0] : "/home/bwross/test";
+    final Path path = Path.create(sp);
+    LocalSession s = new LocalSession(path);
 
-    r.stat().new Then() {
+    s.root().stat().new Then() {
       public void done(Stat stat) {
         System.out.println(stork.ad.Ad.marshal(stat));
       } public void fail(Exception e) {
-        e.printStackTrace();
+        System.out.println(path+" does not exist.");
       }
     };
   }

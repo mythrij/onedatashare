@@ -11,7 +11,7 @@ package stork.feather;
  *
  * @param <R> The root {@code Resource} type.
  */
-public abstract class ProxyElement<R extends Resource> {
+public abstract class ProxyElement<R extends Resource<?,R>> {
   /** The root {@code Resource} of this {@code ProxyElement}. */
   public final R root;
 
@@ -97,9 +97,10 @@ public abstract class ProxyElement<R extends Resource> {
   /**
    * Start the flow of data.
    *
-   * @return A {@code Bell} which will ring once the flow of data may begin.
+   * @return A {@code Bell} which will ring with the root {@code Resource} once
+   * the flow of data may begin.
    */
-  protected Bell<?> start() { return new Bell().ring(); }
+  protected Bell<R> start() { return new Bell<R>().ring(root); }
 
   /** Stop the flow of data permanently. */
   protected void stop() { }

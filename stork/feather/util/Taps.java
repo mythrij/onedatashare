@@ -31,12 +31,12 @@ public final class Taps {
    * Create a {@code Tap} which emits the given {@code Slice} for the given
    * {@code Resource} {@code root}.
    */
-  public static <R extends Resource>
-  Tap<? super R> fromSlice(R root, Slice slice) {
+  public static <R extends Resource<?,R>>
+  Tap<R> fromSlice(R root, Slice slice) {
     final Slice s = slice;
     return new Tap<R>(root) {
       private final Tap<R> thisTap = this;
-      public Bell<?> start() {
+      public Bell<R> start() {
         initialize(Path.ROOT).new Promise() {
           public void done() {
             if (s != null) drain(s);

@@ -43,18 +43,16 @@ public abstract class Crawler<R extends Resource<?,R>> extends Bell<R> {
     pattern = recursive ? resource.path.append("**") : resource.path;
   }
 
-  /**
-   * Start the crawling process.
-   */
+  /** Start the crawling process. */
   public synchronized void start() {
     if (!started)
-      crawl(root);
+      crawl(root.selectRelative(Path.ROOT));
     started = true;
   }
 
-  private void crawl(final R resource) {
-    if (!isDone()) resource.subresources().new Promise() {
-      public void done(Map<String,R> subs) {
+  private void crawl(final Relative<R> resource) {
+    if (!isDone()) resource.object.stat().new Promise() {
+      public void done(Stat stat) {
         // Don't continue if crawling has completed.
         if (Crawler.this.isDone())
           return;
@@ -62,11 +60,15 @@ public abstract class Crawler<R extends Resource<?,R>> extends Bell<R> {
         // Perform the operation on the resource.
         operate(resource);
 
-        Path tp = pattern.truncate(resource.path.length());
+        // The pattern we'll use for matching below.
+        Path tp = pattern.truncate(resource.path.length()+1);
 
         // Crawl subresources that match the path.
-        if (subs != null) for (R s : subs.values())
-          if (tp.matches(s.path)) crawl(s);
+        if (stat.files != null) for (Stat s : stat.files) {
+          Path sp = resource.path.append(s.name);
+          if (tp.matches(sp))
+            crawl(root.selectRelative(sp));
+        }
       } public void fail(Throwable t) {
         Crawler.this.ring(t);
       }
@@ -79,5 +81,5 @@ public abstract class Crawler<R extends Resource<?,R>> extends Bell<R> {
    *
    * @param resource the {@code Resource} to operate one.
    */
-  protected abstract void operate(R resource);
+  protected abstract void operate(Relative<R> resource);
 }

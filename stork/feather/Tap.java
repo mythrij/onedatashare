@@ -38,7 +38,7 @@ package stork.feather;
  * @see Sink
  * @see Slice
  */
-public abstract class Tap<R extends Resource> extends ProxyElement<R> {
+public abstract class Tap<R extends Resource<?,R>> extends ProxyElement<R> {
   private ProxyTransfer<R,?> transfer;
 
   /** Whether or not this is an active {@code Tap}. */
@@ -89,13 +89,15 @@ public abstract class Tap<R extends Resource> extends ProxyElement<R> {
    * @throws NullPointerException if {@code sink} is {@code null}.
    * @throws IllegalStateException is a {@code Sink} has already been attached.
    */
-  public final <D extends Resource> ProxyTransfer<R,D> attach(Sink<D> sink) {
+  public final <D extends Resource<?,D>>
+  ProxyTransfer<R,D> attach(Sink<D> sink) {
     if (sink == null)
       throw new NullPointerException();
     synchronized (this) {
       if (transfer != null)
         throw new IllegalStateException("A Sink is already attached.");
-      transfer = new ProxyTransfer<R,D>(this, sink);
+      Tap<R> tap = active ? this : new Pump<R>(this);
+      transfer = new ProxyTransfer<R,D>(tap, sink);
       return (ProxyTransfer<R,D>) transfer;
     }
   }

@@ -9,7 +9,7 @@ import stork.feather.*;
  * an {@link OutputStream} or, by default, to {@code System.out}. This is used
  * for testing Feather {@code Tap}s.
  */
-public class HexDumpSink extends Sink<Resource> {
+public class HexDumpSink extends Sink<AnonymousResource> {
   private PrintStream out;
   private boolean first = true;
 
@@ -17,7 +17,7 @@ public class HexDumpSink extends Sink<Resource> {
    * Create a {@code HexDumpSink} that prints to {@code System.out}.
    */
   public HexDumpSink() {
-    super(Resource.ANONYMOUS);
+    super((AnonymousResource) Resource.ANONYMOUS);
     out = System.out;
   }
 
@@ -28,7 +28,7 @@ public class HexDumpSink extends Sink<Resource> {
    * @throws NullPointerException if {@code out} is {@code null}.
    */
   public HexDumpSink(OutputStream out) {
-    super(Resource.ANONYMOUS);
+    super((AnonymousResource) Resource.ANONYMOUS);
     if (out == null)
       throw new NullPointerException();
     this.out = new PrintStream(out);
@@ -41,13 +41,14 @@ public class HexDumpSink extends Sink<Resource> {
    * @throws NullPointerException if {@code out} is {@code null}.
    */
   public HexDumpSink(PrintStream out) {
-    super(Resource.ANONYMOUS);
+    super((AnonymousResource) Resource.ANONYMOUS);
     if (out == null)
       throw new NullPointerException();
     this.out = out;
   }
 
-  public Bell<Resource> initialize(Relative<Resource> resource) {
+  public Bell<AnonymousResource>
+  initialize(Relative<AnonymousResource> resource) {
     if (first)
       out.println();
     first = false;
@@ -59,7 +60,7 @@ public class HexDumpSink extends Sink<Resource> {
     out.println(slice);
   }
 
-  public void finalize(Relative<Resource> resource) {
+  public void finalize(Relative<AnonymousResource> resource) {
     out.println("End of dump: "+resource.path);
   }
 }

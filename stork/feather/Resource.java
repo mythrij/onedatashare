@@ -202,9 +202,9 @@ public class Resource
    * @return A subresource relative to this {@code Resource} containing a
    * reference to this {@code Resource}.
    */
-  public final Relative<Resource> selectRelative(Path path) {
+  public final Relative<R> selectRelative(Path path) {
     R r = select(path);
-    return new Relative<Resource>(r, this, path, r);
+    return new Relative<R>(r, this, path, r);
   }
 
   /**
@@ -314,7 +314,7 @@ public class Resource
    * supported by one of the resources.
    * @throws NullPointerException if {@code resource} is {@code null}.
    */
-  public <D extends Resource> Transfer<R,D> transferTo(D resource) {
+  public <D extends Resource<?,D>> Transfer<R,D> transferTo(D resource) {
     Sink sink = resource.sink();
     return tap().attach(sink);
   }

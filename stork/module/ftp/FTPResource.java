@@ -154,8 +154,8 @@ class FTPTap extends Tap<FTPResource> {
   }
 
   // Just make sure the control channel is connected.
-  public Bell<FTPTap> start() {
-    return root.initialize().thenAs(this);
+  public Bell<FTPResource> start() {
+    return root.initialize().thenAs(root);
   }
 
   // Create a new data channel for every initialized resource.
@@ -194,8 +194,8 @@ class FTPSink extends Sink<FTPResource> {
   }
 
   // Just make sure the control channel is connected.
-  public Bell<FTPSink> start() {
-    return root.initialize().thenAs(this);
+  public Bell<FTPResource> start() {
+    return root.initialize().thenAs(root);
   }
 
   // Create a new data channel for every initialized resource.

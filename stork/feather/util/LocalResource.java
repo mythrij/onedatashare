@@ -6,20 +6,14 @@ import java.nio.channels.*;
 
 import stork.feather.*;
 
-/**
- * A {@code Resource} on the local file system. This is intended to serve as an
- * example Feather implementation, but can also be used for testing other
- * implementations.
- * <p/>
- * Many of the methods in this implementation perform long-running operations
- * concurrently using threads because this is the most straighforward way to
- * demonstrate the asynchronous nature of session operations. However, this is
- * often not the most efficient way to perform operations concurrently, and
- * ideal implementations would use an alternative method.
- */
+/** A {@code Resource} produced by a {@code LocalSession}. */
 public class LocalResource extends Resource<LocalSession,LocalResource> {
+  // Separate reference to work around javac bug.
+  LocalSession session;
+
   public LocalResource(LocalSession session, Path path) {
     super(session, path);
+    this.session = session;
   }
 
   // Get the absolute path to the file.
@@ -29,10 +23,11 @@ public class LocalResource extends Resource<LocalSession,LocalResource> {
 
   // Get the File based on the path.
   protected File file() {
-    return new File(path().toString());
+    Path p = session.path.append(path);
+    return new File(p.toString());
   }
 
-  public Bell mkdir() {
+  public Bell<LocalResource> mkdir() {
     return session.new TaskBell() {
       public void task() {
         File file = file();
@@ -41,10 +36,10 @@ public class LocalResource extends Resource<LocalSession,LocalResource> {
         else if (!file.mkdirs())
           throw new RuntimeException("Could not create directory.");
       }
-    };
+    }.thenAs(this);
   }
 
-  public Bell unlink() {
+  public Bell<LocalResource> unlink() {
     return session.new TaskBell() {
       private File root = file();
 
@@ -69,11 +64,11 @@ public class LocalResource extends Resource<LocalSession,LocalResource> {
           throw new RuntimeException(e);
         }
       }
-    };
+    }.thenAs(this);
   }
 
   public Bell<Stat> stat() {
-    return session.new TaskBell<Stat>() {
+    return session.new TaskBell() {
       public void task() {
         File file = file();
 

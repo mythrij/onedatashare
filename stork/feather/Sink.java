@@ -19,7 +19,7 @@ import stork.feather.util.*;
  *
  * @param <R> The destination {@code Resource} type.
  */
-public abstract class Sink<R extends Resource> extends ProxyElement<R> {
+public abstract class Sink<R extends Resource<?,R>> extends ProxyElement<R> {
   private ProxyTransfer<?,R> transfer;
 
   /**
@@ -54,7 +54,8 @@ public abstract class Sink<R extends Resource> extends ProxyElement<R> {
    * @throws NullPointerException if {@code tap} is {@code null}.
    * @throws IllegalStateException if a {@code Tap} has already been attached.
    */
-  public final <S extends Resource> ProxyTransfer<S,R> attach(Tap<S> tap) {
+  public final <S extends Resource<?,S>>
+  ProxyTransfer<S,R> attach(Tap<S> tap) {
     if (tap == null)
       throw new NullPointerException();
     if (transfer != null)
