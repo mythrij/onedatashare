@@ -254,6 +254,9 @@ public class Bell<T> implements Future<T> {
    * Promise to ring another bell when this bell rings. Promised bells will
    * ring in the order they are promised and after this bell's handlers have
    * been called.
+   *
+   * @param bell the {@code Bell} to promise to this {@code Bell}.
+   * @return The value passed in for {@code bell}.
    */
   public synchronized Bell<? super T> promise(Bell<? super T> bell) {
     if (bell.isDone()) {
@@ -276,36 +279,19 @@ public class Bell<T> implements Future<T> {
   }
 
   /**
-   * A bell which is promised to the parent bell on instantiation. This may
-   * optionally be created with a delegate bell that will be rung with the
-   * result of the parent bell if no handler is defined in this bell. If a
-   * handler is overridden in this bell, it is up to the handler to ring the
-   * delegated bell or promise it to a bell which will ultimately ring it.
+   * Return a new {@code Bell} promised to this {@code Bell}. This can be used
+   * to avoid leaking references to {@code Bell}s.
+   */
+  public Bell<T> detach() {
+    return (Bell<T>) promise(new Bell<T>());
+  }
+
+  /**
+   * A bell which is promised to the parent bell on instantiation.
    */
   public class Promise extends Bell<T> {
-    private final Bell<? super T> delegate;
-
     /** Create a promise which does not delegate to any other bell. */
-    public Promise() { this(null); }
-
-    /**
-     * Create a promise which delegates to the given bell if none of the
-     * handlers are redefined. This allows you to essentially insert shims
-     * between two bells, or create a chain where a failure in any bell
-     * immediately rings the final bell.
-     *
-     * @param delegate the bell to delegate to if no handler is defined.
-     */
-    public Promise(Bell<? super T> delegate) {
-      this.delegate = delegate;
-      Bell.this.promise(this);
-    }
-
-    public void done(T t) {
-      if (delegate != null) delegate.ring(t);
-    } public void fail(Throwable t) {
-      if (delegate != null) delegate.ring(t);
-    }
+    public Promise() { Bell.this.promise(this); }
   }
 
   /**
@@ -534,7 +520,7 @@ public class Bell<T> implements Future<T> {
 
   /**
    * Return a {@code Bell} which will ring with the value of this {@code Bell},
-   * if this {@code Bell} rings successfully, or else will be be promised to
+   * if this {@code Bell} rings successfully, or else will be promised to
    * {@code other} if this {@code Bell} fails.
    *
    * @param other the {@code Bell} to promise the returned {@code Bell} to if
@@ -543,6 +529,20 @@ public class Bell<T> implements Future<T> {
   public Bell<T> or(final Bell<T> other) {
     return new Then() {
       public void then(Throwable err) { other.promise(this); }
+    };
+  }
+
+  /**
+   * Return a {@code Bell} which will be promised to {@code other} if this
+   * {@code Bell} rings successfully, or else will fail if this {@code Bell}
+   * fails.
+   *
+   * @param other the {@code Bell} to promise the returned {@code Bell} to if
+   * this {@code Bell} succeeds.
+   */
+  public Bell<T> and(final Bell<T> other) {
+    return new Then() {
+      public void then(T t) { other.promise(this); }
     };
   }
 

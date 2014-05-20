@@ -36,7 +36,7 @@ public class LocalResource extends Resource<LocalSession,LocalResource> {
         else if (!file.mkdirs())
           throw new RuntimeException("Could not create directory.");
       }
-    }.thenAs(this);
+    }.thenAs(this).detach();
   }
 
   public Bell<LocalResource> unlink() {
@@ -64,7 +64,19 @@ public class LocalResource extends Resource<LocalSession,LocalResource> {
           throw new RuntimeException(e);
         }
       }
-    }.thenAs(this);
+    }.thenAs(this).detach();
+  }
+
+  // Returns the target File if this is a symlink, null otherwise.
+  private File resolveLink(File file) {
+    try {
+      File cf = file.getCanonicalFile();
+      if (!file.equals(cf))
+        return cf;
+      return null;
+    } catch (Exception e) {
+      return null;
+    }
   }
 
   public Bell<Stat> stat() {
@@ -77,12 +89,19 @@ public class LocalResource extends Resource<LocalSession,LocalResource> {
 
         Stat stat = new Stat(file.getName());
         stat.size = file.length();
-        stat.setFiles(file.list());
+        stat.file = file.isFile();
+        stat.dir = file.isDirectory();
+        
+        File sym = resolveLink(file);
+        if (sym != null)
+          stat.link = Path.create(file.toString());
+
+        if (stat.dir) stat.setFiles(file.list());
         stat.time = file.lastModified();
 
         ring(stat);
       }
-    };
+    }.detach();
   }
 
   public Tap<LocalResource> tap() {
@@ -90,7 +109,6 @@ public class LocalResource extends Resource<LocalSession,LocalResource> {
   }
 }
 
-// A passive Tap that will use a Pump to send files recursively.
 class LocalTap extends Tap<LocalResource> {
   // Small hack to take advantage of NIO features.
   private WritableByteChannel nioToFeather = new WritableByteChannel() {

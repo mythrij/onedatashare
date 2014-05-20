@@ -28,12 +28,6 @@ package stork.feather;
  * {@code Resource} when it is ready to be transferred. Passive {@code Tap}s
  * must override {@link #initialize(Relative)} to implement behavior that
  * starts the transfer of data for the requested {@code Resource}.
- * <p/>
- * A passive {@code Tap} can be converted into an active {@code Tap} through
- * the use of a {@code Pump} adapter. A {@code Pump} uses a {@code Crawler} to
- * traverse a collection {@code Resource}s and transfers each in turn. {@code
- * Pump}s will be transparently inserted into the pipeline when a passive
- * {@code Tap} is attached to a {@code Sink}.
  *
  * @see Sink
  * @see Slice
@@ -96,8 +90,7 @@ public abstract class Tap<R extends Resource<?,R>> extends ProxyElement<R> {
     synchronized (this) {
       if (transfer != null)
         throw new IllegalStateException("A Sink is already attached.");
-      Tap<R> tap = active ? this : new Pump<R>(this);
-      transfer = new ProxyTransfer<R,D>(tap, sink);
+      transfer = new ProxyTransfer<R,D>(this, sink);
       return (ProxyTransfer<R,D>) transfer;
     }
   }

@@ -43,7 +43,7 @@ public class URI {
   private final String query;
   private final String fragment;
 
-  private static Intern<URI> intern = new Intern<URI>();
+  //private static Intern<URI> intern = new Intern<URI>();
 
   // Used to quickly determine if a character is reserved.
   private static final BitSet RESERVED = new BitSet(128);
@@ -53,7 +53,7 @@ public class URI {
   }
 
   /** The canonical empty URI. */
-  public static final URI EMPTY = intern(new URI());
+  public static final URI EMPTY = new URI();
 
   private URI() {
     scheme   = null;
@@ -97,7 +97,7 @@ public class URI {
     String query    = URI.this.query;
     String fragment = URI.this.fragment;
 
-    URI toURI() { return intern(new URI(this)); }
+    URI toURI() { return new URI(this); }
   }
 
   /**
@@ -106,9 +106,9 @@ public class URI {
    * @param uri the URI which should be interned.
    * @return A canonical representation of {@code uri}.
    */
-  public static URI intern(URI uri) {
-    return intern.intern(uri);
-  }
+  //public static URI intern(URI uri) {
+    //return intern.intern(uri);
+  //}
 
   /**
    * Create a URI from the given string representation.
@@ -117,7 +117,8 @@ public class URI {
    * @return A parsed URI.
    */
   public static URI create(String uri) {
-    return intern.intern(new URI(uri));
+    //return intern.intern(new URI(uri));
+    return new URI(uri);
   }
 
   /**

@@ -2,6 +2,8 @@ package stork.feather;
 
 import java.util.*;
 
+import stork.feather.util.*;
+
 /**
  * A mediator for a locally proxied data transfer. The transfer will begin
  * automatically once both a {@link Sink} and {@link Tap} are assigned.
@@ -17,7 +19,7 @@ extends Transfer<S,D> {
   // Used to buffer excess slices.
   private List<Slice> buffer = new LinkedList<Slice>();
 
-  private Bell<ProxyTransfer<S,D>> bell = new Bell();
+  private Bell<ProxyTransfer<S,D>> bell = new Bell<ProxyTransfer<S,D>>();
 
   private Bell<Sink> sinkBell = new Bell<Sink>() {
     protected void done(Sink sink) {
@@ -72,9 +74,24 @@ extends Transfer<S,D> {
 
   private final void checkIfWeCanStart() {
     if (tap != null && sink != null) try {
-      sink.start();
-      tap.start();
-      bell.ring(this);
+      Bell<S> tb = tap.start();
+      Bell<D> sb = sink.start();
+
+      if (tb == null) tb = new Bell<S>().ring();
+      if (sb == null) sb = new Bell<D>().ring();
+
+      // Start a crawler if the tap is passive.
+      if (!tap.active) tb.new Promise() {
+        public void done() {
+          new Crawler<S>(tap.root, true) {
+            public void operate(Relative<S> resource) {
+              tap.initialize(resource);
+            }
+          }.start();
+        }
+      };
+
+      ((Bell)sb).and(tb).thenAs(this).promise(bell);
     } catch (Exception e) {
       bell.ring(e);
     }

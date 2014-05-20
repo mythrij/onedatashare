@@ -53,8 +53,14 @@ public abstract class Crawler<R extends Resource<?,R>> extends Bell<R> {
     started = true;
   }
 
-  private synchronized void crawl(final Relative<R> resource) {
-    count++;
+  private synchronized int count(int d) {
+    count += d;
+    if (count == 0) ring(root);
+    return count;
+  }
+
+  private void crawl(final Relative<R> resource) {
+    count(1);
     if (!isDone()) resource.object.stat().new Promise() {
       public void done(Stat stat) {
         // Don't continue if crawling has completed.
@@ -63,6 +69,10 @@ public abstract class Crawler<R extends Resource<?,R>> extends Bell<R> {
 
         // Perform the operation on the resource.
         operate(resource);
+
+        // Don't do further crawling on symlinks.
+        if (stat.link != null)
+          return;
 
         // The pattern we'll use for matching below. TODO
         //Path tp = pattern.truncate(resource.path.length()+1);
@@ -73,11 +83,10 @@ public abstract class Crawler<R extends Resource<?,R>> extends Bell<R> {
           crawl(root.selectRelative(sp));
         }
       } public void fail(Throwable t) {
-        Crawler.this.ring(t);
+        if (resource.object == root)
+          Crawler.this.ring(t);
       } public void always() {
-        count--;
-        if (count == 0)
-          Crawler.this.ring(root);
+        count(-1);
       }
     };
   }
@@ -96,10 +105,17 @@ public abstract class Crawler<R extends Resource<?,R>> extends Bell<R> {
     final LocalSession s = new LocalSession(path);
 
     new Crawler<LocalResource>(s.root(), true) {
-      public void operate(Relative<LocalResource> r) {
-        System.out.println("Crawling: "+r.object.file());
+      long size = 0;
+
+      public void operate(final Relative<LocalResource> r) {
+        //System.out.println("Crawling: "+r.object.file());
+        r.object.stat().new Promise() {
+          public void done(Stat s) { if (s.file) size += s.size; }
+          public void fail(Throwable t) { System.out.println(r.object.file()+" failed..."); }
+          public void always() { System.out.println(size); }
+        };
       } public void done() {
-        System.out.println("Done crawling.");
+        System.out.println("Done crawling. Total size: "+size);
       } public void fail(Throwable t) {
         System.out.println("Crawling failed: "+t);
         t.printStackTrace();

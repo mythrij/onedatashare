@@ -62,4 +62,12 @@ public class LocalSession extends Session<LocalSession,LocalResource> {
         future.cancel(false);
     }
   }
+
+  public static void main(String[] args) {
+    String sp = args.length > 0 ? args[0] : "/home/bwross/test";
+    final Path path = Path.create(sp);
+    final LocalSession s = new LocalSession(path);
+
+    s.root().tap().attach(new HexDumpSink());
+  }
 }

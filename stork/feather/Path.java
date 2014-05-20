@@ -22,9 +22,7 @@ import stork.feather.util.*;
  * entries in a set.
  */
 public abstract class Path {
-  private transient int hash = 0;
-
-  static final Intern<Path> INTERN = new Intern<Path>();
+  //static final Intern<Path> INTERN = new Intern<Path>();
   static final String[] EMPTY_SEGMENT_ARRAY = new String[0];
 
   // Paths can only be constructed in this package. This isn't class private
@@ -135,7 +133,7 @@ public abstract class Path {
     return create(null, path);
   }
 
-  // Return an interned path based on an escaped path string.
+  // Return a path based on an escaped path string.
   private static Path create(Path parent, String path) {
     String[] s = path.split("/+");
     if (s.length == 0)
@@ -143,11 +141,11 @@ public abstract class Path {
     if (parent == null)
       parent = (s[0].equals(".") || s[0].equals("..")) ? DOT : ROOT;
     for (String ss : s)
-      parent = INTERN.intern(createSegment(parent, Intern.string(ss)));
+      parent = createSegment(parent, ss);
     return parent;
   }
 
-  // Return an uninterned segment with the given parent.
+  // Return a segment with the given parent.
   private static Path createSegment(Path parent, String name) {
     if (name.isEmpty())
       return parent;
@@ -429,8 +427,6 @@ public abstract class Path {
     if (!(object instanceof Path))
       return false;
     Path path = (Path) object;
-    if (path.hash != 0 && hash != 0 && path.hash != hash)
-      return false;
     return segmentEquals(path) && up().equals(path.up());
   }
 
@@ -442,7 +438,7 @@ public abstract class Path {
     // TODO: Of course we should do this without actually stringifying the
     // entire path, which we can with a little bit of math. The hash code of a
     // string is defined in the Java documentation.
-    return (hash != 0) ? hash : (hash = toString().hashCode());
+    return toString().hashCode();
   }
 
   /**
@@ -532,7 +528,7 @@ class LiteralPath extends Path {
 
   public Path appendTo(Path path) {
     path = new LiteralPath(up.appendTo(path), name);
-    return Path.INTERN.intern(path);
+    return path;
   }
 
   public String name(boolean encode) {
@@ -588,7 +584,7 @@ class GlobPath extends Path {
 
   public Path appendTo(Path path) {
     path = new GlobPath(up.appendTo(path), name);
-    return Path.INTERN.intern(path);
+    return path;
   }
 
   public boolean segmentMatches(Path path) {
