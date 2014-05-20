@@ -33,6 +33,7 @@ space:=$(empty) $(empty)
 classpathify=$(subst $(space) ,:,$1)
 
 JAVASRCS=$(call rwildcard,$(PROJECT),*.java)
+JAVASRCS:=$(patsubst %/package-info.java,,$(JAVASRCS))
 CLASSES=$(JAVASRCS:%.java=build/%.class)
 LIBJARS=$(call rwildcard,lib,*.jar)
 
