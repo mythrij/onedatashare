@@ -84,13 +84,15 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
           };
 
         // Otherwise we're doing a data channel listing.
-        /*
-        else channel.new DataChannel() {{
-          tap.attach(parser);
-          new Command(cmd.toString(), makePath());
-          unlock();
-        }};
-        */
+        else channel.new DataChannel() {
+          public void init() {
+            channel.new Command(cmd, makePath());
+          } public void receive(Slice slice) {
+            parser.write(slice.asBytes());
+          } public void done() {
+            parser.finish();
+          }
+        };
       }
 
       // Do this every time we send a command so we don't have to store a whole
@@ -107,18 +109,18 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
   }
 
   // Create a directory at the end-point, as well as any parent directories.
-  public Bell<?> mkdir() {
+  public Bell<FTPResource> mkdir() {
     if (!isSingleton())  // Unsupported.
       return super.mkdir();
-    return initialize().new ThenAs<FTPChannel.Reply>() {
-      public void then(FTPSession session) {
-        session.channel.new Command("MKD", path).promise(this);
+    return initialize().new Then() {
+      public void then(FTPResource r) {
+        session.channel.new Command("MKD", path).thenAs(r).promise(this);
       }
     };
   }
 
   // Remove a file or directory.
-  public Bell<?> unlink() {
+  public Bell<FTPResource> unlink() {
     if (!isSingleton())  // Unsupported.
       return super.unlink();
     return stat().new ThenAs<FTPChannel.Reply>() {
@@ -128,11 +130,11 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
         else
           session.channel.new Command("DELE", path).promise(this);
       }
-    };
+    }.thenAs(this);
   }
 
   public Sink<FTPResource> sink() {
-    return null;//new FTPSink(this);
+    return new FTPSink(this);
   }
 
   public Tap<FTPResource> tap() {

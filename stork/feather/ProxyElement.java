@@ -12,6 +12,17 @@ package stork.feather;
  * @param <R> The root {@code Resource} type.
  */
 public abstract class ProxyElement<R extends Resource> {
+  /** The root {@code Resource} of this {@code ProxyElement}. */
+  public final R root;
+
+  /**
+   * Create a {@code ProxyElement} with the given {@code Resource} as the root.
+   *
+   * @param root the {@code Resource} this {@code ProxyElement} receives data
+   * for.
+   */
+  public ProxyElement(R root) { this.root = root; }
+
   /**
    * Prepare the pipeline for the transfer of data for {@code resource}. This
    * must be called before any data is drained for {@code resource}.

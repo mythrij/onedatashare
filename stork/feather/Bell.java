@@ -21,6 +21,15 @@ public class Bell<T> implements Future<T> {
   private static ScheduledExecutorService deadlineTimerPool =
     new ScheduledThreadPoolExecutor(1);
 
+  /** Create an unrung {@code Bell}. */
+  public Bell() { }
+
+  /** Create a {@code Bell} rung with {@code object}. */
+  public Bell(T object) { ring(object); }
+
+  /** Create a {@code Bell} rung with {@code error}. */
+  public Bell(Throwable error) { ring(error); }
+
   /**
    * Ring the bell with the given object and wake up any waiting threads.
    *
@@ -385,7 +394,7 @@ public class Bell<T> implements Future<T> {
      *
      * @param done the value the parent bell rang with.
      */
-    protected void then(T done) { ring(done); }
+    protected void then(T done) throws Throwable { ring(done); }
   }
 
   // Used in ThenAs to signal no default fail value.
@@ -397,7 +406,9 @@ public class Bell<T> implements Future<T> {
    * called depending on the result of the parent bell. By default, the {@code
    * then(...)} methods will ring this bell, though these may be overridden to
    * start another operation which will ring this bell instead. This can be
-   * used to create an asynchronous chain of commands.
+   * used to create an asynchronous chain of commands. If any of the {@code
+   * then(...)} methods throw, this {@code Bell} is rung with the thrown
+   * object.
    *
    * @param <V> the supertype of objects this bell rings with.
    */
@@ -438,9 +449,13 @@ public class Bell<T> implements Future<T> {
     // methods to run.
     {
       Bell.this.new Promise() {
-        public void done(T t)         { then(t); }
-        public void fail(Throwable t) { then(t); }
-        public void always()          { then();  }
+        public void done(T t) {
+          try { then(t); } catch (Throwable e) { ring(e); }
+        } public void fail(Throwable t) {
+          try { then(t); } catch (Throwable e) { ring(e); }
+        } public void always() {
+          try { then( ); } catch (Throwable e) { ring(e); }
+        }
       };
     }
 
@@ -452,7 +467,7 @@ public class Bell<T> implements Future<T> {
      *
      * @param done the value the parent bell rang with.
      */
-    protected void then(T done) {
+    protected void then(T done) throws Throwable {
       ring(this.done);
     }
 
@@ -464,7 +479,7 @@ public class Bell<T> implements Future<T> {
      *
      * @param fail the {@code Throwable} the parent bell failed with.
      */
-    protected void then(Throwable fail) {
+    protected void then(Throwable fail) throws Throwable {
       if (fail == NO_DEFAULT_FAIL)
         ring(fail);
       else
@@ -475,7 +490,7 @@ public class Bell<T> implements Future<T> {
      * This method will always be executed after the parent bell rings. By
      * default, it does nothing.
      */
-    protected void then() { }
+    protected void then() throws Throwable { }
   }
 
   /**
@@ -515,6 +530,20 @@ public class Bell<T> implements Future<T> {
     for (Bell b : promises)
       if (!b.isDone()) return false;
     return true;
+  }
+
+  /**
+   * Return a {@code Bell} which will ring with the value of this {@code Bell},
+   * if this {@code Bell} rings successfully, or else will be be promised to
+   * {@code other} if this {@code Bell} fails.
+   *
+   * @param other the {@code Bell} to promise the returned {@code Bell} to if
+   * this {@code Bell} fails.
+   */
+  public Bell<T> or(final Bell<T> other) {
+    return new Then() {
+      public void then(Throwable err) { other.promise(this); }
+    };
   }
 
   /**

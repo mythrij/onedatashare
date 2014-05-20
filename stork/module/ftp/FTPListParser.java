@@ -55,7 +55,7 @@ public class FTPListParser extends Bell<Stat> {
           finish();
       }
 
-      public void close() {
+      public void stop() {
         finish();
       }
     };
@@ -189,8 +189,8 @@ public class FTPListParser extends Bell<Stat> {
 
       case 'M':  // Check for an MLSX listing.
       if (tokens.length >= 2) try {
-        // We should tokenize on a single space.
-        String[] t = line.split(" ", 2);
+        // We must trim leading and tokenize on a single space.
+        String[] t = line.replaceAll("^\\s+", "").split(" ", 2);
         String[] facts = t[0].split(";+");
         String name = t[1];
 

@@ -14,6 +14,7 @@ import io.netty.handler.codec.*;
 import io.netty.handler.codec.string.*;
 import io.netty.handler.codec.base64.*;
 import io.netty.util.*;
+import io.netty.util.concurrent.*;
 
 import org.ietf.jgss.*;
 import org.gridforum.jgss.*;
@@ -34,7 +35,7 @@ import stork.util.*;
  */
 public class FTPChannel {
   // The maximum amount of time (in ms) to wait for a connection.
-  private static final int timeout = 2000;
+  static final int timeout = 2000;
 
   private final Bell<Void> onClose = new Bell<Void>();
 
@@ -62,7 +63,7 @@ public class FTPChannel {
   class FTPSharedChannelState {
     Protocol protocol;
     ChannelFuture future;
-    SecurityContext security;
+    Bell<SecurityContext> security;
     Deque<Command> handlers = new ArrayDeque<Command>();
 
     FTPChannel owner;  // The view that owns the underlying channel.
@@ -74,10 +75,8 @@ public class FTPChannel {
     Reply welcome;
     FeatureSet features = new FeatureSet();
 
-    // Transfer type and mode. See the explanation above mode() and type() for
-    // why these are bells.
-    Bell<Character> mode = new Bell<Character>().ring('S');
-    Bell<Character> type = new Bell<Character>().ring('A');
+    Bell<Character> mode = new Bell<Character>('S');
+    Bell<Character> type = new Bell<Character>('A');
   }
 
   // Deferred commands
@@ -256,35 +255,39 @@ public class FTPChannel {
     // though no channel context is present. This may be an issue if Netty ever
     // changes to use the channel context in line splitting, in which case we
     // will need to come up with another solution.
-    private Reply decodeProtectedReply(Reply reply) throws Exception {
+    private Bell<Reply> decodeProtectedReply(final Reply reply) {
       // Do nothing if the security context has not been initialized. Really
       // this is an error on the part of the server, but there's a chance the
       // client code will know what to do.
       if (data.security == null)
-        return reply;
+        return new Bell<Reply>(reply);
 
-      ReplyDecoder rd = new ReplyDecoder(20480);
-      for (ByteBuf eb : reply.lines) {
-        ByteBuf db = data.security.unprotect(Base64.decode(eb));
-        Reply r = rd.decode(null, db);
-        if (r != null)
-          return r;
-      } throw new RuntimeException("Bad reply from server.");
+      return data.security.new ThenAs<Reply>() {
+        public void then(SecurityContext sc) throws Exception {
+          ReplyDecoder rd = new ReplyDecoder(20480);
+          for (ByteBuf eb : reply.lines) {
+            ByteBuf db = sc.unprotect(Base64.decode(eb));
+            Bell<Reply> r = rd.decode(null, db);
+            if (r != null) {
+              r.promise(this); return;
+            }
+          } throw new RuntimeException("Bad reply from server.");
+        }
+      };
     }
 
     // Override the decode from LineBasedFrameDecoder to feed incoming lines to
     // decodeReplyLine.
-    protected Reply decode(ChannelHandlerContext ctx, ByteBuf buffer)
-    throws Exception {
-      buffer = (ByteBuf) super.decode(ctx, buffer);
+    protected Bell<Reply> decode(ChannelHandlerContext ctx, ByteBuf buffer) {
+      //buffer = (ByteBuf) super.decode(ctx, buffer);
       if (buffer == null)
         return null;  // We haven't gotten a full line.
       Reply r = decodeReplyLine(buffer);
       if (r == null)
         return null;  // We haven't gotten a full reply.
       if (r.isProtected())
-        r = decodeProtectedReply(r);
-      return r;
+        return decodeProtectedReply(r);
+      return new Bell<Reply>(r);
     }
 
     // Decode a reply from a string. This should only be called if the input
@@ -434,19 +437,28 @@ public class FTPChannel {
   // newlines.
   class CommandEncoder extends MessageToMessageEncoder<Object> {
     protected void encode
-      (ChannelHandlerContext ctx, Object msg, List<Object> out)
+      (final ChannelHandlerContext ctx, Object msg, final List<Object> out)
     throws Exception {
       Log.finer("Writing "+msg);
-      ByteBuf b =
+      final ByteBuf raw =
         Unpooled.wrappedBuffer(msg.toString().getBytes(data.encoding));
 
-      if (data.security != null) {
-        b = Base64.encode(data.security.protect(b), false);
-        out.add(Unpooled.wrappedBuffer("ENC ".getBytes(data.encoding)));
-      } 
-
-      out.add(b);
-      out.add(Unpooled.wrappedBuffer("\r\n".getBytes(data.encoding)));
+      if (data.security == null) {
+        out.add(raw);
+        out.add(Unpooled.wrappedBuffer("\r\n".getBytes(data.encoding)));
+      } else data.security.new PromiseAs<ByteBuf>() {
+        public ByteBuf convert(SecurityContext sc) throws Exception {
+          return Unpooled.wrappedBuffer(
+            Unpooled.wrappedBuffer("ENC ".getBytes(data.encoding)),
+            Base64.encode(sc.protect(raw), false));
+        } public void done(ByteBuf encoded) {
+          out.add(encoded);
+        } public void fail() {
+          out.add(raw);
+        } public void always() {
+          out.add(Unpooled.wrappedBuffer("\r\n".getBytes(data.encoding)));
+        }
+      }; 
     }
   }
 
@@ -499,6 +511,11 @@ public class FTPChannel {
   public Bell<Reply> authenticate(GSSCredential cred) {
     final GSSSecurityContext sec;
 
+    if (data.security != null)
+      throw new RuntimeException("already authenticated");
+
+    data.security = new Bell<SecurityContext>();
+
     try {
       sec = new GSSSecurityContext(cred);
     } catch (Exception e) {
@@ -507,11 +524,12 @@ public class FTPChannel {
 
     return new Command("AUTH GSSAPI").new ThenAs<Reply>() {
       public void then(Reply r) {
-        switch (r.code/100) {
-          case 3:  handshake(sec, Unpooled.EMPTY_BUFFER).promise(this);
-          case 1:  ring(r); return;
-          case 2:  data.security = sec; ring(r); return;
-          default: throw r.asError();
+        if (r.isNegative()) {
+          ring(r.asError());
+        } else if (r.isIncomplete()) {
+          handshake(sec, Unpooled.EMPTY_BUFFER).promise(this);
+        } else {
+          data.security.ring(sec); ring(r);
         }
       }
     };
@@ -531,8 +549,6 @@ public class FTPChannel {
             case 3:
               ByteBuf token = Base64.decode(r.lines[0].skipBytes(5));
               handshake(sec, token).promise(bell);
-            case 1:
-              return;
             case 2:
               promise(bell); return;
             default:
@@ -589,7 +605,7 @@ public class FTPChannel {
       };
       //new Command("FEAT");  // TODO
       new Command(null) {
-        public void handle() { finalizeChecks(); }
+        public void done() { finalizeChecks(); }
       };
     }
 
@@ -694,70 +710,38 @@ public class FTPChannel {
     }
 
     // Now we can call the handlers.
-    handler.ring(reply);
+    handler.handle(reply);
     if (syncs != null) for (Command sync : syncs)
       sync.ring();
   }
 
-  // Negotiate a type or change. Admittedly, this is a little unnecessarily
-  // complex, and designed to defeat an edge case that will probably never be
-  // encountered. Nevertheless, doing it like this ensures data channel
-  // creation can be pipelined and properly handle failures to change the data
-  // channel mode or type without needing to lock the channel until we're sure
-  // of the mode or type change. Returns a bell that will ring with the channel
-  // mode or type when the command completes.
+  /**
+   * Change the channel data type.
+   * @return The data type after this command.
+   */
   public synchronized Bell<Character> type(char t) {
-    Bell<Character> ntb = new Bell<Character>();  // Ring with result.
-    Bell<Character> otb = typeModeHelper("TYPE", t, ntb);
-    data.type.promise(otb);  // Ring helper bell.
-    return data.type = ntb;  // Replace current type bell.
-  } public synchronized Bell<Character> mode(char m) {
-    Bell<Character> nmb = new Bell<Character>();  // Ring with result.
-    Bell<Character> omb = typeModeHelper("MODE", m, nmb);
-    data.mode.promise(omb);  // Ring helper bell.
-    return data.mode = nmb;  // Replace current mode bell.
-  } private Bell<Character> typeModeHelper(
-      final String cmd, final char c, final Bell<Character> cb) {
-    // This bell should be rung when the current mode or type is known. Ringing
-    // it will send the command which will later ring the passed bell.
-    return new Bell<Character>() {
-      protected void done(final char old) {
-        new Command(cmd, c).promise(new Bell<Reply>() {
-          protected void done(Reply r) {
-            if (r.isComplete())
-              cb.ring(c);
-            else
-              cb.ring(old);
-          } protected void fail(Throwable e) {
-            cb.ring(old);
-          }
-        });
-      }
-    };
-  }
-
-  // Negotiate a passive mode data channel.
-  public synchronized Bell<FTPHostPort> passive() {
-    final Bell<FTPHostPort> bell = new Bell<FTPHostPort>();
-
-    new Command("PASV") {
-      public void done(Reply r) {
-        if (!r.isComplete()) {
-          bell.ring(r.asError());
-        } try {
-          String s = r.message().split("[()]")[1];
-          bell.ring(new FTPHostPort(s));
-        } catch (Exception e) {
-          bell.ring(e);
-        }
-      }
-    };
-    
-    return bell;
+    return data.type =
+      new Command("TYPE", t).expectComplete().thenAs(t).or(data.type);
   }
 
   /**
-   * Instantiaing this class requests a lock on the channel and returns a
+   * Change the channel transfer mode.
+   * @return The transfer mode after this command.
+   */
+  public synchronized Bell<Character> mode(char m) {
+    return data.mode =
+      new Command("MODE", m).expectComplete().thenAs(m).or(data.mode);
+  }
+
+  /** Negotiate a passive mode data channel. */
+  public synchronized Bell<FTPHostPort> passive() {
+    return new Command("PASV").expectComplete().new PromiseAs<FTPHostPort>() {
+      public FTPHostPort convert(Reply r) { return new FTPHostPort(r); }
+    };
+  }
+
+  /**
+   * Instantiating this class requests a lock on the channel and returns a
    * special view of the channel once the lock request is satisfied. The
    * special channel view will have exclusive use of the channel until unlocked
    * (after which the channel lock will become unusable) or garbage collected.
@@ -770,13 +754,13 @@ public class FTPChannel {
     public Lock() {
       super(FTPChannel.this);
       FTPChannel.this.new Command(null) {
-        public void handle() { Lock.this.assumeControl(); }
+        public void done() { Lock.this.assumeControl(); }
       };
     } public Bell<FTPChannel> lock() {
       throw new IllegalStateException("cannot lock from a view");
     } public void unlock() {
       new Command(null) {
-        public void handle() { FTPChannel.this.assumeControl(); }
+        public void done() { FTPChannel.this.assumeControl(); }
       };
     } protected void finalize() {
       if (data.owner == this)
@@ -876,14 +860,155 @@ public class FTPChannel {
       }
     } 
 
-    public synchronized final boolean isSync() {
-      return isSync;
+    /** An optional handler for intermediate replies. */
+    public void handle(Reply r) { }
+
+    /**
+     * Return a bell which will fail if the reply code is not in the given
+     * range (inclusive), instead of ringing successfully with the reply.
+     */
+    public Bell<Reply> expect(final int lo, final int hi) {
+      return new Then() {
+        public void done(Reply r) {
+          if (r.code < lo || r.code > hi)
+            ring(r.asError());
+          ring(r);
+        }
+      };
     }
+
+    /**
+     * Return a bell which will fail if the reply code does not match the given
+     * code, instead of ringing successfully with the reply.
+     */
+    public Bell<Reply> expect(int code)   { return expect(code, code); }
+
+    public Bell<Reply> expectComplete()   { return expect(200, 299); }
+
+    public Bell<Reply> expectIncomplete() { return expect(300, 399); }
+
+    public Bell<Reply> expectNegative()   { return expect(400, 599); }
+
+    public synchronized final boolean isSync() { return isSync; }
   }
 
-  /** Open a data channel using whatever method is appropriate. */
-  public Bell<FTPDataChannel> dataChannel() {
-    return null;
+  /**
+   * Asynchronous FTP data channel abstraction. Subclasses must override {@link
+   * #receive(Slice)} to handle incoming data. This channel extends {@code
+   * Lock}, but handles its own unlocking.
+   */
+  public class DataChannel extends Lock {
+    private Bell<SocketChannel> dc;
+
+    private final Bell<DataChannel> onClose = new Bell<DataChannel>() {
+      public void always() {
+        dc.cancel().new Promise() {
+          public void done(SocketChannel ch) { ch.close(); }
+        };
+      }
+    };
+
+    public DataChannel() { this(true); }
+
+    public DataChannel(boolean preferPassive) {
+      dc = preferPassive ? tryPassiveThenActive() : tryActiveThenPassive();
+    }
+
+    private Bell<SocketChannel> tryPassiveThenActive() {
+      return tryPassive().new Then() {
+        public void then(Throwable t) { tryActive().promise(this); }
+      };
+    }
+
+    private Bell<SocketChannel> tryActiveThenPassive() {
+      return tryActive().new Then() {
+        public void then(Throwable t) { tryPassive().promise(this); }
+      };
+    }
+
+    private Bell<SocketChannel> tryPassive() {
+      return passive().new ThenAs<SocketChannel>() {
+        public void then(FTPHostPort hp) {
+          Bootstrap b = new Bootstrap();
+          b.group(FTPChannel.group).channel(NioSocketChannel.class);
+          b.handler(new ChannelInitializer<SocketChannel>() {
+            public void initChannel(SocketChannel ch) throws Exception {
+              ch.config().setConnectTimeoutMillis(timeout);
+              ch.pipeline().addLast(new SliceHandler());
+            }
+          });
+          futureToBell(b.connect(hp.getAddr())).promise(this);
+        }
+      };
+    }
+
+    private Bell<SocketChannel> tryActive() {
+      return new Bell<SocketChannel>(new RuntimeException("TODO"));
+    }
+
+    // Make a future into a bell that reverse cancels.
+    private Bell<SocketChannel> futureToBell(final ChannelFuture cf) {
+      return new Bell<SocketChannel>() {
+        {
+          cf.addListener(new GenericFutureListener<ChannelFuture>() {
+            public void operationComplete(ChannelFuture f) {
+              try {
+                ring((SocketChannel) f.channel());
+              } catch (Exception e) {
+                ring(e);
+              }
+            }
+          });
+        } public void fail(Throwable t) {
+          cf.cancel(true);
+        }
+      };
+    }
+
+    // Handle incoming data chunks and forward to handler.
+    // TODO: Mode E, encryption, pause/resume.
+    class SliceHandler extends ChannelHandlerAdapter {
+      public void channelRead(ChannelHandlerContext ctx, Object msg) {
+        receive(new Slice((ByteBuf) msg));
+      } public void channelInactive(ChannelHandlerContext ctx) {
+        DataChannel.this.close();
+      }
+    }
+
+    /** This must not be called externally. */
+    public void unlock() {
+      throw new Error("do not call unlock() on a DataChannel");
+    }
+
+    /** Return a bell which rings on connect. */
+    public Bell<DataChannel> onConnect() {
+      return dc.thenAs(this);
+    }
+
+    /** Return a bell which rings on close (or failure). */
+    public Bell<DataChannel> onClose() {
+      return onClose;
+    }
+
+    /** Pipe commands to be run in the lock. */
+    public void init() { }
+
+    /** Close the channel. */
+    public final void close() {
+      onClose.ring(this);
+    }
+
+    /** Subclasses use this to handle slices. */
+    public void receive(Slice slice) { }
+
+    /** Send a slice through the data channel. */
+    public void send(final Slice slice) {
+      dc.new Promise() {
+        public void done(SocketChannel ch) {
+          ch.write(slice.asByteBuf());
+        }
+      };
+    }
   }
 
   public static void main(String[] args) throws Exception {

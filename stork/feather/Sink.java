@@ -22,9 +22,6 @@ import stork.feather.util.*;
 public abstract class Sink<R extends Resource> extends ProxyElement<R> {
   private ProxyTransfer<?,R> transfer;
 
-  /** The root {@code Resource} of this {@code Sink}. */
-  public final R root;
-
   /**
    * Create a {@code Sink} with an anonymous root {@code Resource}.
    */
@@ -35,7 +32,7 @@ public abstract class Sink<R extends Resource> extends ProxyElement<R> {
    *
    * @param root the {@code Resource} this {@code Sink} receives data for.
    */
-  public Sink(R root) { this.root = root; }
+  public Sink(R root) { super(root); }
 
   // Get the transfer, or throw an IllegalStateException if the transfer is not
   // ready.

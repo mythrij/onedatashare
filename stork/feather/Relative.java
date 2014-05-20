@@ -14,10 +14,10 @@ package stork.feather;
  */
 public class Relative<T> {
   /** The root {@code Resource} of the operation. */
-  public final Resource root;
+  public final Resource<?,?> root;
 
   /** The {@code Resource} that {@code object} originated from. */
-  public final Resource origin;
+  public final Resource<?,?> origin;
 
   /** The selection {@code Path} from {@code root} to {@code origin}. */
   public final Path path;

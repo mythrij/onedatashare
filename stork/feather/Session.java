@@ -107,7 +107,8 @@ public abstract class Session
    * This is what actually gets called and returned when {@code
    * Resource.initialize()} is called. It enforces the guarantee that {@code
    * initialize()} will be called only once, and that the same {@code Bell}
-   * will always be returned.
+   * will always be returned. It will also return a failed {@code Bell} if the
+   * {@code Session} is closed.
    */
   final synchronized Bell<S> mediatedInitialize() {
     if (initializeBell != null) {
@@ -154,10 +155,16 @@ public abstract class Session
   protected void finalize() { }
 
   /**
-   * Close this {@code Session} and call {@code finalize()}.
+   * Close this {@code Session} and call {@code finalize()}. {@code
+   * initialize()} will never be called after this has been called.
+   *
+   * @return This {@code Session}.
    */
-  public final synchronized void close() {
+  public final synchronized S close() {
+    initializeBell = new Bell<S>(
+      new IllegalStateException("Session is closed."));
     onClose.ring((S) this);
+    return (S) this;
   }
 
   /**
@@ -173,7 +180,8 @@ public abstract class Session
    * Return a bell that will be rung with this {@code Session} when the {@code
    * Session} is closed.
    *
-   * @return A bell that will be rung when the {@code Session} is closed.
+   * @return A {@code Bell} that will be rung when the {@code Session} is
+   * closed.
    */
   public final Bell<S> onClose() {
     return onClose.new Promise();

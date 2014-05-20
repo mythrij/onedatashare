@@ -41,9 +41,6 @@ package stork.feather;
 public abstract class Tap<R extends Resource> extends ProxyElement<R> {
   private ProxyTransfer<R,?> transfer;
 
-  /** The root {@code Resource} of this {@code Tap}. */
-  public final R root;
-
   /** Whether or not this is an active {@code Tap}. */
   public final boolean active;
 
@@ -76,7 +73,7 @@ public abstract class Tap<R extends Resource> extends ProxyElement<R> {
    * @throws NullPointerException if {@code resource} is {@code null}.
    */
   public Tap(R root, boolean active) {
-    this.root = root;
+    super(root);
     this.active = active;
   }
 
