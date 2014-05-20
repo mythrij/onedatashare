@@ -138,6 +138,90 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
   }
 
   public Tap<FTPResource> tap() {
-    return null;//new FTPTap(this);
+    return new FTPTap(this);
+  }
+}
+
+/**
+ * A FTP {@code Tap} which manages data channels autonomonously.
+ */
+class FTPTap extends Tap<FTPResource> {
+  // Current data channel.
+  private FTPChannel.DataChannel dc = null;
+
+  public FTPTap(FTPResource resource) {
+    super(resource, false);
+  }
+
+  // Just make sure the control channel is connected.
+  public Bell<FTPTap> start() {
+    return root.initialize().thenAs(this);
+  }
+
+  // Create a new data channel for every initialized resource.
+  public Bell<FTPResource> initialize(Relative<FTPResource> resource) {
+    final Relative<FTPResource> r = resource;
+    return r.origin.stat().new ThenAs<FTPResource>() {
+      public void then(Stat stat) {
+        if (stat.dir) {
+          r.object.mkdir().promise(this);
+        } else if (stat.file) {
+          dc = root.session.channel.new DataChannel() {
+            public void init() {
+              new Command("RETR", r.path);
+            } public void receive(Slice slice) {  
+              drain(r.wrap(slice));
+            }
+          };
+          dc.onConnect().thenAs(root).promise(this);
+        } else {
+          ring(new RuntimeException("invalid destination"));
+        }
+      }
+    };
+  }
+}
+
+/**
+ * A FTP {@code Sink} which manages data channels autonomonously.
+ */
+class FTPSink extends Sink<FTPResource> {
+  // Current data channel.
+  private FTPChannel.DataChannel dc = null;
+
+  public FTPSink(FTPResource resource) {
+    super(resource);
+  }
+
+  // Just make sure the control channel is connected.
+  public Bell<FTPSink> start() {
+    return root.initialize().thenAs(this);
+  }
+
+  // Create a new data channel for every initialized resource.
+  public Bell<FTPResource> initialize(Relative<FTPResource> resource) {
+    final Relative<FTPResource> r = resource;
+    return r.origin.stat().new ThenAs<FTPResource>() {
+      public void then(Stat stat) {
+        if (stat.dir) {
+          r.object.mkdir().promise(this);
+        } else if (stat.file) {
+          dc = root.session.channel.new DataChannel() {
+            public void init() {
+              new Command("STOR", r.path);
+            }
+          };
+          dc.onConnect().thenAs(r.object).promise(this);
+        } else {
+          ring(new RuntimeException("invalid source"));
+        }
+      }
+    };
+  }
+
+  public void drain(final Relative<Slice> slice) {
+    dc.onConnect().new Promise() {
+      public void done(FTPChannel.DataChannel d) { d.send(slice.object); }
+    };
   }
 }
