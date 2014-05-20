@@ -19,7 +19,7 @@ JAVADOC=javadoc
 TAR=tar
 LN=ln
 
-.PHONY: all install clean init release classes $(PROJECT)_cmds
+.PHONY: all install clean init release classes pkglist $(PROJECT)_cmds
 .SUFFIXES: .java .class
 
 # Recursive wildcard function from jgc.org.
@@ -83,7 +83,7 @@ build/build_tag: $(CLASSES) | build
 	@echo version=$(VERSION) >> build/build_tag
 	@echo buildtime=$(shell date) >> build/build_tag
 
-list-packages:
+pkglist:
 	@echo $(subst /,.,$(call rdirs,$(PROJECT)))
 
 doc: $(JAVASRCS)
@@ -92,5 +92,4 @@ doc: $(JAVASRCS)
 	  -sourcepath $(PROJECT) $(JAVASRCS)
 
 clean:
-	#$(RM) -rf build lib/$(PROJECT)-*.jar $(PROJECT).tar.gz bin/$(PROJECT)_* $(DOC)
 	$(RM) -rf build lib/$(PROJECT)-*.jar $(PROJECT).tar.gz bin/$(PROJECT)_*
