@@ -68,6 +68,8 @@ public class LocalSession extends Session<LocalSession,LocalResource> {
     final Path path = Path.create(sp);
     final LocalSession s = new LocalSession(path);
 
-    s.root().tap().attach(new HexDumpSink());
+    s.root().tap().attach(new HexDumpSink()).onStop().new Promise() {
+      public void done() { s.close(); }
+    };
   }
 }

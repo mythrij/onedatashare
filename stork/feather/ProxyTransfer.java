@@ -38,7 +38,7 @@ extends Transfer<S,D> {
   };
 
   /**
-   * Create a {@code ProxyTransfer} without a tap or sink set.
+   * Create a {@code ProxyTransfer} without a {@code Tap} or {@code Sink} set.
    */
   public ProxyTransfer() { }
 
@@ -84,8 +84,12 @@ extends Transfer<S,D> {
       if (!tap.active) tb.new Promise() {
         public void done() {
           new Crawler<S>(tap.root, true) {
-            public void operate(Relative<S> resource) {
-              tap.initialize(resource);
+            public Bell<S> operate(Relative<S> resource) {
+              return passiveInitialize(resource);
+            } public void done() {
+              mediator.stop();
+            } public void fail(Throwable t) {
+              mediator.stop(t);
             }
           }.start();
         }
@@ -195,13 +199,27 @@ extends Transfer<S,D> {
     return sink.root;
   }
 
-  // Called by tap.
+  // Called internally.
+  private Bell<S> passiveInitialize(Relative<S> r) {
+    if (tap.active) {
+      throw new Error("crawlerInitialize");
+    } try {
+      Bell<S> bell = tap.initialize(r);
+      if (bell == null)
+        throw new Error("Passive Tap initialize() may not return null.");
+      return initialize(r).promise(bell).thenAs(r.object);
+    } catch (Exception e) {
+      return new Bell<S>(e);
+    }
+  }
+
+  // Called by tap (and internally).
   public Bell<S> initialize(Relative<S> r) {
     try {
       Bell<D> bell = sink.initialize((Relative<D>) r.wrap(sink.root));
       if (bell == null)
-        return new Bell<S>().ring(r.object);
-      return bell.new ThenAs<S>(r.object);
+        return new Bell<S>(r.object);
+      return bell.thenAs(r.object);
     } catch (Exception e) {
       return new Bell<S>().ring(e);
     }
@@ -219,6 +237,10 @@ extends Transfer<S,D> {
   // Called by tap.
   final void drain(Relative<Slice> slice) {
     sink.drain(slice);
+  }
+
+  final protected Bell<ProxyTransfer<S,D>> start() {
+    return bell;
   }
 
   final protected void stop() {

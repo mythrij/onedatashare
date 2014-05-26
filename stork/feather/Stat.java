@@ -127,4 +127,8 @@ public class Stat {
 
     return this;
   }
+
+  public String toString() {
+    return stork.ad.Ad.marshal(this).toString();
+  }
 }

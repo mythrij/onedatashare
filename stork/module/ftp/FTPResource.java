@@ -65,6 +65,8 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
 
         parser.name(StorkUtil.basename(path.name()));
 
+        Log.fine("Trying list command: ", cmd);
+
         // When doing MLSx listings, we can reduce the response size with this.
         if (hint == 'M' && !session.mlstOptsAreSet) {
           channel.new Command("OPTS MLST Type*;Size*;Modify*;UNIX.mode*");
@@ -75,18 +77,28 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
         if (!cmd.requiresDataChannel())
           channel.new Command(cmd.toString(), makePath()) {
             public void handle(FTPChannel.Reply r) {
-              if (r.code/100 > 2)
-                parser.ring(r.asError());
               parser.write(r.message().getBytes());
-              if (r.isComplete())
+            } public void done(FTPChannel.Reply r) {
+              if (r.code/100 > 2) {
+                parser.ring(r.asError());
+              } else {
+                parser.write(r.message().getBytes());
                 parser.finish();
+              }
             }
           };
 
         // Otherwise we're doing a data channel listing.
         else channel.new DataChannel() {
           public void init() {
-            channel.new Command(cmd, makePath());
+            channel.new Command(cmd, makePath()) {
+              public void done(FTPChannel.Reply r) {
+                if (r.code/100 > 2) {
+                  parser.ring(r.asError());
+                  close();
+                }
+              }
+            };
           } public void receive(Slice slice) {
             parser.write(slice.asBytes());
           } public void done() {

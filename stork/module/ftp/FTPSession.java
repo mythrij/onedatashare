@@ -72,4 +72,18 @@ public class FTPSession extends Session<FTPSession, FTPResource> {
   public void finalize() {
     channel.close();
   }
+
+  public static void main(String[] args) {
+    URI uri = URI.create("ftp://didclab-ws8/asdasd/asdasd");
+    final FTPResource r = new FTPModule().select(uri);
+    r.stat().new Promise() {
+      public void done(Stat s) {
+        System.out.println(s);
+      } public void fail(Throwable t) {
+        t.printStackTrace();
+      } public void always() {
+        r.session.close();
+      }
+    };
+  }
 }

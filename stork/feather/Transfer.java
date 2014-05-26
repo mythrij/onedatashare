@@ -60,18 +60,28 @@ public abstract class Transfer<S extends Resource, D extends Resource> {
       } return onStart;
     }
 
-    /** Stop the transfer. Cancel any pending bells. */
-    public synchronized void stop() {
+    /** Stop the transfer with an error. Cancel any pending bells. */
+    public synchronized void stop(Throwable t) {
       if (state != State.STOPPED) try {
         Transfer.this.stop();
       } catch (Exception e) {
-        // What should we do with this...?
+        if (t == null) t = e;
       } finally {
-        onStart.cancel();  // Will also cancel pendingPause.
-        if (paused()) pauseBell.cancel();
-        onStop.ring(Transfer.this);
+        if (t != null)
+          onStart.ring(t);
+        else
+          onStart.cancel();  // Will also cancel pendingPause.
+        if (paused())
+          pauseBell.cancel();
+        if (t != null)
+          onStop.ring(t);
+        else
+          onStop.ring(Transfer.this);
       }
     }
+
+    /** Stop the transfer. Cancel any pending bells. */
+    public synchronized void stop() { stop(null); }
 
     /** Pause the transfer. The returned {@code Bell} rings on resume. */
     public synchronized Bell<Transfer<S,D>> pause() {
@@ -233,4 +243,22 @@ public abstract class Transfer<S extends Resource, D extends Resource> {
    * has not been initialized.
    */
   public int concurrency() { return 1; }
+
+  /**
+   * Return a {@code Bell} which rings when the {@code Transfer} starts.
+   *
+   * @return A {@code Bell} which rings when the {@code Transfer} starts.
+   */
+  public final Bell<Transfer<S,D>> onStart() {
+    return onStart.detach();
+  }
+
+  /**
+   * Return a {@code Bell} which rings when the {@code Transfer} stops.
+   *
+   * @return A {@code Bell} which rings when the {@code Transfer} stops.
+   */
+  public final Bell<Transfer<S,D>> onStop() {
+    return onStop.detach();
+  }
 }

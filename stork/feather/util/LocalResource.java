@@ -135,6 +135,7 @@ class LocalTap extends Tap<LocalResource> {
   // Because this is a passive tap, the bell needs to have a handler that
   // begins transfer when it rings.
   public Bell<LocalResource> initialize(final Relative<LocalResource> r) {
+    System.out.println("Initializing: "+r.object);
     File file = r.object.file();
 
     if (!file.exists())
@@ -151,8 +152,10 @@ class LocalTap extends Tap<LocalResource> {
     File file = r.object.file();
 
     // If it's not a data file, we're done.
-    if (!file.isFile())
+    if (!file.isFile()) {
+      finalize(r);
       return;
+    }
 
     try {
       // Set up state.
@@ -161,7 +164,7 @@ class LocalTap extends Tap<LocalResource> {
       currentResource = r;
       offset = 0;
       remaining = file.length();
-
+      sendChunk();
     } catch (Exception e) {
       // Ignore for now...
       e.printStackTrace();
@@ -171,6 +174,7 @@ class LocalTap extends Tap<LocalResource> {
   // Send the next chunk. This method keeps calling itself asynchronously until
   // the file has been sent.
   public synchronized void sendChunk() {
+    System.out.println("Sending");
     // If paused, delay until resumed.
     if (pauseBell != null) pauseBell.new Promise() {
       public void done() { sendChunk(); }
@@ -183,6 +187,7 @@ class LocalTap extends Tap<LocalResource> {
     // Submit a task to send the next chunk.
     else root.session.new TaskBell() {
       public void task() throws Exception {
+        System.out.println("Sending: "+offset);
         long len = remaining < chunkSize ? remaining : chunkSize;
         len = currentChannel.transferTo(offset, len, nioToFeather);
         offset += len;

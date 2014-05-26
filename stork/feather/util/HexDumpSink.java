@@ -57,7 +57,7 @@ public class HexDumpSink extends Sink<AnonymousResource> {
   }
 
   public void drain(Relative<Slice> slice) {
-    out.println(slice);
+    out.println(slice.object);
   }
 
   public void finalize(Relative<AnonymousResource> resource) {

@@ -62,33 +62,44 @@ public abstract class Crawler<R extends Resource<?,R>> extends Bell<R> {
   private void crawl(final Relative<R> resource) {
     count(1);
     if (!isDone()) resource.object.stat().new Promise() {
-      public void done(Stat stat) {
-        // Don't continue if crawling has completed.
+      public void done(final Stat stat) {
         if (Crawler.this.isDone())
-          return;
-
-        // Perform the operation on the resource.
-        operate(resource);
-
-        // Don't do further crawling on symlinks.
-        if (stat.link != null)
           return;
 
         // The pattern we'll use for matching below. TODO
         //Path tp = pattern.truncate(resource.path.length()+1);
 
-        // Crawl subresources that match the path.
-        if (stat.files != null) for (Stat s : stat.files) {
-          Path sp = resource.path.appendLiteral(s.name);
-          crawl(root.selectRelative(sp));
-        }
+        // Perform the operation on the resource.
+        Bell<R> op = doOperate(resource).new Promise() {
+          public void done() {
+            if (Crawler.this.isDone())
+              return;
+            // Crawl subresources that match the path.
+            if (stat.link == null && stat.files != null) {
+              for (Stat s : stat.files) {
+                Path sp = resource.path.appendLiteral(s.name);
+                crawl(root.selectRelative(sp));
+              }
+            }
+          } public void always() {
+            count(-1);
+          }
+        };
       } public void fail(Throwable t) {
         if (resource.object == root)
           Crawler.this.ring(t);
-      } public void always() {
-        count(-1);
       }
     };
+  }
+
+  private Bell<R> doOperate(Relative<R> resource) {
+    try {
+      Bell<R> bell = operate(resource);
+      if (bell == null) bell = new Bell<R>().ring();
+      return bell;
+    } catch (Throwable t) {
+      return new Bell<R>(t);
+    }
   }
 
   /**
@@ -96,8 +107,11 @@ public abstract class Crawler<R extends Resource<?,R>> extends Bell<R> {
    * performed on {@code resource}.
    *
    * @param resource the {@code Resource} to operate one.
+   * @return A {@code Bell} that will ring with the {@code Resource} when the
+   * operation is complete, or {@code null} if the operation completed
+   * instantly.
    */
-  protected abstract void operate(Relative<R> resource);
+  protected abstract Bell<R> operate(Relative<R> resource);
 
   public static void main(String[] args) {
     String sp = args.length > 0 ? args[0] : "/home/bwross/test";
@@ -107,13 +121,12 @@ public abstract class Crawler<R extends Resource<?,R>> extends Bell<R> {
     new Crawler<LocalResource>(s.root(), true) {
       long size = 0;
 
-      public void operate(final Relative<LocalResource> r) {
-        //System.out.println("Crawling: "+r.object.file());
-        r.object.stat().new Promise() {
+      public Bell<LocalResource> operate(final Relative<LocalResource> r) {
+        return r.object.stat().new Promise() {
           public void done(Stat s) { if (s.file) size += s.size; }
           public void fail(Throwable t) { System.out.println(r.object.file()+" failed..."); }
           public void always() { System.out.println(size); }
-        };
+        }.thenAs(r.object);
       } public void done() {
         System.out.println("Done crawling. Total size: "+size);
       } public void fail(Throwable t) {

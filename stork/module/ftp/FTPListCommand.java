@@ -4,7 +4,7 @@ package stork.module.ftp;
  * FTP listing commands in order of priority.
  */
 public enum FTPListCommand {
-  MLSC, STAT, MLSD, LIST(true), NLST(true);
+  MLSC, STAT, MLSD(true), LIST(true), NLST(true);
 
   private boolean dataChannel;
 
