@@ -66,7 +66,7 @@ public class FTPSession extends Session<FTPSession, FTPResource> {
         // Unsupported credential...
         ring(new IllegalArgumentException());
       }
-    }}.new ThenAs<FTPSession>(FTPSession.this);
+    }}.as(FTPSession.this);
   }
 
   public void finalize() {

@@ -28,23 +28,25 @@ public class LocalResource extends Resource<LocalSession,LocalResource> {
   }
 
   public Bell<LocalResource> mkdir() {
-    return session.new TaskBell() {
-      public void task() {
+    return new ThreadBell(session.executor) {
+      public Object run() {
         File file = file();
         if (file.exists() && file.isDirectory())
           throw new RuntimeException("Resource is a file.");
         else if (!file.mkdirs())
           throw new RuntimeException("Could not create directory.");
+        return null;
       }
-    }.thenAs(this).detach();
+    }.start().as(this).detach();
   }
 
   public Bell<LocalResource> unlink() {
-    return session.new TaskBell() {
+    return new ThreadBell(session.executor) {
       private File root = file();
 
-      public void task() {
+      public Object run() {
         remove(root);
+        return null;
       }
 
       // Recursively remove files.
@@ -64,7 +66,7 @@ public class LocalResource extends Resource<LocalSession,LocalResource> {
           throw new RuntimeException(e);
         }
       }
-    }.thenAs(this).detach();
+    }.start().as(this).detach();
   }
 
   // Returns the target File if this is a symlink, null otherwise.
@@ -80,8 +82,8 @@ public class LocalResource extends Resource<LocalSession,LocalResource> {
   }
 
   public Bell<Stat> stat() {
-    return session.new TaskBell() {
-      public void task() {
+    return new ThreadBell<Stat>(session.executor) {
+      public Stat run() {
         File file = file();
 
         if (!file.exists())
@@ -99,9 +101,9 @@ public class LocalResource extends Resource<LocalSession,LocalResource> {
         if (stat.dir) stat.setFiles(file.list());
         stat.time = file.lastModified();
 
-        ring(stat);
+        return stat;
       }
-    }.detach();
+    }.start().detach();
   }
 
   public Tap<LocalResource> tap() {
@@ -109,12 +111,14 @@ public class LocalResource extends Resource<LocalSession,LocalResource> {
   }
 }
 
-class LocalTap extends Tap<LocalResource> {
+class LocalTap extends PassiveTap<LocalResource> {
+  final File file = source().file();
+
   // Small hack to take advantage of NIO features.
   private WritableByteChannel nioToFeather = new WritableByteChannel() {
     public int write(ByteBuffer buffer) {
       Slice slice = new Slice(buffer);
-      drain(currentResource.wrap(slice));
+      drain(slice);
       return slice.length();
     }
 
@@ -122,88 +126,45 @@ class LocalTap extends Tap<LocalResource> {
     public boolean isOpen() { return true; }
   };
 
+  private RandomAccessFile raf;
+  private FileChannel channel;
+  private long offset = 0, remaining = 0;
   private long chunkSize = 16384;
+  private volatile Bell pause;
 
   // State of the current transfer.
-  private Relative<LocalResource> currentResource;
-  private FileChannel currentChannel;
-  private long offset = 0, remaining = 0;
-  private Bell pauseBell;
+  public LocalTap(LocalResource root) { super(root); }
 
-  public LocalTap(LocalResource root) { super(root, false); }
-
-  // Because this is a passive tap, the bell needs to have a handler that
-  // begins transfer when it rings.
-  public Bell<LocalResource> initialize(final Relative<LocalResource> r) {
-    System.out.println("Initializing: "+r.object);
-    File file = r.object.file();
-
+  public void start(Bell bell) throws Exception {
     if (!file.exists())
       throw new RuntimeException("File not found");
     if (!file.canRead())
       throw new RuntimeException("Permission denied");
-    return new Bell<LocalResource>() {
-      public void done(LocalResource lr) { beginTransferFor(r); }
-    };
-  }
+    if (!file.isFile())
+      throw new RuntimeException("Resource is a directory");
 
-  // Called after initialization.
-  private void beginTransferFor(Relative<LocalResource> r) {
-    File file = r.object.file();
+    // Set up state.
+    raf = new RandomAccessFile(file, "r");
+    channel = raf.getChannel();
+    remaining = file.length();
 
-    // If it's not a data file, we're done.
-    if (!file.isFile()) {
-      finalize(r);
-      return;
-    }
-
-    try {
-      // Set up state.
-      RandomAccessFile raf = new RandomAccessFile(file, "r");
-      currentChannel = raf.getChannel();
-      currentResource = r;
-      offset = 0;
-      remaining = file.length();
-      sendChunk();
-    } catch (Exception e) {
-      // Ignore for now...
-      e.printStackTrace();
-    }
-  }
-
-  // Send the next chunk. This method keeps calling itself asynchronously until
-  // the file has been sent.
-  public synchronized void sendChunk() {
-    System.out.println("Sending");
-    // If paused, delay until resumed.
-    if (pauseBell != null) pauseBell.new Promise() {
-      public void done() { sendChunk(); }
-    };
-
-    // See if we're done.
-    else if (remaining <= 0)
-      finalize(currentResource);
-
-    // Submit a task to send the next chunk.
-    else root.session.new TaskBell() {
-      public void task() throws Exception {
-        System.out.println("Sending: "+offset);
-        long len = remaining < chunkSize ? remaining : chunkSize;
-        len = currentChannel.transferTo(offset, len, nioToFeather);
-        offset += len;
-        remaining -= len;
-      } public void done() {
-        sendChunk();
+    // When bell rings, start a loop to send all chunks.
+    bell.promise(new BellLoop(this) {
+      public Bell lock() { return pause; }
+      public void body() throws Exception {
+        if (remaining <= 0) {
+          finish();
+          ring();
+        } else {
+          System.out.println("Sending: "+offset);
+          long len = remaining < chunkSize ? remaining : chunkSize;
+          len = channel.transferTo(offset, len, nioToFeather);
+          offset += len;
+          remaining -= len;
+        }
       }
-    };
+    });
   }
 
-  public synchronized void pause() {
-    pauseBell = new Bell();
-  }
-
-  public synchronized void resume() {
-    pauseBell.ring();
-    pauseBell = null;
-  }
+  public synchronized void pause(Bell bell) { pause = bell; }
 }

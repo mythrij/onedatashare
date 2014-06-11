@@ -35,15 +35,15 @@ public final class Taps {
   Tap<R> fromSlice(R root, Slice slice) {
     final Slice s = slice;
     return new Tap<R>(root) {
-      private final Tap<R> thisTap = this;
-      public Bell<R> start() {
-        initialize(Path.ROOT).new Promise() {
+      public void start(Bell bell) {
+        bell.new Promise() {
           public void done() {
             if (s != null) drain(s);
-            thisTap.finalize(Path.ROOT);
+            finish();
           }
         };
-        return null;
+      } public void pause(Bell bell) {
+        // Just no-op for now...
       }
     };
   }

@@ -9,16 +9,17 @@ import stork.feather.*;
  * an {@link OutputStream} or, by default, to {@code System.out}. This is used
  * for testing Feather {@code Tap}s.
  */
-public class HexDumpSink extends Sink<AnonymousResource> {
-  private PrintStream out;
+public class HexDumpSink extends Sink<HexDumpResource> {
+  private PrintStream out = System.out;
   private boolean first = true;
 
   /**
    * Create a {@code HexDumpSink} that prints to {@code System.out}.
    */
   public HexDumpSink() {
-    super((AnonymousResource) Resource.ANONYMOUS);
-    out = System.out;
+    this(new HexDumpSession().root());
+  } private HexDumpSink(HexDumpResource r) {
+    super(r);
   }
 
   /**
@@ -28,7 +29,7 @@ public class HexDumpSink extends Sink<AnonymousResource> {
    * @throws NullPointerException if {@code out} is {@code null}.
    */
   public HexDumpSink(OutputStream out) {
-    super((AnonymousResource) Resource.ANONYMOUS);
+    this();
     if (out == null)
       throw new NullPointerException();
     this.out = new PrintStream(out);
@@ -41,26 +42,31 @@ public class HexDumpSink extends Sink<AnonymousResource> {
    * @throws NullPointerException if {@code out} is {@code null}.
    */
   public HexDumpSink(PrintStream out) {
-    super((AnonymousResource) Resource.ANONYMOUS);
+    this();
     if (out == null)
       throw new NullPointerException();
     this.out = out;
   }
 
-  public Bell<AnonymousResource>
-  initialize(Relative<AnonymousResource> resource) {
-    if (first)
-      out.println();
-    first = false;
-    out.println("Beginning dump: "+resource.path);
-    return null;
+  public void start(Bell bell) { bell.ring(); }
+
+  public void drain(Slice slice) {
+    out.println(slice);
   }
 
-  public void drain(Relative<Slice> slice) {
-    out.println(slice.object);
+  public void finish() {
+    out.println("End of dump: "+path());
   }
+}
 
-  public void finalize(Relative<AnonymousResource> resource) {
-    out.println("End of dump: "+resource.path);
+class HexDumpResource extends Resource<HexDumpSession, HexDumpResource> {
+  public HexDumpResource(HexDumpSession s, Path path) { super(s, path); }
+  public HexDumpSink sink() { return new HexDumpSink(); }
+}
+
+class HexDumpSession extends Session<HexDumpSession, HexDumpResource> {
+  public HexDumpSession() { super(URI.EMPTY); }
+  public HexDumpResource select(Path path) {
+    return new HexDumpResource(this, path);
   }
 }

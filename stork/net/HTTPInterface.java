@@ -62,7 +62,7 @@ public class HTTPInterface extends StorkInterface {
   private void handleRequest(final HTTPRequest request) {
     issueRequest(requestToAd(request)).new Promise() {
       public void done(Request sr) {
-        sr.new PromiseAs<Ad>() {
+        sr.new As<Ad>() {
           public Ad convert(Object o) {
             return Ad.marshal(o);
           } public void done(Ad ad) {
@@ -114,13 +114,13 @@ public class HTTPInterface extends StorkInterface {
     Bell<Ad> bell;
 
     if (type == null || type.startsWith("application/json")) {
-      bell = sink.bell().new PromiseAs<Ad>() {
+      bell = sink.bell().new As<Ad>() {
         public Ad convert(Slice slice) {
           return Ad.parse(new ByteBufInputStream(slice.asByteBuf()));
         }
       };
     } else if (type.startsWith("application/x-www-form-urlencoded")) {
-      bell = sink.bell().new PromiseAs<Ad>() {
+      bell = sink.bell().new As<Ad>() {
         public Ad convert(Slice slice) {
           return queryToAd(slice.asByteBuf().toString(CharsetUtil.UTF_8));
         }
@@ -130,7 +130,7 @@ public class HTTPInterface extends StorkInterface {
     }
 
     req.root().tap().attach(sink);
-    return bell.new PromiseAs<Ad>() {
+    return bell.new As<Ad>() {
       public Ad convert(Ad body) { return head.merge(body); }
     };
   }

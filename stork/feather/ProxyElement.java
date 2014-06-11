@@ -4,110 +4,122 @@ package stork.feather;
  * An abstract base class for anything which can serve as an element in a proxy
  * transfer pipeline. In particular, this is the base class for {@link Sink}
  * and {@link Tap}.
- * <p/>
- * {@code ProxyElement}s must implement behavior for controlling the flow of
- * data on demand and for initializing, draining to, and finalizing {@code
- * Resource}s handled by the {@code ProxyElement}.
  *
- * @param <R> The root {@code Resource} type.
+ * @param <S> The source {@code Resource} type.
+ * @param <D> The destination {@code Resource} type.
  */
-public abstract class ProxyElement<R extends Resource<?,R>> {
-  /** The root {@code Resource} of this {@code ProxyElement}. */
-  public final R root;
+public abstract class ProxyElement <S extends Resource, D extends Resource> {
+  private S source;
+  private D destination;
+  private Path path = Path.ROOT;
+  private ProxyTransfer<S,D> transfer;
+
+  // Exactly one of these may be non-null.
+  ProxyElement(S s, D d) {
+    if (s == null && d == null)
+      throw new NullPointerException("resource");
+    if (s != null && d != null)
+      throw new IllegalArgumentException();
+    source = s;
+    destination = d;
+  }
 
   /**
-   * Create a {@code ProxyElement} with the given {@code Resource} as the root.
-   *
-   * @param root the {@code Resource} this {@code ProxyElement} receives data
-   * for.
+   * The {@code Path} of this transfer element relative to the root of the
+   * transfer.
    */
-  public ProxyElement(R root) { this.root = root; }
+  public final Path path() {
+    return path;
+  } final void path(Path path) {
+    this.path = path;
+  }
 
   /**
-   * Prepare the pipeline for the transfer of data for {@code resource}. This
-   * must be called before any data is drained for {@code resource}.
-   * <p/>
-   * This method returns immediately, and initialization takes place
-   * asynchronously. It may return a {@code Bell} which will be rung when the
-   * initialization process is complete and slices for {@code path} may begun
-   * being drained through this endpoint. It may also return {@code null} to
-   * indicate that transmission may begin immediately.
+   * Get the source {@code Resource} of the transfer.
    *
-   * @param resource the {@code Resource} which should be initialized, in a
-   * {@code Relative} wrapper.
-   * @return A {@code Bell} which will ring when data for {@code resource} is
-   * ready to be drained, or {@code null} if data can begin being drained
-   * immediately.
-   * @throws Exception (via bell) if the {@code Resource} cannot be
-   * initialized.
+   * @throws IllegalStateException if a {@code Tap} has not been attached.
    */
-  public abstract Bell<R> initialize(Relative<R> resource) throws Exception;
+  public final S source() {
+    if (source == null)
+      throw new IllegalStateException("No source has been set.");
+    return source;
+  } final synchronized void source(S source) {
+    if (source != null)
+      throw new IllegalStateException("A source has already been set.");
+    this.source = source;
+  }
+
 
   /**
-   * Drain a {@code Relative<Slice>} through the pipeline. This method
-   * returns as soon as possible, with the actual I/O operation taking place
-   * asynchronously.
+   * Get the destination {@code Resource} of the transfer.
+   *
+   * @throws IllegalStateException if a {@code Sink} has not been attached.
+   */
+  public final D destination() {
+    if (destination == null)
+      throw new IllegalStateException("No destination has been set");
+    return destination;
+  } final synchronized void destination(D destination) {
+    if (destination != null)
+      throw new IllegalStateException("A destination has already been set.");
+    this.destination = destination;
+  }
+
+  // Used in Tap and Sink to get a reference to the transfer.
+  final synchronized ProxyTransfer<S,D> transfer() {
+    if (transfer == null)
+      throw new IllegalStateException("Not attached.");
+    return transfer;
+  } final synchronized ProxyTransfer<S,D> transfer(ProxyTransfer<S,D> t) {
+    if (transfer != null)
+      throw new IllegalStateException("Already attached.");
+    return transfer = t;
+  }
+
+  /**
+   * Drain a {@code Slice} through the pipeline. This method returns as soon as
+   * possible, with the actual I/O operation taking place asynchronously.
    *
    * @param slice a {@code Slice} being drained through the pipeline.
    * @throws IllegalStateException if this method is called when the pipeline
    * has not been initialized.
    */
-  public abstract void drain(Relative<Slice> slice);
+  protected abstract void drain(Slice slice);
 
   /**
-   * Finalize the transfer of data for the specified {@code Resource}. This
-   * method should return immediately, and finalization should take place
-   * asynchronously.
+   * Prepare to begin the transfer of data. This involves, for example,
+   * establishing data channels, pipelining transfer commands, altering state,
+   * etc. The {@code Sink} will ring {@code bell} when data may begin being
+   * drained.
    *
-   * @param resource the {@code Resource} being finalized.
-   * @throws IllegalStateException if this method is called when the pipeline
-   * has not been initialized.
+   * @param bell a {@code Bell} whose ringing indicates the transfer of data
+   * may begin.
+   * @throws Exception if this transfer element cannot be started for a reason
+   * known immediately.
    */
-  public abstract void finalize(Relative<R> resource);
+  protected abstract void start(Bell bell) throws Exception;
+
+  /** Finish the flow of data. */
+  protected abstract void finish();
 
   /**
-   * Check if the pipeline is capable of draining {@code Slice}s in arbitrary
-   * order. The return value of this method should remain constant across
-   * calls.
+   * Pause the transfer until {@code Bell} is rung. When this is called, data
+   * should no longer be drained through the pipeline, and the attached {@code
+   * Tap} should cease reading from underlying data buffers. The {@code Sink}
+   * will ring {@code bell} when the transfer of data may be resumed.
    *
-   * @return {@code true} if transmitting slices in arbitrary order is
-   * supported.
-   * @throws IllegalStateException if this method is called when the pipeline
-   * has not been initialized.
+   * @param bell the {@code Bell} whose ringing indicates that the transfer of
+   * data may resume.
    */
-  public boolean random() { return false; }
+  protected abstract void pause(Bell bell);
 
   /**
-   * Get the number of distinct {@code Resource}s the pipeline may be in the
-   * process of transferring simultaneously. Specifically, this value limits
-   * how many times {@code #initialize(...)} may be called before a
-   * corresponding {@code #finalize(...)} must be called to free up a transfer
-   * slot.
-   * <p/>
-   * Returning a number less than or equal to zero indicates that an arbitrary
-   * number of {@code Resource}s may be transferred concurrently.
+   * Free any system resources allocated by this transfer element. This will be
+   * called after the transfer element has finished transferring data.
+   * Subclasses should implement this to free any resources if any are
+   * allocated.
    *
-   * @return The number of data {@code Resource}s this sink can receive
-   * concurrently.
-   * @throws IllegalStateException if this method is called when the pipeline
-   * has not been initialized.
+   * @throws Exception Any {@code Exception} thrown by this method is ignored.
    */
-  public int concurrency() { return 1; }
-
-  /**
-   * Start the flow of data.
-   *
-   * @return A {@code Bell} which will ring with the root {@code Resource} once
-   * the flow of data may begin.
-   */
-  protected Bell<R> start() { return new Bell<R>().ring(root); }
-
-  /** Stop the flow of data permanently. */
-  protected void stop() { }
-
-  /** Pause the transfer. */
-  protected void pause() { }
-
-  /** Resume the the flow of data after a pause. */
-  protected void resume() { }
+  protected void close() throws Exception { }
 }

@@ -18,17 +18,14 @@ public class AggregatorSink extends Sink<AnonymousResource> {
     super((AnonymousResource) Resource.ANONYMOUS);
   }
 
-  public void drain(Relative<Slice> slice) {
-    if (slice.isRoot())
-      list.add(slice.object.asByteBuf());
+  public void drain(Slice slice) {
+    list.add(slice.asByteBuf());
   }
 
-  public void finalize(Relative<AnonymousResource> resource) {
-    if (resource.isRoot()) {
-      ByteBuf[] array = list.toArray(new ByteBuf[0]);
-      ByteBuf buf = Unpooled.wrappedBuffer(array);
-      bell.ring(new Slice(buf));
-    }
+  public void finish() {
+    ByteBuf[] array = list.toArray(new ByteBuf[0]);
+    ByteBuf buf = Unpooled.wrappedBuffer(array);
+    bell.ring(new Slice(buf));
   }
 
   public Bell<Slice> bell() {

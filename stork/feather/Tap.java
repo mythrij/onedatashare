@@ -6,11 +6,6 @@ package stork.feather;
  * {@link #pause()} and {@link #resume()}) to allow attached {@code Sink}s to
  * prevent themselves from being overwhelmed.
  * <p/>
- * {@code Tap}s may either be <i>active</i> or <i>passive</i>. The distinction
- * lies in how the {@code Tap} manages {@code Resource} ordering and
- * initialization. Whether a {@code Tap} is active or passive influences the
- * semantics of {@code initialize(...)}.
- * <p/>
  * Active {@code Tap}s handle their own initialization and ordering of {@code
  * Resource}s, which are typically imposed by some external mechanism. These
  * {@code Tap}s will call {@code initialize(...)} themselves when a {@code
@@ -31,187 +26,70 @@ package stork.feather;
  *
  * @see Sink
  * @see Slice
+ * @see Transfer
+ *
+ * @param <S> The source {@code Resource} type.
  */
-public abstract class Tap<R extends Resource<?,R>> extends ProxyElement<R> {
-  private ProxyTransfer<R,?> transfer;
-
-  /** Whether or not this is an active {@code Tap}. */
-  public final boolean active;
-
+public abstract class Tap<S extends Resource>
+extends ProxyElement<S,Resource> {
   /**
-   * Create a {@code Tap} with an anonymous root {@code Resource}.
-   */
-  public Tap() { this((R) Resource.ANONYMOUS); }
-
-  /**
-   * Create a {@code Tap} with an anonymous root {@code Resource}.
+   * Create a {@code Tap} associated with {@code source}.
    *
-   * @param active whether or not this {@code Tap} is active.
-   */
-  public Tap(boolean active) { this((R) Resource.ANONYMOUS, active); }
-
-  /**
-   * Create an active {@code Tap} with {@code root} as the root {@code
-   * Resource}.
-   *
-   * @param root the {@code Resource} this {@code Tap} emits data from.
+   * @param source the {@code Resource} this {@code Tap} emits data from.
    * @throws NullPointerException if {@code resource} is {@code null}.
    */
-  public Tap(R root) { this(root, false); }
+  public Tap(S source) { super(source, null); }
 
   /**
-   * Create a {@code Tap} with the given {@code Resource} as the root resource.
-   *
-   * @param root the {@code Resource} this {@code Tap} emits data from.
-   * @param active whether or not this {@code Tap} is active.
-   * @throws NullPointerException if {@code resource} is {@code null}.
-   */
-  public Tap(R root, boolean active) {
-    super(root);
-    this.active = active;
-  }
-
-  public final R source() { return root; }
-  public final Resource destination() { return transfer().destination(); }
-
-  /**
-   * Attach this tap to a {@code Sink}. Once this method is called, {@link
-   * #start()} will be called and the {@code Tap} may begin emitting {@link
-   * Slice}s.
+   * Attach this {@cod Tap} to a {@code Sink}. Once this method is called,
+   * {@link #start()} will be called and the {@code Tap} may begin emitting
+   * {@link Slice}s.
    *
    * @param sink a {@link Sink} to attach.
    * @throws NullPointerException if {@code sink} is {@code null}.
-   * @throws IllegalStateException is a {@code Sink} has already been attached.
+   * @throws IllegalStateException if a {@code Sink} has already been attached.
    */
-  public final <D extends Resource<?,D>>
-  ProxyTransfer<R,D> attach(Sink<D> sink) {
-    if (sink == null)
-      throw new NullPointerException();
-    synchronized (this) {
-      if (transfer != null)
-        throw new IllegalStateException("A Sink is already attached.");
-      transfer = new ProxyTransfer<R,D>(this, sink);
-      return (ProxyTransfer<R,D>) transfer;
-    }
+  public final <D extends Resource<?,D>> Transfer<S,D> attach(Sink<D> sink) {
+    return new ProxyTransfer<S,D>(this, sink);
   }
 
-  // Get the transfer, or throw an IllegalStateException if the transfer is not
-  // ready.
-  private synchronized final ProxyTransfer<R,?> transfer() {
-    if (transfer == null)
-      throw new IllegalStateException();
-    return transfer;
+  final void subattach(Path path, ProxyTransfer<S,Resource> transfer) {
+    transfer(transfer);
   }
 
   /**
-   * Initialize the pipeline to transfer a {@code Resource}. Active {@code
-   * Tap}s should call this to initialize downstream elements for transfer.
-   * Active subclasses may override this, but must return {@code
-   * super.initialize(resource)}. The returned {@code Bell} will ring when the
-   * attached {@code Sink} is ready to transfer data.
-   * <p/>
-   * Passive {@code Tap}s will have this called to indicate that a transfer
-   * should begin, and must not call {@code super.initialize(...)}, or an
-   * {@code IllegalStateException} will be thrown. A {@code Bell} must be
-   * returned that will be rung when the {@code Sink} is ready to receive
-   * {@code Slice}s from {@code resource}. Once the returned {@code Bell} has
-   * been rung, and any asynchronous preparations in the {@code Tap} have
-   * completed, the {@code Tap} may begin draining {@code Slice}s for {@code
-   * resource}.
+   * Declare the existence of a sub-{@code Resource}. The {@code Resource} is
+   * named {@code name}, and its {@code Path} in the transfer is given by
+   * {@code path().appendLiteral(name)}.
+   */
+  protected final void subresource(String name) {
+    if (!name.equals(".") && !name.equals(".."))
+      subresource(path().appendLiteral(name));
+  }
+
+  /**
+   * Declare the existence of a sub-{@code Resource}. The {@code Path} of the
+   * {@code Resource} is given by {@code path}.
+   */
+  protected final void subresource(Path path) {
+    transfer().subresource(path);
+  }
+
+  protected abstract void start(Bell bell) throws Exception;
+
+  protected void drain(Slice slice) {
+    transfer().drain(path(), slice);
+  }
+
+  protected void finish() { }
+
+  /**
+   * Check if this is an active {@code Tap}.
    *
-   * @throws IllegalStateException if this {@code Tap} is passive and this
-   * method has not been overridden.
+   * @return {@code true} if this is an active {@code Tap}; {@code false}
+   * otherwise.
    */
-  public Bell<R> initialize(Relative<R> resource) {
-    // This is kind of an antipattern, maybe we should have a subclass?
-    if (!active) throw new
-      IllegalStateException("Passive Taps must override initialize().");
-    return transfer().initialize(resource);
-  }
-
-  /**
-   * Initialize the transfer of data for the {@code Resource} specified by
-   * {@code path} relative to the root {@code Resource}. This simply delegates
-   * to {@link #initialize(Relative)}, and is made available as a convenience.
-   *
-   * @param path the path to the {@code Resource} which should be initialized
-   * relative to the root.
-   * @return A {@code Bell} which will ring when data for {@code path} is ready
-   * to be drained, or {@code null} if data can begin being drained
-   * immediately.
-   */
-  public final Bell<R> initialize(Path path) {
-    return initialize(root.selectRelative(path));
-  }
-
-  /**
-   * Drain a {@code Slice} to the {@code Sink}. This method (or one of its
-   * analogues) should be called by {@code Tap}s to drain {@code Slice}s
-   * through the pipeline.
-   */
-  public final void drain(Relative<Slice> slice) {
-    transfer().drain(slice);
-  }
-
-  /**
-   * Drain a {@link Slice} through the pipeline from the root {@code Resource}.
-   * This delegates to {@link #drain(Relative)}.
-   *
-   * @param slice a {@code Slice} being drained through the pipeline.
-   * @throws IllegalStateException if this method is called when the pipeline
-   * has not been initialized.
-   */
-  public final void drain(Slice slice) {
-    drain(root.wrap(slice));
-  }
-
-  /**
-   * Drain a {@link Slice} through the pipeline for the {@code Resource} with the given
-   * {@code Path}. This delegates to {@link #drain(Relative)}.
-   *
-   * @param path the path corresponding to the {@code Resource} the slice originated
-   * from.
-   * @param slice a {@code Slice} being drained through the pipeline.
-   * @throws IllegalStateException if this method is called when the pipeline
-   * has not been initialized.
-   */
-  public final void drain(Path path, Slice slice) {
-    drain(root.wrap(path, slice));
-  }
-
-  /**
-   * Drain a {@link Slice} through the pipeline for the given {@code
-   * Relative<R>}. This delegates to {@link #drain(Relative)}.
-   *
-   * @param resource the {@code Resource} the slice originated from.
-   * @param slice a {@code Slice} being drained through the pipeline.
-   * @throws IllegalStateException if this method is called when the pipeline
-   * has not been initialized.
-   */
-  public final void drain(Relative<R> resource, Slice slice) {
-    drain(resource.wrap(slice));
-  }
-
-  /**
-   * Finalize the transfer of a {@code Resource}. This method (or one of its
-   * analogues) should be called by {@code Tap}s to indicate to the attached
-   * {@code Sink} that a given {@code Resource} has finished transferring.
-   * Non-data {@code Resource}s do not need to be finalized.
-   */
-  public final void finalize(Relative<R> resource) {
-    transfer().finalize(resource);
-  }
-
-  /**
-   * Finalize the transfer of data for the {@code Resource} specified by {@code
-   * path}. This simply delegates to {@link #finalize(Relative)}.
-   *
-   * @param path the path to the {@code Resource} which should be finalized
-   * relative to the root.
-   * @throws IllegalStateException if this method is called when the pipeline
-   * has not been initialized.
-   */
-  public final void finalize(Path path) {
-    finalize(root.selectRelative(path));
+  public final boolean isActive() {
+    return !(this instanceof PassiveTap);
   }
 }

@@ -52,7 +52,7 @@ public abstract class Transfer<S extends Resource, D extends Resource> {
         state = State.STARTING;
         Bell<?> bell = Transfer.this.start();
         if (bell != null)
-          bell.thenAs(Transfer.this).promise(onStart);
+          bell.as(Transfer.this).promise(onStart);
         else
           onStart.ring(Transfer.this);
       } catch (Exception e) {
@@ -90,7 +90,7 @@ public abstract class Transfer<S extends Resource, D extends Resource> {
           return pauseBell.new Promise();
         case UNSTARTED:
         case STARTING:  // Call back later.
-          if (pendingPause == null) pendingPause = onStart.new Then() {
+          if (pendingPause == null) pendingPause = onStart.new Promise() {
             public void then(Transfer<S,D> transfer) {
               pause().promise(this);  // Note, this is the mediator pause.
             } public void always() {
@@ -123,14 +123,10 @@ public abstract class Transfer<S extends Resource, D extends Resource> {
     }
   }
 
-  /**
-   * Get the source {@code Resource}.
-   */
+  /** Get the source {@code Resource}. */
   public abstract S source();
 
-  /**
-   * Get the destination {@code Resource}.
-   */
+  /** Get the destination {@code Resource}. */
   public abstract D destination();
 
   /**

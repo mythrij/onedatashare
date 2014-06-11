@@ -16,34 +16,20 @@ import stork.feather.util.*;
  *
  * @see Tap
  * @see Slice
+ * @see Transfer
  *
- * @param <R> The destination {@code Resource} type.
+ * @param <D> The destination {@code Resource} type.
  */
-public abstract class Sink<R extends Resource<?,R>> extends ProxyElement<R> {
-  private ProxyTransfer<?,R> transfer;
-
+public abstract class Sink<D extends Resource>
+extends ProxyElement<Resource,D> {
   /**
-   * Create a {@code Sink} with an anonymous root {@code Resource}.
-   */
-  public Sink() { this((R) Resource.ANONYMOUS); }
-
-  /**
-   * Create a {@code Sink} with the given {@code Resource} as the root.
+   * Create a {@code Sink} associated with {@code destination}.
    *
-   * @param root the {@code Resource} this {@code Sink} receives data for.
+   * @param destination the {@code Resource} this {@code Sink} receives data
+   * for.
+   * @throws NullPointerException if {@code resource} is {@code null}.
    */
-  public Sink(R root) { super(root); }
-
-  // Get the transfer, or throw an IllegalStateException if the transfer is not
-  // ready.
-  private final synchronized ProxyTransfer<?,R> transfer() {
-    if (transfer == null)
-      throw new IllegalStateException();
-    return transfer;
-  }
-
-  public final Resource source() { return transfer().source(); }
-  public final R destination() { return root; }
+  public Sink(D destination) { super(null, destination); }
 
   /**
    * Attach this {@code Sink} to a {@code Tap}. Once this method is called,
@@ -54,23 +40,12 @@ public abstract class Sink<R extends Resource<?,R>> extends ProxyElement<R> {
    * @throws NullPointerException if {@code tap} is {@code null}.
    * @throws IllegalStateException if a {@code Tap} has already been attached.
    */
-  public final <S extends Resource<?,S>>
-  ProxyTransfer<S,R> attach(Tap<S> tap) {
-    if (tap == null)
-      throw new NullPointerException();
-    if (transfer != null)
-      throw new IllegalStateException("A Tap is already attached.");
-    return tap.attach(this);
+  public final <S extends Resource<?,S>> Transfer<S,D> attach(Tap<S> tap) {
+    return new ProxyTransfer<S,D>(tap, this);
   }
 
-  /**
-   * This can be overridden by {@code Sink} implementations to initialize the
-   * transfer of {@code Slice}s for a {@code Resource}. {@code resource.object}
-   * will contain the destination {@code Resource} to be initialized, and
-   * {@code resource.origin} will contain the matching source {@code Resource}.
-   */
-  public Bell<R> initialize(Relative<R> resource) {
-    return null;
+  protected void start(Bell bell) throws Exception {
+    bell.ring();
   }
 
   /**
@@ -86,19 +61,24 @@ public abstract class Sink<R extends Resource<?,R>> extends ProxyElement<R> {
    * @throws IllegalStateException if this method is called when the pipeline
    * has not been initialized.
    */
-  public abstract void drain(Relative<Slice> slice);
+  protected abstract void drain(Slice slice);
+
+  protected abstract void finish();
 
   /**
-   * This can be overridden by {@code Sink} implementations to finalize the
-   * transfer of {@code Slice}s for a {@code Resource}.
+   * This calls {@link #pause(Bell)} with a new {@code Bell}, and return the
+   * {@code Bell}. The returned {@code Bell} should be rung once the transfer
+   * of data may resume.
+   *
+   * @return A {@code Bell} that, when rung, resumes the transfer.
    */
-  public void finalize(Relative<R> resource) { }
-
-  public final void pause() {
-    transfer().mediator.pause();
+  protected final Bell pause() {
+    Bell bell = new Bell();
+    pause(bell);
+    return bell;
   }
 
-  public final void resume() {
-    transfer().mediator.resume();
+  protected final void pause(Bell bell) {
+    transfer().mediator.pause();
   }
 }

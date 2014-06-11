@@ -18,7 +18,7 @@ import stork.feather.*;
  * method.
  */
 public class LocalSession extends Session<LocalSession,LocalResource> {
-  private ThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(4);
+  final ThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(4);
   final Path path;
 
   /** Create a {@code LocalSession} at the system root. */
@@ -36,31 +36,6 @@ public class LocalSession extends Session<LocalSession,LocalResource> {
 
   protected void finalize() {
     executor.shutdown();
-  }
-
-  // A special runnable bell that will be scheduled with the executor, and will
-  // cancel the queued task if the bell is cancelled.
-  abstract class TaskBell<T> extends Bell<T> {
-    private final Future future = executor.submit(new Runnable() {
-      public final void run() {
-        try {
-          task();
-          ring();
-        } catch (Exception e) {
-          ring(e);
-        }
-      }
-    });
-
-    // Override this to perform some task and optionally ring the bell. If the
-    // bell is not rung at the end of the task, it will be rung with null. Any
-    // exception thrown will fail the bell.
-    public abstract void task() throws Exception;
-
-    public final void fail(Throwable t) {
-      if (t instanceof CancellationException)
-        future.cancel(false);
-    }
   }
 
   public static void main(String[] args) {

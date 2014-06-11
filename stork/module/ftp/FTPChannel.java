@@ -257,15 +257,14 @@ public class FTPChannel {
       if (data.security == null || !reply.isProtected())
         return new Bell<Reply>(reply);
 
-      return data.security.new ThenAs<Reply>() {
-        public void then(SecurityContext sc) throws Exception {
+      return data.security.new AsBell<Reply>() {
+        public Bell<Reply> convert(SecurityContext sc) throws Exception {
           ReplyDecoder rd = new ReplyDecoder();
           for (ByteBuf eb : reply.lines) {
             ByteBuf db = sc.unprotect(Base64.decode(eb));
             Bell<Reply> r = rd.asyncDecode(db, null);
-            if (r != null) {
-              r.promise(this); return;
-            }
+            if (r != null)
+              return r;
           } throw new RuntimeException("Bad reply from server.");
         }
       };
@@ -285,7 +284,7 @@ public class FTPChannel {
       Reply r = decodeReplyLine(buffer);
       if (r == null)
         return null;  // We haven't gotten a full reply.
-      return new Bell<Reply>(r).new Then() {
+      return new Bell<Reply>(r).new Promise() {
         public void then(Reply r) { decodeProtectedReply(r).promise(this); }
         public void done(Reply r) { if (out != null) out.add(r); }
       };
@@ -448,11 +447,12 @@ public class FTPChannel {
       if (data.security == null) {
         out.add(raw);
         out.add(Unpooled.wrappedBuffer("\r\n".getBytes(data.encoding)));
-      } else data.security.new PromiseAs<ByteBuf>() {
-        public ByteBuf convert(SecurityContext sc) throws Exception {
-          return Unpooled.wrappedBuffer(
+      } else data.security.new AsBell<ByteBuf>() {
+        public Bell<ByteBuf> convert(SecurityContext sc) throws Exception {
+          ring(Unpooled.wrappedBuffer(
             Unpooled.wrappedBuffer("ENC ".getBytes(data.encoding)),
-            Base64.encode(sc.protect(raw), false));
+            Base64.encode(sc.protect(raw), false)));
+          return null;
         } public void done(ByteBuf encoded) {
           out.add(encoded);
         } public void fail() {
@@ -494,14 +494,15 @@ public class FTPChannel {
   } public Bell<Reply> authorize(String user) {
     return authorize(user, "");
   } public Bell<Reply> authorize(final String user, final String pass) {
-    return new Command("USER", user).new Then() {
-      public void then(Reply r) {
+    return new Command("USER", user).new AsBell<Reply>() {
+      public Bell<Reply> convert(Reply r) {
         if (r.code == 331)
-          new Command("PASS", pass).promise(this);
+          return new Command("PASS", pass);
         else if (r.isComplete())
           ring(r);
         else
           ring(r.asError());
+        return null;
       }
     };
   }
@@ -521,7 +522,7 @@ public class FTPChannel {
       return new Bell<Reply>().ring(e);
     }
 
-    return new Command("AUTH GSSAPI").new ThenAs<Reply>() {
+    return new Command("AUTH GSSAPI").new Promise() {
       public void then(Reply r) {
         if (r.isNegative()) {
           ring(r.asError());
@@ -570,7 +571,7 @@ public class FTPChannel {
     private Map<String,Set<CheckBell>> checks;
 
     // Custom bell which is associated with a given command query.
-    class CheckBell extends Bell<Boolean> {
+    class CheckBell extends Bell {
       public final String cmd;
       CheckBell(String cmd) {
         this.cmd = cmd;
@@ -608,7 +609,7 @@ public class FTPChannel {
       };
     }
 
-    public Bell<Boolean> supports(String cmd) {
+    public Bell supports(String cmd) {
       return new CheckBell(cmd);
     }
 
@@ -624,12 +625,15 @@ public class FTPChannel {
       if (checks.containsKey(cmd)) for (CheckBell cb : checks.get(cmd))
         cb.ring(true);
     } private synchronized void addCheck(final CheckBell cb) {
+      // This is some really smelly code...
       if (features == null)
         init();
-      if (checks == null)
-        cb.ring(isSupported(cb.cmd));
+      if (checks == null && isSupported(cb.cmd))
+        cb.ring();
+      else if (checks == null && isSupported(cb.cmd))
+        cb.ring(new RuntimeException());
       else if (features.contains(cb.cmd))
-        cb.ring(true);
+        cb.ring();
       else if (!checks.containsKey(cb.cmd))
         checks.put(cb.cmd, new HashSet<CheckBell>() {{ add(cb); }});
       else
@@ -648,16 +652,16 @@ public class FTPChannel {
 
   // Checks if a command is supported by the server.
   public Bell<Boolean> supports(String cmd) {
-    return data.features.supports(cmd);
-  } private List<Bell<Boolean>> supportsMulti(String... cmd) {
-    List<Bell<Boolean>> bs = new ArrayList<Bell<Boolean>>(cmd.length);
-    for (String c : cmd)
-      bs.add(supports(c));
-    return bs;
+    return data.features.supports(cmd).as(true, false);
+  } private Bell[] supportsMulti(String... cmd) {
+    Bell[] bells = new Bell[cmd.length];
+    for (int i = 0; i < cmd.length; i++)
+      bells[i] = data.features.supports(cmd[i]);
+    return bells;
   } public Bell<Boolean> supportsAny(String... cmd) {
-    return new Bell.Or(supportsMulti(cmd));
+    return Bell.any(supportsMulti(cmd)).as(true, false);
   } public Bell<Boolean> supportsAll(String... cmd) {
-    return new Bell.And(supportsMulti(cmd));
+    return Bell.all(supportsMulti(cmd)).as(true, false);
   }
 
   // Append the given command to the handler queue. If the command is a sync
@@ -723,7 +727,7 @@ public class FTPChannel {
    */
   public synchronized Bell<Character> type(char t) {
     return data.type =
-      new Command("TYPE", t).expectComplete().thenAs(t).or(data.type);
+      new Command("TYPE", t).expectComplete().as(t).or(data.type);
   }
 
   /**
@@ -732,12 +736,12 @@ public class FTPChannel {
    */
   public synchronized Bell<Character> mode(char m) {
     return data.mode =
-      new Command("MODE", m).expectComplete().thenAs(m).or(data.mode);
+      new Command("MODE", m).expectComplete().as(m).or(data.mode);
   }
 
   /** Negotiate a passive mode data channel. */
   public synchronized Bell<FTPHostPort> passive() {
-    return new Command("PASV").expectComplete().new PromiseAs<FTPHostPort>() {
+    return new Command("PASV").expectComplete().new As<FTPHostPort>() {
       public FTPHostPort convert(Reply r) { return new FTPHostPort(r); }
     };
   }
@@ -870,10 +874,10 @@ public class FTPChannel {
      * range (inclusive), instead of ringing successfully with the reply.
      */
     public Bell<Reply> expect(final int lo, final int hi) {
-      return new Then() {
-        public void done(Reply r) {
+      return new Promise() {
+        public void then(Reply r) {
           if (r.code < lo || r.code > hi)
-            ring(r.asError());
+            throw r.asError();
           ring(r);
         }
       };
@@ -901,6 +905,8 @@ public class FTPChannel {
    */
   public class DataChannel extends Lock {
     private Bell<SocketChannel> dc;
+    private volatile boolean read = false;
+    private ChannelHandlerContext context;
 
     private final Bell<DataChannel> onClose = new Bell<DataChannel>() {
       public void always() {
@@ -924,20 +930,20 @@ public class FTPChannel {
     }
 
     private Bell<SocketChannel> tryPassiveThenActive() {
-      return tryPassive().new Then() {
+      return tryPassive().new Promise() {
         public void then(Throwable t) { tryActive().promise(this); }
       };
     }
 
     private Bell<SocketChannel> tryActiveThenPassive() {
-      return tryActive().new Then() {
+      return tryActive().new Promise() {
         public void then(Throwable t) { tryPassive().promise(this); }
       };
     }
 
     private Bell<SocketChannel> tryPassive() {
-      return passive().new ThenAs<SocketChannel>() {
-        public void then(FTPHostPort hp) {
+      return passive().new AsBell<SocketChannel>() {
+        public Bell<SocketChannel> convert(FTPHostPort hp) {
           Bootstrap b = new Bootstrap();
           b.group(FTPChannel.group).channel(NioSocketChannel.class);
           b.handler(new ChannelInitializer<SocketChannel>() {
@@ -946,7 +952,7 @@ public class FTPChannel {
               ch.pipeline().addLast(new SliceHandler());
             }
           });
-          futureToBell(b.connect(hp.getAddr())).promise(this);
+          return futureToBell(b.connect(hp.getAddr()));
         }
       };
     }
@@ -981,6 +987,11 @@ public class FTPChannel {
         receive(new Slice((ByteBuf) msg));
       } public void channelInactive(ChannelHandlerContext ctx) {
         DataChannel.this.close();
+      } public void read(ChannelHandlerContext ctx) {
+        if (read)
+          ctx.read();
+        else if (context == null)
+          context = ctx;
       }
     }
 
@@ -991,12 +1002,41 @@ public class FTPChannel {
 
     /** Return a bell which rings on connect. */
     public Bell<DataChannel> onConnect() {
-      return dc.thenAs(this);
+      return dc.as(this);
     }
 
     /** Return a bell which rings on close (or failure). */
     public Bell<DataChannel> onClose() {
       return onClose;
+    }
+
+    /** Start reading data when {@code bell} rings. */
+    public synchronized DataChannel startWhen(Bell bell) {
+      bell.new Promise() {
+        public void done() { start(); }
+        public void fail() { close(); }
+      };
+      return this;
+    }
+
+    /** Pause reading until {@code bell} rings. */
+    public synchronized DataChannel pauseUntil(Bell bell) {
+      stop();
+      startWhen(bell);
+      return this;
+    }
+
+    /** Start reading data. */
+    public synchronized void start() {
+      read = true;
+      if (context != null)
+        context.read();
+      context = null;
+    }
+
+    /** Stop reading data. */
+    public synchronized void stop() {
+      read = false;
     }
 
     /** Pipe commands to be run in the lock. */

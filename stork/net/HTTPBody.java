@@ -49,21 +49,21 @@ public class HTTPBody extends Resource<HTTPRequest,HTTPBody> {
    */
   private class HTTPTap extends Tap<HTTPBody> {
     HTTPTap() {
-      super(HTTPBody.this, true);
+      super(HTTPBody.this);
     }
 
-    public Bell<HTTPBody> start() {
-      initialize(Path.ROOT).new Promise() {
+    public void start(Bell bell) {
+      bell.new Promise() {
         public void done() {
           session.ready = true;
         } public void fail() {
+          // TODO
         }
       };
-      return root.initialize();
     }
 
-    public void stop() {
-      finalize(Path.ROOT);
+    public void pause(Bell bell) {
+      // TODO
     }
   };
 
@@ -77,10 +77,10 @@ public class HTTPBody extends Resource<HTTPRequest,HTTPBody> {
     HTTPSink() { super(HTTPBody.this); }
 
     // If this is the root, send a header through Netty.
-    public Bell<HTTPBody> initialize(Relative<HTTPBody> resource) {
-      if (!resource.isRoot())  // Sigh browsers...
+    public void start(Bell bell) {
+      if (!path().isRoot())  // Sigh browsers...
         throw new RuntimeException("Cannot send multiple files.");
-      return generateHeader(resource.object).new PromiseAs<HTTPBody>() {
+      generateHeader(destination()).new As<HTTPBody>() {
         public HTTPBody convert(HttpResponse o) {
           session.toNetty(o);
           return HTTPBody.this;
@@ -88,14 +88,14 @@ public class HTTPBody extends Resource<HTTPRequest,HTTPBody> {
           session.toNetty(errorToHttpMessage(t));
           throw t;
         }
-      };
+      }.promise(bell);
     }
 
-    public void drain(Relative<Slice> slice) {
-      session.toNetty(new DefaultHttpContent(slice.object.asByteBuf()));
+    public void drain(Slice slice) {
+      session.toNetty(new DefaultHttpContent(slice.asByteBuf()));
     }
 
-    public void finalize(Relative<HTTPBody> resource) {
+    public void finish() {
       session.toNetty(new DefaultLastHttpContent());
     }
   };
@@ -104,7 +104,7 @@ public class HTTPBody extends Resource<HTTPRequest,HTTPBody> {
    * Generate an HTTP header for another resource based on its metadata.
    */
   private Bell<HttpResponse> generateHeader(Resource<?,?> resource) {
-    return resource.stat().new PromiseAs<HttpResponse>() {
+    return resource.stat().new As<HttpResponse>() {
       public HttpResponse convert(Stat stat) {
         if (stat.dir)
           throw new RuntimeException("Cannot send directories.");

@@ -98,31 +98,6 @@ public class Resource
   }
 
   /**
-   * Get the sub-resources of this {@code Resource}. Specifically, this returns
-   * a mapping from {@code Resource} names as {@code String}s to {@code
-   * Resource}s. This can only be called on a singleton {@code Resource} and
-   * returns {@code null} if it is not a singleton {@code Resource}. It may
-   * also return {@code null} either from the method or through the returned
-   * {@code Bell} if this {@code Resource} does not represent a collection
-   * resource.
-   *
-   * @return (via bell) A mapping from names to {@code Resource}s that
-   * represent sub-resources of this {@code Resource}.
-   */
-  public Bell<Map<String,R>> subresources() {
-    return stat().new PromiseAs<Map<String,R>>() {
-      public Map<String,R> convert(Stat s) {
-        if (s.files == null)
-          return null;
-        Map<String,R> map = new HashMap<String,R>();
-        for (Stat ss : s.files)
-          map.put(ss.name, select(ss.name));
-        return map;
-      }
-    };
-  }
-
-  /**
    * Reselect this {@code Resource} through an equivalent {@code Session}.
    * Assuming {@code session} is actually equivalent to this {@code Resource}'s
    * {@code Session}, the returned {@code Resource} will refer to the same
@@ -156,22 +131,6 @@ public class Resource
   }
 
   /**
-   * Wrap an object with a {@code Relative} with this {@code Resource} as the
-   * root and origin.
-   */
-  public <T> Relative<T> wrap(T object) {
-    return new Relative<T>(object, this, Path.ROOT);
-  }
-
-  /**
-   * Wrap an object with a {@code Relative} with this {@code Resource} as the
-   * root.
-   */
-  public <T> Relative<T> wrap(Path path, T object) {
-    return new Relative<T>(object, this, path);
-  }
-
-  /**
    * Select a subresource relative to this resource.
    *
    * @param name the literal name of a subresource to select.
@@ -193,21 +152,6 @@ public class Resource
   }
 
   /**
-   * Select a subresource as a {@code Relative<Resource>} containing relative
-   * path information. This is used during proxy transfers, and should
-   * generally not be used in applications unless maintaining relative path
-   * information across selection is necessary.
-   *
-   * @param path the path to the subresource, relative to this resource.
-   * @return A subresource relative to this {@code Resource} containing a
-   * reference to this {@code Resource}.
-   */
-  public final Relative<R> selectRelative(Path path) {
-    R r = select(path);
-    return new Relative<R>(r, this, path, r);
-  }
-
-  /**
    * Initialize the {@code Session} associated with this {@code Resource} to
    * perform operations on this {@code Resource}. Implementors should call this
    * themselves in the method body of any operation that requires {@code
@@ -223,7 +167,7 @@ public class Resource
    * operate on this {@code Resource}.
    */
   public final Bell<R> initialize() {
-    return session.mediatedInitialize().new ThenAs<R>((R)this);
+    return session.mediatedInitialize().as((R)this);
   }
 
   /**
