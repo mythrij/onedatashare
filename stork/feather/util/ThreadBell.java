@@ -49,7 +49,7 @@ public abstract class ThreadBell<T> extends Bell<T> {
    * @return This {@code ThreadBell}.
    */
   public synchronized ThreadBell<T> start() {
-    if (started) {
+    if (!started) {
       if (executor != null)
         executor.execute(runnable);
       else
