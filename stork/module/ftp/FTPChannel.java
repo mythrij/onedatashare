@@ -907,6 +907,7 @@ public class FTPChannel {
     private Bell<SocketChannel> dc;
     private volatile boolean read = false;
     private ChannelHandlerContext context;
+    private Bell writeBell;  // Ring when we can write again.
 
     private final Bell<DataChannel> onClose = new Bell<DataChannel>() {
       public void always() {
@@ -992,6 +993,13 @@ public class FTPChannel {
           ctx.read();
         else if (context == null)
           context = ctx;
+      } public void channelWritabilityChanged(ChannelHandlerContext ctx) {
+        if (!ctx.channel().isWritable()) {
+          if (writeBell == null) writeBell = new Bell();
+        } else if (writeBell != null) {
+          writeBell.ring();
+          writeBell = null;
+        }
       }
     }
 
@@ -1021,9 +1029,10 @@ public class FTPChannel {
 
     /** Pause reading until {@code bell} rings. */
     public synchronized DataChannel pauseUntil(Bell bell) {
-      stop();
-      startWhen(bell);
-      return this;
+      if (bell != null && !bell.isDone()) {
+        stop();
+        startWhen(bell);
+      } return this;
     }
 
     /** Start reading data. */
@@ -1051,10 +1060,14 @@ public class FTPChannel {
     public void receive(Slice slice) { }
 
     /** Send a slice through the data channel. */
-    public void send(final Slice slice) {
-      dc.new Promise() {
-        public void done(SocketChannel ch) {
+    public Bell send(final Slice slice) {
+      return dc.new Promise() {
+        public void then(SocketChannel ch) {
           ch.write(slice.asByteBuf());
+          if (writeBell == null)
+            ring();
+          else
+            writeBell.promise(this);
         }
       };
     }

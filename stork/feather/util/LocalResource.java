@@ -111,7 +111,7 @@ public class LocalResource extends Resource<LocalSession,LocalResource> {
   }
 }
 
-class LocalTap extends PassiveTap<LocalResource> {
+class LocalTap extends Tap<LocalResource> {
   final File file = source().file();
 
   // Small hack to take advantage of NIO features.
@@ -135,7 +135,7 @@ class LocalTap extends PassiveTap<LocalResource> {
   // State of the current transfer.
   public LocalTap(LocalResource root) { super(root); }
 
-  public void start(Bell bell) throws Exception {
+  public Bell start(Bell bell) throws Exception {
     if (!file.exists())
       throw new RuntimeException("File not found");
     if (!file.canRead())
@@ -149,7 +149,7 @@ class LocalTap extends PassiveTap<LocalResource> {
     remaining = file.length();
 
     // When bell rings, start a loop to send all chunks.
-    bell.promise(new BellLoop(this) {
+    return bell.promise(new BellLoop(this) {
       public Bell lock() { return pause; }
       public void body() throws Exception {
         if (remaining <= 0) {

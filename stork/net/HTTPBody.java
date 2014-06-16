@@ -52,18 +52,14 @@ public class HTTPBody extends Resource<HTTPRequest,HTTPBody> {
       super(HTTPBody.this);
     }
 
-    public void start(Bell bell) {
-      bell.new Promise() {
+    public Bell start(Bell bell) {
+      return bell.new Promise() {
         public void done() {
           session.ready = true;
         } public void fail() {
           // TODO
         }
       };
-    }
-
-    public void pause(Bell bell) {
-      // TODO
     }
   };
 
@@ -77,10 +73,10 @@ public class HTTPBody extends Resource<HTTPRequest,HTTPBody> {
     HTTPSink() { super(HTTPBody.this); }
 
     // If this is the root, send a header through Netty.
-    public void start(Bell bell) {
-      if (!path().isRoot())  // Sigh browsers...
+    public Bell start() {
+      if (!source().path.isRoot())  // Sigh browsers...
         throw new RuntimeException("Cannot send multiple files.");
-      generateHeader(destination()).new As<HTTPBody>() {
+      return generateHeader(destination()).new As<HTTPBody>() {
         public HTTPBody convert(HttpResponse o) {
           session.toNetty(o);
           return HTTPBody.this;
@@ -88,11 +84,11 @@ public class HTTPBody extends Resource<HTTPRequest,HTTPBody> {
           session.toNetty(errorToHttpMessage(t));
           throw t;
         }
-      }.promise(bell);
+      };
     }
 
-    public void drain(Slice slice) {
-      session.toNetty(new DefaultHttpContent(slice.asByteBuf()));
+    public Bell drain(Slice slice) {
+      return session.toNetty(new DefaultHttpContent(slice.asByteBuf()));
     }
 
     public void finish() {

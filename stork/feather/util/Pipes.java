@@ -1,5 +1,6 @@
 package stork.feather.util;
 
+import java.util.*;
 import java.nio.*;
 import java.nio.charset.*;
 
@@ -9,10 +10,11 @@ import io.netty.util.*;
 import stork.feather.*;
 
 /**
- * A utility class for creating anonymous {@link Tap}s for various purposes.
+ * A utility class for creating {@link Pipe}s, {@link Tap}s, and {@link Sink}s
+ * for various purposes.
  */
-public final class Taps {
-  private Taps() { }
+public final class Pipes {
+  private Pipes() { }
 
   /**
    * Create an anonymous {@code Tap} which emits a single {@code Slice} to an
@@ -23,7 +25,7 @@ public final class Taps {
    * @param slice the {@code Slice} emitted by the returned {@code Tap}.
    * @return An anonymous {@code Tap} which will emit {@code slice}.
    */
-  public static Tap fromSlice(final Slice slice) {
+  public static Tap tapFromSlice(final Slice slice) {
     return Resources.fromSlice(slice).tap();
   }
 
@@ -32,11 +34,11 @@ public final class Taps {
    * {@code Resource} {@code root}.
    */
   public static <R extends Resource<?,R>>
-  Tap<R> fromSlice(R root, Slice slice) {
+  Tap<R> tapFromSlice(R root, Slice slice) {
     final Slice s = slice;
     return new Tap<R>(root) {
-      public void start(Bell bell) {
-        bell.new Promise() {
+      public Bell start(Bell bell) {
+        return bell.new Promise() {
           public void done() {
             if (s != null) drain(s);
             finish();
@@ -56,8 +58,8 @@ public final class Taps {
    * @return An anonymous {@code Tap} which will emit {@code object} as a
    * {@code String} encoded using UTF-8.
    */
-  public static Tap fromString(Object object) {
-    return fromString(object, CharsetUtil.UTF_8);
+  public static Tap tapFromString(Object object) {
+    return tapFromString(object, CharsetUtil.UTF_8);
   }
 
   /**
@@ -69,12 +71,69 @@ public final class Taps {
    * @return An anonymous {@code Tap} which will emit {@code object} as a
    * {@code String} using {@code charset}.
    */
-  public static Tap fromString(Object object, Charset charset) {
+  public static Tap tapFromString(Object object, Charset charset) {
     if (object == null)
       return Resources.fromSlice(null).tap();
     CharBuffer cb = CharBuffer.wrap(object.toString());
     ByteBufAllocator allo = UnpooledByteBufAllocator.DEFAULT;
     ByteBuf bb = ByteBufUtil.encodeString(allo, cb, charset);
     return Resources.fromSlice(new Slice(bb)).tap();
+  }
+
+  /**
+   * A {@code Pipe} which aggregates multiple, randomly-ordered {@code Slices}
+   * into a single {@code Slice} which it drains on completion.
+   */
+  public static Pipe aggregatorPipe() {
+    return new Pipe() {
+      private List<ByteBuf> list = new LinkedList<ByteBuf>();
+
+      public Bell drain(Slice slice) {
+        list.add(slice.asByteBuf());
+        return null;
+      }
+
+      public void finish() {
+        ByteBuf[] array = list.toArray(new ByteBuf[0]);
+        ByteBuf buf = Unpooled.wrappedBuffer(array);
+        try {
+          super.drain(new Slice(buf));
+        } catch (Exception e) {
+          // Ugh, what should we do here?
+        } super.finish();
+      }
+    };
+  }
+
+  /**
+   * A {@code Sink} which receives and parses an {@code Ad}.
+   */
+  public static class AggregatorSink extends Sink {
+    private Bell<Slice> bell = new Bell<Slice>();
+    private List<ByteBuf> list = new LinkedList<ByteBuf>();
+
+    public AggregatorSink(Resource r) { super(r); }
+
+    public Bell<Slice> bell() {
+      return bell;
+    }
+
+    public Bell drain(Slice slice) {
+      list.add(slice.asByteBuf());
+      return null;
+    }
+
+    public void finish() {
+      ByteBuf[] array = list.toArray(new ByteBuf[0]);
+      ByteBuf buf = Unpooled.wrappedBuffer(array);
+      bell.ring(new Slice(buf));
+    }
+  }
+
+  /**
+   * Get an {@code AggregatorSink} for an anonymous {@code Resource}.
+   */
+  public static AggregatorSink aggregatorSink() {
+    return new AggregatorSink(Resources.anonymous());
   }
 }

@@ -67,7 +67,7 @@ public class HTTPInterface extends StorkInterface {
             return Ad.marshal(o);
           } public void done(Ad ad) {
             // Write the request back to the requestor.
-            Taps.fromString(ad).attach(request.root().sink());
+            Pipes.tapFromString(ad).attach(request.root().sink());
           } public void fail(Throwable t) {
             //Taps.fromError(t).attach(request.root().sink());
           }
@@ -108,11 +108,11 @@ public class HTTPInterface extends StorkInterface {
 
   // Asynchronously handle an HTTP request body.
   private Bell<Ad> handleRequestBody(final Ad head, HTTPRequest req) {
-    // Make sure it's a type we can handle.
     String type = req.type();
-    AggregatorSink sink = new AggregatorSink();
+    Pipes.AggregatorSink sink = Pipes.aggregatorSink();
     Bell<Ad> bell;
 
+    // Make sure it's a type we can handle.
     if (type == null || type.startsWith("application/json")) {
       bell = sink.bell().new As<Ad>() {
         public Ad convert(Slice slice) {

@@ -42,7 +42,7 @@ public abstract class HTTPRequest extends Session<HTTPRequest,HTTPBody> {
   }
 
   /** Send something back to Netty. */
-  public abstract void toNetty(HttpObject obj);
+  public abstract Bell toNetty(HttpObject obj);
 
   /** Total size of the request. */
   public long size() {

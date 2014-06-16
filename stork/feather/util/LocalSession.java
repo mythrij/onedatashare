@@ -41,10 +41,10 @@ public class LocalSession extends Session<LocalSession,LocalResource> {
   public static void main(String[] args) {
     String sp = args.length > 0 ? args[0] : "/home/bwross/test";
     final Path path = Path.create(sp);
-    final LocalSession s = new LocalSession(path);
+    final LocalResource s = new LocalSession(path).root();
 
-    s.root().tap().attach(new HexDumpSink()).onStop().new Promise() {
-      public void done() { s.close(); }
+    new ProxyTransfer(s.tap(), new HexDumpSink()).onStop().new Promise() {
+      public void always() { s.session.close(); }
     };
   }
 }

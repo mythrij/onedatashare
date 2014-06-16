@@ -16,36 +16,35 @@ import stork.feather.util.*;
  *
  * @see Tap
  * @see Slice
- * @see Transfer
  *
  * @param <D> The destination {@code Resource} type.
  */
-public abstract class Sink<D extends Resource>
-extends ProxyElement<Resource,D> {
+public abstract class Sink<D extends Resource> extends Pipe {
+  private D destination;
+
   /**
    * Create a {@code Sink} associated with {@code destination}.
    *
    * @param destination the {@code Resource} this {@code Sink} receives data
    * for.
-   * @throws NullPointerException if {@code resource} is {@code null}.
+   * @throws NullPointerException if {@code destination} is {@code null}.
    */
-  public Sink(D destination) { super(null, destination); }
-
-  /**
-   * Attach this {@code Sink} to a {@code Tap}. Once this method is called,
-   * {@link #start()} will be called and the sink may begin draining data from
-   * the tap. This is equivalent to calling {@code tap.attach(this)}.
-   *
-   * @param tap a {@link Tap} to attach.
-   * @throws NullPointerException if {@code tap} is {@code null}.
-   * @throws IllegalStateException if a {@code Tap} has already been attached.
-   */
-  public final <S extends Resource<?,S>> Transfer<S,D> attach(Tap<S> tap) {
-    return new ProxyTransfer<S,D>(tap, this);
+  public Sink(D destination) {
+    if (destination == null)
+      throw new NullPointerException("destination");
+    this.destination = destination;
   }
 
-  protected void start(Bell bell) throws Exception {
-    bell.ring();
+  public final D destination() { return destination; }
+
+  public final Sink<D> sink() { return this; }
+
+  public final Pipe.Orientation orientation() {
+    return Pipe.Orientation.SINK;
+  }
+
+  protected Bell start() throws Exception {
+    return Bell.rungBell();
   }
 
   /**
@@ -61,24 +60,7 @@ extends ProxyElement<Resource,D> {
    * @throws IllegalStateException if this method is called when the pipeline
    * has not been initialized.
    */
-  protected abstract void drain(Slice slice);
+  protected abstract Bell drain(Slice slice);
 
   protected abstract void finish();
-
-  /**
-   * This calls {@link #pause(Bell)} with a new {@code Bell}, and return the
-   * {@code Bell}. The returned {@code Bell} should be rung once the transfer
-   * of data may resume.
-   *
-   * @return A {@code Bell} that, when rung, resumes the transfer.
-   */
-  protected final Bell pause() {
-    Bell bell = new Bell();
-    pause(bell);
-    return bell;
-  }
-
-  protected final void pause(Bell bell) {
-    transfer().mediator.pause();
-  }
 }

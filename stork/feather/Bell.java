@@ -3,7 +3,7 @@ package stork.feather;
 import java.util.*;
 import java.util.concurrent.*;
 
-import static stork.feather.util.Dispatcher.Task;
+import stork.feather.util.*;
 
 /**
  * A promise primitive used for stringing together the results of asynchronous
@@ -17,10 +17,6 @@ public class Bell<T> implements Future<T> {
   private Object object;  // May contain T or Throwable.
   private byte state = 0;  // 0 = unrung, 1 = thenned, 2 = done, 3 = failed
   private List<Bell<? super T>> promises = Collections.emptyList();
-
-  // This is used to schedule bell deadlines.
-  private static ScheduledExecutorService deadlineTimerPool =
-    new ScheduledThreadPoolExecutor(1);
 
   /** Create an unrung {@code Bell}. */
   public Bell() { }
@@ -380,6 +376,30 @@ public class Bell<T> implements Future<T> {
   }
 
   /**
+   * Return a {@code Bell} promised to this {@code Bell} which will run the
+   * given handler on success.
+   */
+  public synchronized Bell<T> promise(BellHandler.Done done) {
+    return (Bell<T>) fromHandler(done);
+  }
+
+  /**
+   * Return a {@code Bell} promised to this {@code Bell} which will run the
+   * given handler on failure.
+   */
+  public synchronized Bell<T> promise(BellHandler.Fail fail) {
+    return (Bell<T>) promise(fromHandler(fail));
+  }
+
+  /**
+   * Return a {@code Bell} promised to this {@code Bell} which will run the
+   * given handler on ring.
+   */
+  public synchronized Bell<T> promise(BellHandler.Always always) {
+    return (Bell<T>) promise(fromHandler(always));
+  }
+
+  /**
    * Return a new {@code Bell} promised to this {@code Bell}. This can be used
    * to avoid leaking references to {@code Bell}s.
    */
@@ -534,15 +554,13 @@ public class Bell<T> implements Future<T> {
    * to the time this method is called. If the {@code Bell} is not rung in this
    * time, it will be resolved with a {@link TimeoutException}.
    *
-   * @param deadline time in seconds after call time that the {@code Bell} may remain
-   * unresolved
+   * @param deadline the time in seconds after call time that the {@code Bell}
+   * may remain unresolved.
    */
   public synchronized Bell<T> deadline(double deadline) {
-    if (!isDone()) deadlineTimerPool.schedule(new Runnable() {
-      public void run() {
-        ring(new TimeoutException());
-      }
-    }, (long)(deadline * 1E6), TimeUnit.MICROSECONDS);
+    if (!isDone()) new Task(deadline) {
+      public void run() { ring(new TimeoutException()); }
+    }; 
     return this;
   }
 
@@ -569,9 +587,8 @@ public class Bell<T> implements Future<T> {
   }
 
   // Used in rungBell() and failedBell()...
-  private final static Bell rungBell = new Bell().ring();
-  private final static Bell failedBell =
-    new Bell().ring(new NullPointerException());
+  private final static Bell rungBell   = new Bell().ring();
+  private final static Bell failedBell = new Bell().ring((Throwable)null);
 
   /**
    * A static {@code Bell} that has already been rung.
@@ -601,6 +618,8 @@ public class Bell<T> implements Future<T> {
    * this {@code Bell} fails.
    */
   public Bell<T> or(final Bell<T> other) {
+    if (isDone())
+      return other;
     return new Promise() {
       public void then(Throwable err) { other.promise(this); }
     };
@@ -615,12 +634,13 @@ public class Bell<T> implements Future<T> {
    * this {@code Bell} succeeds.
    */
   public <V> Bell<V> and(final Bell<V> other) {
-    final Bell<V> bell = new Bell<V>();
-    new Promise() {
-      public void done() { other.promise(bell); }
-      public void fail(Throwable t) { bell.ring(t); }
+    if (isFailed())
+      return (Bell<V>) this;
+    if (isDone())
+      return other;
+    return new AsBell<V>() {
+      public Bell<V> convert(T t) { return other; }
     };
-    return bell;
   }
 
   /**
@@ -691,5 +711,65 @@ public class Bell<T> implements Future<T> {
     for (Bell b : bells)
       if (b != null) b.promise(bell);
     return bell;
+  }
+
+  /** Return a {@code Bell} that will run the given handler on success. */
+  public static <V> Bell<V> fromHandler(final BellHandler.Done done) {
+    return new Bell<V>() {
+      public void done(V v) throws Throwable { done.done(v); }
+    };
+  }
+
+  /** Return a {@code Bell} that will run the given handler on failure. */
+  public static <V> Bell<V> fromHandler(final BellHandler.Fail fail) {
+    return new Bell<V>() {
+      public void fail(Throwable t) throws Throwable { fail.fail(t); }
+    };
+  }
+
+  /** Return a {@code Bell} that will run the given handler on ring. */
+  public static <V> Bell<V> fromHandler(final BellHandler.Always always) {
+    return new Bell<V>() {
+      public void always() throws Throwable { always.always(); }
+    };
+  }
+
+  /**
+   * If a {@code Bell} is garbage collected before ringing, cancel it.
+   */
+  protected void finalize() {
+    if (!isDone()) cancel();
+  }
+}
+
+/** A task for the dispatch loop. */
+abstract class Task implements Runnable {
+  Task() {
+    Dispatcher.dispatch(this);
+  } Task(double delay) {
+    Dispatcher.dispatch(this, delay);
+  }
+  public abstract void run();
+}
+
+/** A dispatch loop used internally. */
+final class Dispatcher {
+  // Keep the thread pool at size 1 for now until we can figure out how to
+  // better control ordering...
+  private static final ScheduledExecutorService pool =
+    Executors.newSingleThreadScheduledExecutor();
+
+  /**
+   * Schedule {@code runnable} to be executed as soon as possible.
+   */
+  static void dispatch(Runnable runnable) {
+     pool.submit(runnable);
+  }
+
+  /**
+   * Schedule {@code runnable} to be executed after a delay.
+   */
+  static void dispatch(Runnable runnable, double delay) {
+     pool.schedule(runnable, (long)(delay*1E6), TimeUnit.MICROSECONDS);
   }
 }

@@ -7,7 +7,10 @@ import stork.feather.*;
 /** A dispatch loop used internally. */
 public final class Dispatcher {
   private static final Dispatcher instance = new Dispatcher();
-  private final ExecutorService pool = Executors.newFixedThreadPool(4);
+
+  // Keep the thread pool at size 1 for now until we can figure out how to
+  // better control ordering...
+  private final ExecutorService pool = Executors.newFixedThreadPool(1);
 
   /**
    * Schedule {@code runnable} to be executed sometime in the future.

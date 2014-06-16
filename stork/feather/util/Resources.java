@@ -1,5 +1,7 @@
 package stork.feather.util;
 
+import io.netty.buffer.*;
+
 import stork.feather.*;
 
 /**
@@ -11,6 +13,17 @@ public final class Resources {
   private Resources() { }
 
   /**
+   * An anonymous {@code Resource}.
+   */
+  public static Resource anonymous() {
+    return new Session(URI.EMPTY) {
+      public Resource select(Path path) {
+        return new Resource(this, path) { };
+      }
+    }.root();
+  }
+
+  /**
    * Get an anonymous {@code Resource} whose {@link Resource#stat()} will
    * return {@code stat}. This can be used to create, for instance, {@code
    * Resource}s with a known size.
@@ -20,11 +33,15 @@ public final class Resources {
    * @return A {@code Resource} with the given {@code Stat}.
    */
   public static Resource anonymous(final Stat stat) {
-    return new AnonymousResource() {
-      public Bell<Stat> stat() {
-        return new Bell<Stat>().ring(stat);
+    return new Session(URI.EMPTY) {
+      public Resource select(Path path) {
+        return new Resource(this, path) {
+          public Bell<Stat> stat() {
+            return new Bell<Stat>().ring(stat);
+          }
+        };
       }
-    };
+    }.root();
   }
 
   /**
@@ -60,12 +77,16 @@ public final class Resources {
     if (slice.offset() > 0)
       stat.size += slice.offset();
 
-    return new AnonymousResource() {
-      public Bell<Stat> stat() {
-        return new Bell<Stat>().ring(stat);
-      } public Tap<AnonymousResource> tap() {
-        return Taps.fromSlice((AnonymousResource) this, slice);
+    return new Session(URI.EMPTY) {
+      public Resource select(Path path) {
+        return new Resource(this, path) {
+          public Bell<Stat> stat() {
+            return new Bell<Stat>().ring(stat);
+          } public Tap tap() {
+            return Pipes.tapFromSlice(this, slice);
+          }
+        };
       }
-    };
+    }.root();
   }
 }

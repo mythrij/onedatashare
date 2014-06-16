@@ -41,11 +41,7 @@ import stork.feather.util.*;
  * selected from or produce through selection. Generally, for a subclass, this
  * is the subclass itself.
  */
-public class Resource
-  <S extends Session<S,R>, R extends Resource<S,R>>
-{
-  /** The canonical anonymous {@code Resource}. */
-  public static final Resource ANONYMOUS = Session.ANONYMOUS.root();
+public class Resource<S extends Session<S,R>, R extends Resource<S,R>> {
 
   /** The selection {@code Path} of this {@code Resource}. */
   public final Path path;
@@ -171,16 +167,25 @@ public class Resource
   }
 
   /**
-   * Get metadata for this {@code Resource}, which includes a list of
-   * subresources.
+   * Get metadata for this {@code Resource}.
    *
    * @return (via bell) A {@link Stat} containing resource metadata.
-   * @throws Exception (via bell) if there was an error retrieving
-   * metadata for the resource.
+   * @throws Exception (via bell) if there was an error retrieving metadata for
+   * the {@code Resource}.
    * @throws UnsupportedOperationException if metadata retrieval is not
    * supported.
    */
   public Bell<Stat> stat() {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Get a listing of sub-{@code Resource}s under this {@code Resource}.
+   *
+   * @return An {@code Emitter} that emits {@code Resource}s.
+   * @throws UnsupportedOperationException if listing is not supported.
+   */
+  public Emitter<R> list() {
     throw new UnsupportedOperationException();
   }
 
@@ -258,9 +263,8 @@ public class Resource
    * supported by one of the resources.
    * @throws NullPointerException if {@code resource} is {@code null}.
    */
-  public <D extends Resource<?,D>> Transfer<R,D> transferTo(D resource) {
-    Sink sink = resource.sink();
-    return tap().attach(sink);
+  public <D extends Resource> Transfer<R,D> transferTo(D resource) {
+    return new ProxyTransfer<R,D>(tap(), resource.sink());
   }
 
   public String toString() {

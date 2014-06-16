@@ -34,12 +34,7 @@ import stork.feather.util.*;
  * typing system.
  * @param <R> The type of {@code Resource}s handled by this {@code Session}.
  */
-public abstract class Session
-  <S extends Session<S,R>, R extends Resource<S,R>>
-{
-  /** The canonical {@code AnonymousSession}. */
-  public static final Session ANONYMOUS = new AnonymousSession();
-
+public abstract class Session<S extends Session<S,R>, R extends Resource<S,R>> {
   /** The URI used to describe this {@code Session}. */
   public final URI uri;
 

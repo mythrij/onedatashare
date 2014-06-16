@@ -48,14 +48,13 @@ public class HexDumpSink extends Sink<HexDumpResource> {
     this.out = out;
   }
 
-  public void start(Bell bell) { bell.ring(); }
-
-  public void drain(Slice slice) {
+  public Bell drain(Slice slice) {
     out.println(slice);
+    return null;
   }
 
   public void finish() {
-    out.println("End of dump: "+path());
+    out.println("End of dump: "+destination().path);
   }
 }
 

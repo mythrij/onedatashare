@@ -24,6 +24,7 @@ import static io.netty.handler.codec.http.HttpVersion.*;
 import static io.netty.handler.codec.http.HttpMethod.*;
 
 import stork.ad.*;
+import stork.feather.Bell;
 import stork.feather.URI;
 import stork.feather.Path;
 import stork.scheduler.*;
@@ -143,12 +144,22 @@ public class HTTPServer {
    */
   private class RequestHandler extends ChannelHandlerAdapter {
     private HTTPRequest request;
+    private Bell pauseBell;
 
     public void channelRead(ChannelHandlerContext ctx, Object msg) {
       if (msg instanceof HttpObject)
         channelRead(ctx, (HttpObject) msg);
       else
         ctx.close();
+    }
+
+    public void channelWritabilityChanged(ChannelHandlerContext ctx) {
+      if (!ctx.channel().isWritable()) {
+        if (pauseBell == null) pauseBell = new Bell();
+      } else if (pauseBell != null) {
+        pauseBell.ring();
+        pauseBell = null;
+      }
     }
 
     public void channelRead(final ChannelHandlerContext ctx, HttpObject msg) {
@@ -165,8 +176,9 @@ public class HTTPServer {
           throw new HTTPException(NOT_FOUND);
 
         request = new HTTPRequest(head) {
-          public void toNetty(HttpObject o) {
+          public Bell toNetty(HttpObject o) {
             ctx.write(o);
+            return pauseBell;
           }
         };
 

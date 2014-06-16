@@ -158,39 +158,29 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
 /**
  * An FTP {@code Tap} which manages data channels autonomonously.
  */
-class FTPTap extends PassiveTap<FTPResource> {
+class FTPTap extends Tap<FTPResource> {
   private FTPChannel.DataChannel dc;
 
   public FTPTap(FTPResource resource) { super(resource); }
 
-  protected void start(Bell bell) {
-    bell.and(source().stat()).new Promise() {
-      public void done(Stat stat) {
-        if (stat.dir) {
-          // Source is a directory, emit subresources.
-          source().mkdir().promise(this);
-          if (stat.files != null) for (Stat s : stat.files)
-            subresource(s.name);
-        } if (stat.file) {
+  protected Bell start(final Bell bell) {
+    return bell.and(source().stat()).new Promise() {
+      public void then(Stat stat) {
+        if (stat.file) {
           // Source is a file, establish data channel and transfer.
-          startTransfer(this);
+          dc = source().session.channel.new DataChannel() {
+            public void init() {
+              new Command("RETR", source().path);
+              ring();
+            } public void receive(Slice slice) {  
+              pauseUntil(drain(slice));
+            }
+          }.startWhen(bell);
+        } else {
+          throw new RuntimeException("Resource is a directory.");
         }
       }
     };
-  }
-
-  private void startTransfer(Bell bell) {
-    dc = source().session.channel.new DataChannel() {
-      public void init() {
-        new Command("RETR", source().path);
-      } public void receive(Slice slice) {  
-        drain(slice);
-      }
-    }.startWhen(bell);
-  }
-
-  protected void pause(Bell bell) {
-    dc.pauseUntil(bell);
   }
 }
 
@@ -202,17 +192,16 @@ class FTPSink extends Sink<FTPResource> {
 
   public FTPSink(FTPResource resource) { super(resource); }
 
-  protected void start(final Bell bell) {
-    source().stat().new Promise() {
+  protected Bell start() {
+    return source().stat().new Promise() {
       public void then(Stat stat) {
         if (stat.dir) {
-          destination().mkdir().promise(bell);
+          destination().mkdir().promise(this);
         } else if (stat.file) {
           dc = destination().session.channel.new DataChannel() {
             public void init() {
               new Command("STOR", destination().path);
-            } public void done() {
-              ring(bell);
+              ring();
             }
           };
         } else {
@@ -222,10 +211,8 @@ class FTPSink extends Sink<FTPResource> {
     };
   }
 
-  public void drain(final Slice slice) {
-    dc.onConnect().new Promise() {
-      public void done(FTPChannel.DataChannel d) { d.send(slice); }
-    };
+  public Bell drain(final Slice slice) {
+    return dc.send(slice);
   }
 
   public void finish() { }

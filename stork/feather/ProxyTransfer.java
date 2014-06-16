@@ -13,27 +13,10 @@ import stork.feather.util.*;
  */
 public class ProxyTransfer<S extends Resource, D extends Resource>
 extends Transfer<S,D> {
-  private Tap<S> tap;
+  private Tap<S>  tap;
   private Sink<D> sink;
 
-  private Map<Path, Tap<S>>  taps  = new HashMap<Path, Tap<S>>();
-  private Map<Path, Sink<D>> sinks = new HashMap<Path, Sink<D>>();
-
-  private final Bell<Tap<S>> tapBell = new Bell<Tap<S>>() {
-    public void done(Tap<S> tap) {
-      ProxyTransfer.this.tap = tap;
-      taps.put(Path.ROOT, tap);
-    }
-  };
-
-  private final Bell<Sink<D>> sinkBell = new Bell<Sink<D>>() {
-    public void done(Sink<D> sink) {
-      ProxyTransfer.this.sink = sink;
-      sinks.put(Path.ROOT, sink);
-    }
-  };
-
-  private Bell ready = tapBell.and(sinkBell);
+  private Bell ready = new Bell();
 
   private List<Slice> buffer = new LinkedList<Slice>();
 
@@ -67,21 +50,6 @@ extends Transfer<S,D> {
   }
 
   /**
-   * Set the {@code Sink} for this transfer.
-   *
-   * @param sink the {@code Sink} for this transfer.
-   * @return This transfer.
-   * @throws NullPointerException if {@code sink} is {@code null}.
-   * @throws IllegalStateException if a {@code Sink} has already been set.
-   */
-  public final synchronized ProxyTransfer<S,D> sink(Sink<D> sink) {
-    if (sink == null)
-      throw new NullPointerException("sink");
-    sinkBell.ring(sink);
-    return this;
-  }
-
-  /**
    * Set the {@code Tap} for this transfer.
    *
    * @param tap the {@code Tap} for this transfer.
@@ -92,45 +60,38 @@ extends Transfer<S,D> {
   public final synchronized ProxyTransfer<S,D> tap(Tap<S> tap) {
     if (tap == null)
       throw new NullPointerException("tap");
-    tapBell.ring(tap);
+    if (this.tap != null)
+      throw new IllegalStateException("A Tap is already set.");
+    if (sink != null)
+      startTransfer();
     return this;
   }
 
-  private Tap<S> tapFor(Path path) {
-    Tap<S> tap = taps.get(path);
-    if (tap == null)
-      throw new Error("Non-existent Tap.");
-    return tap;
-  }
-
-  private Sink<D> sinkFor(Path path) {
-    Sink<D> sink = sinks.get(path);
-    if (sink == null)
-      throw new Error("Non-existent Sink.");
-    return sink;
-  }
-
-  // Called by tap.
-  final void drain(Path path, Slice slice) {
-    sinkFor(path).drain(slice);
-  }
-
-  final protected Bell<ProxyTransfer<S,D>> start() {
-    return ready;
-  }
-
-  final protected void stop() {
-    tap.finish();
-    sink.finish();
-  }
-
-  final protected void pause(Bell bell) {
-    tap.pause(bell);
-  }
-
   /**
-   * Called by {@code Tap} when a subresource has been discovered.
+   * Set the {@code Sink} for this transfer.
+   *
+   * @param sink the {@code Sink} for this transfer.
+   * @return This transfer.
+   * @throws NullPointerException if {@code sink} is {@code null}.
+   * @throws IllegalStateException if a {@code Sink} has already been set.
    */
-  final protected void subresource(Path path) {
+  public final synchronized ProxyTransfer<S,D> sink(Sink<D> sink) {
+    if (sink == null)
+      throw new NullPointerException("sink");
+    if (this.sink != null)
+      throw new IllegalStateException("A Sink is already set.");
+    this.sink = sink;
+    if (tap != null)
+      startTransfer();
+    return this;
+  }
+
+  private void startTransfer() {
+    try {
+      tap.attach(sink);
+      tap.start();
+    } catch (Exception e) {
+      throw new RuntimeException("Transfer failed to start.", e);
+    }
   }
 }
