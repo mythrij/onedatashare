@@ -63,9 +63,15 @@ public abstract class Tap<S extends Resource> extends Pipe {
     }
   }
 
-  public final Bell start() throws Exception {
-    return start(sink().start());
+  public final Bell start() {
+    try {
+      Bell b1 = super.start();
+      if (b1 == null) b1 = Bell.rungBell();
+      Bell b2 = start(b1);
+      if (b2 == null) b2 = Bell.rungBell();
+      return b1.and(b2);
+    } catch (Exception e) {
+      return new Bell(e);
+    }
   }
-
-  protected final void finish() { }
 }

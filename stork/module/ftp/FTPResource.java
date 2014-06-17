@@ -133,7 +133,7 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
   }
 
   // Remove a file or directory.
-  public Bell<FTPResource> unlink() {
+  public Bell<FTPResource> delete() {
     if (!isSingleton())
       throw new UnsupportedOperationException();
     return stat().new AsBell<FTPChannel.Reply>() {

@@ -227,7 +227,7 @@ public class Scheduler {
   class StorkRmfHandler extends Handler {
     public Bell handle(Request req) {
       Endpoint ep = req.ad.unmarshalAs(Endpoint.class);
-      return ep.select().unlink();
+      return ep.select().delete();
     }
 
     public boolean requiresLogin() {

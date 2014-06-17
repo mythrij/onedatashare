@@ -70,7 +70,7 @@ public class Pipe {
    * @param pipe the {@code Pipe} to attach.
    * @throws IllegalStateException if {@code pipe} cannot be attached to this
    * {@code Pipe} due to conflicting orientations.
-   * @return This {@code Pipe}.
+   * @return The {@code pipe} being attached.
    */
   public Pipe attach(Pipe pipe) {
     Orientation o1 = orientation(), o2 = pipe.orientation();
@@ -81,17 +81,17 @@ public class Pipe {
       // ...and that they're not both ambiguous or conflicting...
       throw new IllegalStateException("Conflicting oritentations.");
     } switch (o1) {
-      // ...so it's guaranteed that this pipe or the other...
+      // ...so it's guaranteed that this pipe...
       case TAP:
-        return (downstream = pipe).upstream = this;
+        return (pipe.upstream = this).downstream = pipe;
       case SINK:
-        return (upstream = pipe).downstream = this;
+        return (pipe.downstream = this).upstream = pipe;
     } switch (o2) {
-      // ...is either tap-oriented or sink-oriented.
+      // ...or the other is either tap-oriented or sink-oriented.
       case TAP:
-        return (upstream = pipe).downstream = this;
+        return (pipe.downstream = this).upstream = pipe;
       case SINK:
-        return (downstream = pipe).upstream = this;
+        return (pipe.upstream = this).downstream = pipe;
       default:
         throw new Error("Pipe.attach failed");
     }

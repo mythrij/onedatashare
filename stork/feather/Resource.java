@@ -133,7 +133,7 @@ public class Resource<S extends Session<S,R>, R extends Resource<S,R>> {
    * @return A subresource of this resource.
    */
   public final R select(String name) {
-    return session.select(path.appendLiteral(name));
+    return select(Path.ROOT.appendLiteral(name));
   }
 
   /**
@@ -143,7 +143,7 @@ public class Resource<S extends Session<S,R>, R extends Resource<S,R>> {
    * Resource}.
    * @return A subresource relative to this {@code Resource}.
    */
-  public final R select(Path path) {
+  public R select(Path path) {
     return session.select(this.path.append(path));
   }
 
@@ -180,12 +180,13 @@ public class Resource<S extends Session<S,R>, R extends Resource<S,R>> {
   }
 
   /**
-   * Get a listing of sub-{@code Resource}s under this {@code Resource}.
+   * Get a listing of names of sub-{@code Resource}s under this {@code
+   * Resource}.
    *
-   * @return An {@code Emitter} that emits {@code Resource}s.
+   * @return An {@code Emitter} that emits {@code Resource} names.
    * @throws UnsupportedOperationException if listing is not supported.
    */
-  public Emitter<R> list() {
+  public Emitter<String> list() {
     throw new UnsupportedOperationException();
   }
 
@@ -213,7 +214,7 @@ public class Resource<S extends Session<S,R>, R extends Resource<S,R>> {
    * @throws Exception (via bell) if the resource could not be fully removed.
    * @throws UnsupportedOperationException if removal is not supported.
    */
-  public Bell<R> unlink() {
+  public Bell<R> delete() {
     throw new UnsupportedOperationException();
   }
 
@@ -263,12 +264,12 @@ public class Resource<S extends Session<S,R>, R extends Resource<S,R>> {
    * supported by one of the resources.
    * @throws NullPointerException if {@code resource} is {@code null}.
    */
-  public <D extends Resource> Transfer<R,D> transferTo(D resource) {
-    return new ProxyTransfer<R,D>(tap(), resource.sink());
+  public <D extends Resource<?,D>> Transfer<R,D> transferTo(D resource) {
+    return new ProxyTransfer<R,D>((R)this, resource);
   }
 
   public String toString() {
-    return session + " -> " + path;
+    return session.uri.append(path).toString();
   }
 
   public boolean equals(Object o) {

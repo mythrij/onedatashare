@@ -48,7 +48,7 @@ public abstract class Module<R extends Resource> {
 
   /** Set the description. Arguments will be joined with space. */
   protected final void description(String... description) {
-    this.description = StorkUtil.join(description);
+    this.description = StorkUtil.join((Object[]) description);
   }
 
   // Return a normalized string set. Used for protocol and option sets.

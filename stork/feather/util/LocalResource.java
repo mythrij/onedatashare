@@ -40,7 +40,7 @@ public class LocalResource extends Resource<LocalSession,LocalResource> {
     }.start().as(this).detach();
   }
 
-  public Bell<LocalResource> unlink() {
+  public Bell<LocalResource> delete() {
     return new ThreadBell(session.executor) {
       private File root = file();
 
@@ -97,13 +97,36 @@ public class LocalResource extends Resource<LocalSession,LocalResource> {
         File sym = resolveLink(file);
         if (sym != null)
           stat.link = Path.create(file.toString());
-
-        if (stat.dir) stat.setFiles(file.list());
         stat.time = file.lastModified();
 
         return stat;
       }
     }.start().detach();
+  }
+
+  public Emitter<String> list() {
+    final Emitter<String> emitter = new Emitter<String>();
+    new ThreadBell<String>(session.executor) {
+      public String run() {
+        File file = file();
+
+        if (!file.exists())
+          throw new RuntimeException("Resource does not exist: "+file);
+        if (!file.isDirectory())
+          throw new RuntimeException("Resource is not a directory: "+file);
+        File sym = resolveLink(file);
+        if (sym != null)
+          throw new RuntimeException("Resource is not a directory: "+file);
+
+        String[] files = file.list();
+        if (files == null)
+          throw new RuntimeException("Resource is not a directory: "+file);
+
+        emitter.emitAll(files);
+        return null;
+      }
+    }.start().promise(emitter);
+    return emitter;
   }
 
   public Tap<LocalResource> tap() {
@@ -113,24 +136,23 @@ public class LocalResource extends Resource<LocalSession,LocalResource> {
 
 class LocalTap extends Tap<LocalResource> {
   final File file = source().file();
+  private volatile Bell pause;
+  private RandomAccessFile raf;
+  private FileChannel channel;
+  private long offset = 0, remaining = 0;
+  private long chunkSize = 16384;
 
   // Small hack to take advantage of NIO features.
   private WritableByteChannel nioToFeather = new WritableByteChannel() {
     public int write(ByteBuffer buffer) {
       Slice slice = new Slice(buffer);
-      drain(slice);
+      pause = drain(slice);
       return slice.length();
     }
 
     public void close() { }
     public boolean isOpen() { return true; }
   };
-
-  private RandomAccessFile raf;
-  private FileChannel channel;
-  private long offset = 0, remaining = 0;
-  private long chunkSize = 16384;
-  private volatile Bell pause;
 
   // State of the current transfer.
   public LocalTap(LocalResource root) { super(root); }
@@ -149,22 +171,21 @@ class LocalTap extends Tap<LocalResource> {
     remaining = file.length();
 
     // When bell rings, start a loop to send all chunks.
-    return bell.promise(new BellLoop(this) {
+    new BellLoop(this) {
       public Bell lock() { return pause; }
       public void body() throws Exception {
-        if (remaining <= 0) {
-          finish();
-          ring();
-        } else {
-          System.out.println("Sending: "+offset);
+        if (remaining > 0) {
           long len = remaining < chunkSize ? remaining : chunkSize;
           len = channel.transferTo(offset, len, nioToFeather);
           offset += len;
           remaining -= len;
+        } else {
+          finish();
+          ring();
         }
       }
-    });
-  }
+    }.start(bell);
 
-  public synchronized void pause(Bell bell) { pause = bell; }
+    return bell;
+  }
 }

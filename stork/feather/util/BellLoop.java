@@ -28,7 +28,7 @@ public abstract class BellLoop extends Bell {
    */
   public void start(Bell bell) {
     if (bell == null)
-      bell = new Bell().ring();
+      bell = Bell.rungBell();
     bell.promise(this);
   }
 
@@ -45,10 +45,10 @@ public abstract class BellLoop extends Bell {
     synchronized (lock) {
       bell = lock();
     } if (bell == null) {
-      bell = new Bell().ring();
+      bell = Bell.rungBell();
     } if (!isDone()) try {
       bell.new Promise() {
-        public void then() throws Exception {
+        public void then(Object o) throws Exception {
           body();
           doIterate();
         } public void fail(Throwable t) {

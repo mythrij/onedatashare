@@ -154,7 +154,7 @@ public class Bell<T> implements Future<T> {
   private void dispatchNotify() {
     new Task() {
       public void run() {
-        synchronized (Bell.this) { notifyAll(); }
+        synchronized (Bell.this) { Bell.this.notifyAll(); }
       }
     };
   }
@@ -526,7 +526,7 @@ public class Bell<T> implements Future<T> {
    * Bell} rings.
    */
   public final <V> Bell<V> as(final V done) {
-    final Bell<V> bell = new Bell<V>(done);
+    final Bell<V> bell = new Bell<V>();
     new Promise() {
       public void done() { bell.ring(done); }
     };
@@ -541,7 +541,7 @@ public class Bell<T> implements Future<T> {
    * @param fail the value to ring the returned {@code Bell} with on failure.
    */
   public final <V> Bell<V> as(final V done, final V fail) {
-    final Bell<V> bell = new Bell<V>(done);
+    final Bell<V> bell = new Bell<V>();
     new Promise() {
       public void done() { bell.ring(done); }
       public void fail() { bell.ring(fail); }
@@ -734,6 +734,16 @@ public class Bell<T> implements Future<T> {
     };
   }
 
+  /** Return a {@code Bell} rung with {@code value}. */
+  public static <V> Bell<V> wrap(V value) {
+    return new Bell<V>(value);
+  }
+
+  /** Return a {@code Bell} rung with {@code error}. */
+  public static <V> Bell<V> wrap(Throwable error) {
+    return new Bell<V>(error);
+  }
+
   /**
    * If a {@code Bell} is garbage collected before ringing, cancel it.
    */
@@ -762,14 +772,22 @@ final class Dispatcher {
   /**
    * Schedule {@code runnable} to be executed as soon as possible.
    */
-  static void dispatch(Runnable runnable) {
-     pool.submit(runnable);
+  static void dispatch(final Runnable runnable) {
+    pool.submit(new Runnable() {
+      public void run() {
+        try {
+          runnable.run();
+        } catch (Exception e) {
+          //e.printStackTrace();
+        }
+      }
+    });
   }
 
   /**
    * Schedule {@code runnable} to be executed after a delay.
    */
   static void dispatch(Runnable runnable, double delay) {
-     pool.schedule(runnable, (long)(delay*1E6), TimeUnit.MICROSECONDS);
+    pool.schedule(runnable, (long)(delay*1E6), TimeUnit.MICROSECONDS);
   }
 }

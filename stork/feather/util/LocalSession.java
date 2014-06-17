@@ -42,9 +42,14 @@ public class LocalSession extends Session<LocalSession,LocalResource> {
     String sp = args.length > 0 ? args[0] : "/home/bwross/test";
     final Path path = Path.create(sp);
     final LocalResource s = new LocalSession(path).root();
+    final HexDumpResource d = new HexDumpResource();
 
-    new ProxyTransfer(s.tap(), new HexDumpSink()).onStop().new Promise() {
-      public void always() { s.session.close(); }
-    };
+    Transfer t = s.transferTo(d);
+    t.starter.ring();
+    t.onStop().new Promise() {
+      public void always() {
+        s.session.close();
+      }
+    }.sync();
   }
 }

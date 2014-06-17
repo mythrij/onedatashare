@@ -1,5 +1,5 @@
 APPNAME=Stork
-VERSION=0.0.5
+VERSION=3.0a
 
 PROJECT=stork
 
@@ -8,10 +8,13 @@ JARFILE=lib/$(PROJECT)-$(VERSION).jar
 
 CLASSPATH=$(call classpathify,$(LIBJARS)):build
 DBGFLAG=-g  # Uncomment to compile with debugging info.
-JFLAGS=-J-Xmx512m $(DBGFLAG) \
-	-classpath $(CLASSPATH) -sourcepath $(PROJECT) -nowarn
+JMEM=-J-Xmx512m
+JFLAGS=$(JMEM) -classpath $(CLASSPATH)
+JCFLAGS=$(JFLAGS) $(DBGFLAG) -sourcepath $(PROJECT) -nowarn
+
+JAVA=java
 JC=javac
-JAR=jar -J-Xmx512m
+JAR=jar
 JAVADOC=javadoc
 TAR=tar
 LN=ln
@@ -32,6 +35,7 @@ classpathify=$(subst $(space) ,:,$1)
 JAVASRCS=$(call rwildcard,$(PROJECT),*.java)
 JAVASRCS:=$(patsubst %/package-info.java,,$(JAVASRCS))
 CLASSES=$(JAVASRCS:%.java=build/%.class)
+#CLASSNAMES=$(subst /,.,$(JAVASRCS:%.java=%))
 LIBJARS=$(call rwildcard,lib,*.jar)
 
 DOC=doc  # Directory to output documentation into.
@@ -49,7 +53,7 @@ build:
 	@mkdir -p build
 
 $(JARFILE): $(CLASSES)
-	$(JAR) cf $(JARFILE) -C build .
+	$(JAR) $(JMEM) cf $(JARFILE) -C build .
 
 build/%.class: %.java | build
 	$(eval TO_BUILD += $<)
@@ -87,6 +91,11 @@ doc: $(JAVASRCS)
 	@$(JAVADOC) -classpath $(CLASSPATH) -d $(DOC) \
 	  -link http://docs.oracle.com/javase/7/docs/api \
 	  -sourcepath $(PROJECT) $(JAVASRCS)
+
+test: all
+	@echo Running tests...
+	$(JAVA) -classpath $(CLASSPATH) org.junit.runner.JUnitCore $(PROJECT).test.Tests
+	@echo Testing complete.
 
 clean:
 	$(RM) -rf build lib/$(PROJECT)-*.jar $(PROJECT).tar.gz bin/$(PROJECT)_*
