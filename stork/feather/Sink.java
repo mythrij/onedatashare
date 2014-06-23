@@ -60,7 +60,7 @@ public abstract class Sink<D extends Resource> extends Pipe {
    * @throws IllegalStateException if this method is called when the pipeline
    * has not been initialized.
    */
-  protected abstract Bell drain(Slice slice);
+  protected abstract Bell drain(Slice slice) throws Exception;
 
   protected abstract void finish();
 }

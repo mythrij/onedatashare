@@ -74,6 +74,38 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
         };
       }
 
+      // A sort of hacky way of dealing with statting directories.
+      private Bell<Stat> filterStat(final Stat stat) {
+        if (list || stat.dir) {
+          return new Bell<Stat>(stat);
+        } if (stat.files != null && stat.files.length != 1) {
+          stat.dir = true;
+          return new Bell<Stat>(stat);
+        } if (!path.name().equals(stat.files[0].name)) {
+          // List contains different name, assume directory...
+          stat.dir = true;
+          return new Bell<Stat>(stat);
+        } return checkIfDirectory().new As<Stat>() {
+          public Stat convert(Boolean dir) {
+            return dir ? stat : stat.files[0];
+          }
+        };
+      }
+
+      // Unfortunately FTP has no reliable method for checking if something is
+      // a directory without altering the state of the channel...
+      private Bell<Boolean> checkIfDirectory() {
+        final Bell bell = new Bell();
+        channel.new Lock() {{
+          new Command("CWD", makePath()).expectComplete().new Promise() {
+            public void done() {
+              new Command("CWD", path.relativize());
+            } public void always() { unlock(); }
+          }.promise(bell);
+        }};
+        return bell.as(true, false);
+      }
+
       // This will get called once we've found a command that is supported.
       // However, if this fails, fall back to the next command.
       private void sendCommand(final FTPListCommand cmd) {
@@ -86,7 +118,7 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
         final FTPListParser parser = new FTPListParser(base, hint) {
           // The parser should ring this bell if it's successful.
           public void done(Stat stat) {
-            tb.ring(stat);
+            filterStat(stat).promise(tb);
           } public void fail() {
             // TODO: Check for permanent errors.
             tryCommand(cmd.next());
@@ -95,7 +127,7 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
 
         parser.name(StorkUtil.basename(path.name()));
 
-        Log.fine("Trying list command: ", cmd);
+        //Log.fine("Trying list command: ", cmd);
 
         // When doing MLSx listings, we can reduce the response size with this.
         if (hint == 'M' && !session.mlstOptsAreSet) {
@@ -136,17 +168,6 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
           }
         };
       }
-
-      // Do this every time we send a command so we don't have to store a whole
-      // concatenated path string for every outstanding listing command.
-      private String makePath() {
-        String p = path.toString();
-        if (p.startsWith("/~"))
-          return p.substring(1);
-        else if (!p.startsWith("/") && !p.startsWith("~"))
-          return "./"+p;
-        return "."+p;
-      }
     };
   }
 
@@ -182,6 +203,16 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
   public Tap<FTPResource> tap() {
     return new FTPTap(this);
   }
+
+  // Stringify and relativize a path.
+  String makePath() {
+    String p = path.toString();
+    if (p.startsWith("/~"))
+      return p.substring(1);
+    else if (!p.startsWith("/"))
+      return "./"+p;
+    return "."+p;
+  }
 }
 
 /**
@@ -193,23 +224,17 @@ class FTPTap extends Tap<FTPResource> {
   public FTPTap(FTPResource resource) { super(resource); }
 
   protected Bell start(final Bell bell) {
-    return bell.and(source().stat()).new Promise() {
-      public void then(Stat stat) {
-        if (stat.file) {
-          // Source is a file, establish data channel and transfer.
-          dc = source().session.channel.new DataChannel() {
-            public void init() {
-              new Command("RETR", source().path);
-              ring();
-            } public void receive(Slice slice) {  
-              pauseUntil(drain(slice));
-            }
-          }.startWhen(bell);
-        } else {
-          throw new RuntimeException("Resource is a directory.");
-        }
+    dc = source().session.channel.new DataChannel() {
+      public void init() {
+        new Command("RETR", source().makePath()).expectComplete();;
+      } public void receive(Slice slice) {  
+        pauseUntil(drain(slice));
       }
+    }.startWhen(bell);
+    dc.onClose().new Promise() {
+      public void always() { finish(); }
     };
+    return dc.onConnect();
   }
 }
 
@@ -222,22 +247,12 @@ class FTPSink extends Sink<FTPResource> {
   public FTPSink(FTPResource resource) { super(resource); }
 
   protected Bell start() {
-    return source().stat().new Promise() {
-      public void then(Stat stat) {
-        if (stat.dir) {
-          destination().mkdir().promise(this);
-        } else if (stat.file) {
-          dc = destination().session.channel.new DataChannel() {
-            public void init() {
-              new Command("STOR", destination().path);
-              ring();
-            }
-          };
-        } else {
-          throw new RuntimeException("invalid source");
-        }
+    dc = destination().session.channel.new DataChannel() {
+      public void init() {
+        new Command("STOR", destination().makePath());
       }
     };
+    return dc.onConnect();
   }
 
   public Bell drain(final Slice slice) {

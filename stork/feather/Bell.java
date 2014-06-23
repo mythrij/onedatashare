@@ -700,6 +700,41 @@ public class Bell<T> implements Future<T> {
     return bell;
   }
 
+  /**
+   * Wait for all the given {@code Bell}s to ring.
+   *
+   * @param bells an array of {@code Bell}s to check.
+   * @return A {@code Bell} that will ring successfully if all of {@code bells}
+   * ring successfully, or will fail otherwise.
+   */
+  public static Bell wait(Bell... bells) {
+    return wait(Arrays.asList(bells));
+  }
+
+  /**
+   * Check if all {@code Bell}s ring successfully.
+   *
+   * @param bells a {@code Collection} of {@code Bell}s to check.
+   * @return A {@code Bell} that will ring successfully if all of {@code bells}
+   * ring successfully, or will fail otherwise.
+   */
+  public static Bell wait(Collection<Bell> bells) {
+    final int len = bells.size() - Collections.frequency(bells, null);
+    if (len == 0)
+      return Bell.rungBell();
+    if (len == 1) for (Bell b : bells)
+      if (b != null) return b;
+    Bell bell = new Bell() {
+      int finished = 0;
+      public void always() {
+        if (++finished >= len) ring();
+      }
+    };
+    for (Bell b : bells)
+      if (b != null) b.promise(bell);
+    return bell;
+  }
+
   /** Return a {@code Bell} that will run the given handler on success. */
   public static <V> Bell<V> fromHandler(final BellHandler.Done done) {
     return new Bell<V>() {

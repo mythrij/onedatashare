@@ -40,7 +40,7 @@ public class FTPChannel {
   private final Bell<Void> onClose = new Bell<Void>();
 
   // FIXME: We should use something system-wide.
-  static EventLoopGroup group = new NioEventLoopGroup();
+  static EventLoopGroup group = new NioEventLoopGroup(1);
 
   // Used for GSS authentication.
   private final String host;
@@ -348,7 +348,7 @@ public class FTPChannel {
     }
 
     public void messageReceived(ChannelHandlerContext ctx, Reply reply) {
-      Log.finer("Got: ", reply);
+      //Log.finer("Got: ", reply);
       switch (reply.code) {
         case 220:
           if (data.welcome == null)
@@ -447,7 +447,7 @@ public class FTPChannel {
     protected void encode
       (final ChannelHandlerContext ctx, Object msg, final List<Object> out)
     throws Exception {
-      Log.finer("Writing ",msg);
+      //Log.finer("Writing ",msg);
       final ByteBuf raw =
         Unpooled.wrappedBuffer(msg.toString().getBytes(data.encoding));
 
@@ -757,7 +757,7 @@ public class FTPChannel {
   // owner.
   protected synchronized void assumeControl() {
     synchronized (data) {
-      Log.finer(data.owner.hashCode()+" -> "+hashCode());
+      //Log.finer(data.owner.hashCode()+" -> "+hashCode());
       data.owner = this;
       if (!deferred.isEmpty()) {
         Deque<Deferred> realDeferred = deferred;
@@ -792,11 +792,11 @@ public class FTPChannel {
       // If we're not the owner, defer the command. Otherwise, send it.
       if (data.owner != FTPChannel.this) {
         deferred.add(this);
-        Log.finer(FTPChannel.this.hashCode()+": Deferring "+this);
+        //Log.finer(FTPChannel.this.hashCode()+": Deferring "+this);
       } else {
         appendHandler(cmd);
         if (verb != null) channel().writeAndFlush(this);
-        Log.finer(FTPChannel.this.hashCode()+": Sending "+this);
+        //Log.finer(FTPChannel.this.hashCode()+": Sending "+this);
       }
     } public String toString() {
       if (verb == null)

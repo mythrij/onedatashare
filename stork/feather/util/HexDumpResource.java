@@ -27,7 +27,7 @@ public class HexDumpResource extends AnonymousResource {
   }
 
   public Bell<HexDumpResource> mkdir() {
-    //out.println("Directory created at: "+path);
+    out.println("Directory created at: "+path);
     return Bell.wrap(this);
   }
 
@@ -48,7 +48,7 @@ class HexDumpSink extends Sink<HexDumpResource> {
   public HexDumpSink(HexDumpResource r) { super(r); }
 
   public Bell start() {
-    //destination().out.println("Starting dump for: "+destination().path);
+    destination().out.println("Starting dump for: "+destination().path);
     return null;
   }
 
@@ -58,12 +58,13 @@ class HexDumpSink extends Sink<HexDumpResource> {
     //destination().out.println(slice.length());
     total += slice.length();
     HexDumpResource.throughput.update(slice.length());
+    buf.release();
     return null;
   }
 
   public void finish() {
-    //destination().out.println("End of dump: "+destination().path);
-    //destination().out.println("Total bytes: "+total);
-    //destination().out.println("Throughput:  "+HexDumpResource.throughput);
+    destination().out.println("End of dump: "+destination().path);
+    destination().out.println("Total bytes: "+total);
+    destination().out.println("Throughput:  "+HexDumpResource.throughput);
   }
 }

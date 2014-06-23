@@ -30,7 +30,7 @@ public class FTPSession extends Session<FTPSession, FTPResource> {
   public Bell<FTPSession> initialize() {
     return new Bell<Object>() {{
       String user = "anonymous";
-      String pass = "";
+      String pass = "stork@storkcloud.org";
 
       // Initialize connection to server.
       channel = new FTPChannel(uri);
@@ -64,7 +64,7 @@ public class FTPSession extends Session<FTPSession, FTPResource> {
         channel.authorize(user, pass).promise(this);
       } else {
         // Unsupported credential...
-        ring(new IllegalArgumentException());
+        ring(new IllegalArgumentException("credential"));
       }
     }}.as(FTPSession.this);
   }
@@ -114,13 +114,8 @@ public class FTPSession extends Session<FTPSession, FTPResource> {
   public static void main(String[] args) {
     String suri = (args.length > 0) ? args[0] : "ftp://didclab-ws8/stuff/";
     URI uri = URI.create(suri);
-    final FTPResource r = new FTPModule().select(uri);
-    r.list().new ForEach() {
-      public void each(String name) {
-        System.out.println(name);
-      } public void done() {
-        System.out.println("Done!");
-      }
-    };
+    final Resource src = new FTPModule().select(uri);
+    final Resource dest = new stork.feather.util.LocalSession(Path.create("/home/bwross/test")).root();
+    src.transferTo(dest);
   }
 }

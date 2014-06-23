@@ -133,6 +133,10 @@ public class LocalResource extends Resource<LocalSession,LocalResource> {
   public Tap<LocalResource> tap() {
     return new LocalTap(this);
   }
+
+  public Sink<LocalResource> sink() {
+    return new LocalSink(this);
+  }
 }
 
 class LocalTap extends Tap<LocalResource> {
@@ -196,5 +200,44 @@ class LocalTap extends Tap<LocalResource> {
       channel.close();
     } catch (Exception e) { }
     super.finish();
+  }
+}
+
+class LocalSink extends Sink<LocalResource> {
+  final File file = destination().file();
+  private RandomAccessFile raf;
+  private FileChannel channel;
+  private long offset = 0, remaining = 0;
+  private long chunkSize = 4096;
+
+  // State of the current transfer.
+  public LocalSink(LocalResource root) { super(root); }
+
+  public Bell start() throws Exception {
+    if (file.exists()) {
+      if (!file.canWrite())
+        throw new RuntimeException("Permission denied");
+      if (!file.isFile())
+        throw new RuntimeException("Resource is a directory");
+    }
+
+    // Set up state.
+    raf = new RandomAccessFile(file, "w");
+    channel = raf.getChannel();
+    remaining = file.length();
+
+    return null;
+  }
+
+  public Bell drain(Slice slice) throws Exception {
+    channel.write(slice.asByteBuf().nioBuffer());
+    return null;
+  }
+
+  protected void finish() {
+    try {
+      raf.close();
+      channel.close();
+    } catch (Exception e) { }
   }
 }

@@ -271,6 +271,32 @@ public abstract class Path {
   public Path absolutize(Path root) { return root.append(absolutize()); }
 
   /**
+   * Return a relative {@code Path} that can be appended to this {@code Path}
+   * to turn it into {@code root}.
+   *
+   * @return This {@code Path} relativized against {@code root}.
+   */
+  public Path relativize(Path root) {
+    if (equals(root))
+      return Path.DOT;
+    if (isRoot())
+      return root;
+    if (root.isRoot())
+      return relativize();
+    return up().relativize(root.up()).appendLiteral(name());
+  }
+
+  /**
+   * Return a relative {@code Path} that can be appended to this {@code Path}
+   * to turn it into the root {@code Path}.
+   *
+   * @return This {@code Path} relativized against the root {@code Path}.
+   */
+  public Path relativize() {
+    return DotPath.create(length());
+  }
+
+  /**
    * Explode this path into its unescaped component names.
    *
    * @return An array of the names of this path's components.
