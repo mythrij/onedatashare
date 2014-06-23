@@ -83,7 +83,7 @@ public class StorkQ extends StorkClient {
     System.out.printf("%3s  %-12s  %8s  %8s\n", "", "", "time", "time");
   } private String time(Ad ad) {
     if (ad == null) return "";
-    Time.Timer w = ad.unmarshalAs(Time.Timer.class);
+    Time w = ad.unmarshalAs(Time.class);
     return w.toString();
   } private String progressBar(Ad ad, int len) {
     if (ad == null) return "";

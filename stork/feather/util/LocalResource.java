@@ -31,13 +31,13 @@ public class LocalResource extends Resource<LocalSession,LocalResource> {
     return new ThreadBell(session.executor) {
       public Object run() {
         File file = file();
-        if (file.exists() && file.isDirectory())
+        if (file.exists() && !file.isDirectory())
           throw new RuntimeException("Resource is a file.");
-        else if (!file.mkdirs())
+        else if (!file.exists() && !file.mkdirs())
           throw new RuntimeException("Could not create directory.");
         return null;
       }
-    }.start().as(this).detach();
+    }.start().as(this);
   }
 
   public Bell<LocalResource> delete() {
@@ -213,25 +213,34 @@ class LocalSink extends Sink<LocalResource> {
   // State of the current transfer.
   public LocalSink(LocalResource root) { super(root); }
 
-  public Bell start() throws Exception {
-    if (file.exists()) {
-      if (!file.canWrite())
-        throw new RuntimeException("Permission denied");
-      if (!file.isFile())
-        throw new RuntimeException("Resource is a directory");
-    }
+  public Bell start() {
+    return new ThreadBell(destination().session.executor) {
+      public Object run() throws Exception {
+        if (file.exists()) {
+          if (!file.canWrite())
+            throw new RuntimeException("Permission denied");
+          if (!file.isFile())
+            throw new RuntimeException("Resource is a directory");
+        }
 
-    // Set up state.
-    raf = new RandomAccessFile(file, "w");
-    channel = raf.getChannel();
-    remaining = file.length();
+        // Set up state.
+        raf = new RandomAccessFile(file, "rw");
+        channel = raf.getChannel();
+        remaining = file.length();
 
-    return null;
+        return null;
+      }
+    }.start();
   }
 
-  public Bell drain(Slice slice) throws Exception {
-    channel.write(slice.asByteBuf().nioBuffer());
-    return null;
+  public Bell drain(final Slice slice) {
+    return new ThreadBell(destination().session.executor) {
+      public Object run() throws Exception {
+        channel.write(slice.asByteBuf().nioBuffer());
+        slice.asByteBuf().release();
+        return null;
+      }
+    }.start();
   }
 
   protected void finish() {

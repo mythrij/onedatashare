@@ -21,6 +21,7 @@ public abstract class ThreadBell<T> extends Bell<T> {
       try {
         ring(ThreadBell.this.run());
       } catch (Exception e) {
+        e.printStackTrace();
         ring(e);
       }
     }

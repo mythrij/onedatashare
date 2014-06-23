@@ -36,6 +36,11 @@ public class Progress {
     this.done += done;
   }
 
+  /** Get the progress rate based on time. */
+  public synchronized Throughput rate(Time time) {
+    return new Throughput(done(), time.elapsed()/1000);
+  }
+
   /** Get the progress as a percentage value. */
   public synchronized double toPercent() {
     return (total <= 0) ? 0 : 100.0 * done / total;
@@ -47,6 +52,8 @@ public class Progress {
   }
 
   public synchronized String toString() {
-    return done+"/"+total;
+    return (total <= 0) ?
+      Throughput.prettySize(done) :
+      Throughput.prettySize(done)+"/"+Throughput.prettySize(total);
   }
 }

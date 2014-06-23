@@ -1,46 +1,37 @@
 package stork.feather.util;
 
 /**
- * A utility for checking time. This class keeps track of time in a way such
- * that it is guaranteed to be monotonically increasing even in the face of
- * system time changes, and also provide a meaningful time.
+ * A timer utility. This class keeps track of time in a way such that it is
+ * guaranteed to be monotonically increasing even in the face of system time
+ * changes, and also provide a meaningful time.
  */
 public class Time {
   private static long absoluteBase = System.currentTimeMillis();
   private static long relativeBase = System.nanoTime();
 
-  /**
-   * A timer. A timer is a specialized type of clock for measuring time
-   * intervals. A timer which counts upwards from zero for measuring elapsed
-   * time is often called a <i>stopwatch</i>, which is unfortunately four
-   * characters longer than the word "timer" and is hence not the name of this
-   * class.
-   */
-  public static class Timer {
-    private volatile long start = now(), total = 0;
+  private volatile long start = now(), total = 0;
 
-    /** Get the elapsed time of this {@code Timer}. */
-    public synchronized long elapsed() {
-      return running() ? total : now()-start + total;
-    }
-
-    /** Pause the {@code Timer}. Has no effect if stopped. */
-    public synchronized void pause() {
-      if (!running()) return;
-      total += now()-start;
-      start = -1;
-    }
-
-    /** Resume the {@code Timer}. Has no effect if running. */
-    public synchronized void resume() {
-      if (!running()) start = now();
-    }
-
-    /** Check if the {@code Timer} is running. */
-    public synchronized boolean running() { return start > 0; }
-
-    public String toString() { return format(elapsed()); }
+  /** Get the elapsed time of this {@code Time}. */
+  public synchronized long elapsed() {
+    return running() ? now()-start + total : total;
   }
+
+  /** Pause the {@code Time}. Has no effect if stopped. */
+  public synchronized void stop() {
+    if (!running()) return;
+    total += now()-start;
+    start = -1;
+  }
+
+  /** Resume this {@code Time}. Has no effect if running. */
+  public synchronized void resume() {
+    if (!running()) start = now();
+  }
+
+  /** Check if this {@code Time} is running. */
+  public synchronized boolean running() { return start > 0; }
+
+  public String toString() { return format(elapsed()); }
 
   /** Get the current Unix time in milliseconds. */
   public static long now() {
@@ -57,7 +48,7 @@ public class Time {
     return (time < 0) ? 0 : time-now();
   }
 
-  /** Format a time (in milliseconds) for human readability. */
+  /** Format a duration (in milliseconds) for human readability. */
   public static String format(long time) {
     if (time < 0) return "-"+format(-time);
 

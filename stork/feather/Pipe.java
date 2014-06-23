@@ -9,6 +9,8 @@ import java.util.*;
  */
 public class Pipe {
   private Pipe upstream, downstream;
+  private boolean finished = false;
+  private Bell lastDrain = Bell.rungBell();
 
   /** The orientation of a {@code Pipe} in a pipeline. */
   public static enum Orientation {
@@ -120,7 +122,7 @@ public class Pipe {
    * @throws Exception if the transfer cannot be started for a reason known
    * immediately.
    */
-  protected Bell start() throws Exception {
+  protected synchronized Bell start() throws Exception {
     try {
       Bell bell = downstream().start();
       if (bell == null)
@@ -143,22 +145,28 @@ public class Pipe {
    * @throws Exception if this transfer element cannot be started for a reason
    * known immediately.
    */
-  protected Bell drain(Slice slice) throws Exception {
-    try {
+  protected synchronized Bell drain(Slice slice) throws Exception {
+    if (!finished) try {
       Bell bell = downstream().drain(slice);
       if (bell == null)
         bell = Bell.rungBell();
-      return bell;
+      return lastDrain = bell;
     } catch (Exception e) {
-      return new Bell(e);
-    }
+      return lastDrain = new Bell(e);
+    } return null;
   }
 
   /**
    * Finalize the flow of data through this {@code Pipe}.
    */
-  protected void finish() {
-    downstream().finish();
+  protected synchronized void finish() {
+    if (!finished) {
+      lastDrain.new Promise() {
+        public void always() { downstream().finish(); }
+      };
+      lastDrain = null;
+      finished = true;
+    }
   }
 
   /**

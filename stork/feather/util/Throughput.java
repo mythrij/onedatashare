@@ -18,11 +18,18 @@ public class Throughput {
 
   /** Create a {@code Throughput} with the given quantum. */
   public Throughput(double quantum) {
-    q = (quantum < 1) ? 1 : quantum;
+    q = (quantum <= 0) ? 0 : quantum;
+  }
+
+  /** Create a {@code Throughput} from {@code time} and {@code progress}. */
+  public Throughput(double bytes, double time) {
+    q = 0;
+    th = bytes/time;
   }
 
   /** Update the throughput estimation with the given amount. */
   public synchronized void update(double amount) {
+    if (q <= 0) return;
     long now = now();
     double d = now-t;
     t = now;
@@ -31,6 +38,7 @@ public class Throughput {
 
   /** Get the throughput in units per second. */
   public synchronized double value() {
+    if (q <= 0) return th;
     double d = now()-t;
     return (d > q) ? 0 : th*(1-d/q)*1000;
   }

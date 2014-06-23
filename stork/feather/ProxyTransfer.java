@@ -14,6 +14,7 @@ import stork.feather.util.*;
 public class ProxyTransfer<S extends Resource<?,S>, D extends Resource<?,D>>
 extends Transfer<S,D> {
   private LinkedList<Pending> queue = new LinkedList<Pending>();
+  private Time timer;
   private Progress progress = new Progress();
   private Throughput throughput = new Throughput();
   
@@ -47,11 +48,15 @@ extends Transfer<S,D> {
 
   protected Bell start() {
     System.out.println("Transfer starting...");
+    timer = new Time();
     return transfer(Path.ROOT);
   }
 
   protected void stop() {
+    timer.stop();
     System.out.println("Transfer complete.");
+    System.out.println("Total:  "+progress);
+    System.out.println("Avg.Th: "+progress.rate(timer));
   }
 
   // Check if we're able to start a data transfer according to the configured
@@ -95,8 +100,8 @@ extends Transfer<S,D> {
     if (isDone())
       return Bell.rungBell();
 
-    S src  = source.select(path);
-    D dest = destination.select(path);
+    final S src  = source.select(path);
+    final D dest = destination.select(path);
 
     // Stat the source to see what it is.
     return src.stat().new AsBell<Object>() {
@@ -105,7 +110,7 @@ extends Transfer<S,D> {
         if (stat.link != null)
           throw new RuntimeException("Cannot transfer links.");
         if (stat.dir)
-          b = b.and(transferList(path));
+          b = b.and(dest.mkdir()).and(transferList(path));
         if (stat.file)
           b = b.and(transferData(path));
         else
