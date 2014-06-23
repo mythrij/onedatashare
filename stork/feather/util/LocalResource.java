@@ -83,6 +83,7 @@ public class LocalResource extends Resource<LocalSession,LocalResource> {
 
   public Bell<Stat> stat() {
     return new ThreadBell<Stat>(session.executor) {
+      { string = path().toString(); }
       public Stat run() {
         File file = file();
 
@@ -98,7 +99,6 @@ public class LocalResource extends Resource<LocalSession,LocalResource> {
         if (sym != null)
           stat.link = Path.create(file.toString());
         stat.time = file.lastModified();
-
         return stat;
       }
     }.start().detach();
@@ -107,6 +107,7 @@ public class LocalResource extends Resource<LocalSession,LocalResource> {
   public Emitter<String> list() {
     final Emitter<String> emitter = new Emitter<String>();
     new ThreadBell<String>(session.executor) {
+      { string = path().toString(); }
       public String run() {
         File file = file();
 
@@ -140,7 +141,7 @@ class LocalTap extends Tap<LocalResource> {
   private RandomAccessFile raf;
   private FileChannel channel;
   private long offset = 0, remaining = 0;
-  private long chunkSize = 16384;
+  private long chunkSize = 4096;
 
   // Small hack to take advantage of NIO features.
   private WritableByteChannel nioToFeather = new WritableByteChannel() {
@@ -172,20 +173,28 @@ class LocalTap extends Tap<LocalResource> {
 
     // When bell rings, start a loop to send all chunks.
     new BellLoop(this) {
-      public Bell lock() { return pause; }
-      public void body() throws Exception {
-        if (remaining > 0) {
-          long len = remaining < chunkSize ? remaining : chunkSize;
-          len = channel.transferTo(offset, len, nioToFeather);
-          offset += len;
-          remaining -= len;
-        } else {
-          finish();
-          ring();
-        }
+      public Bell lock() {
+        return pause;
+      } public boolean condition() {
+        return remaining > 0;
+      } public void body() throws Exception {
+        long len = remaining < chunkSize ? remaining : chunkSize;
+        len = channel.transferTo(offset, len, nioToFeather);
+        offset += len;
+        remaining -= len;
+      } public void always() {
+        finish();
       }
     }.start(bell);
 
     return bell;
+  }
+
+  protected void finish() {
+    try {
+      raf.close();
+      channel.close();
+    } catch (Exception e) { }
+    super.finish();
   }
 }

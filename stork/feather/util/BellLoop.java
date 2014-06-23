@@ -46,18 +46,20 @@ public abstract class BellLoop extends Bell {
       bell = lock();
     } if (bell == null) {
       bell = Bell.rungBell();
-    } if (!isDone()) try {
-      bell.new Promise() {
-        public void then(Object o) throws Exception {
+    } if (!isDone()) bell.new Promise() {
+      public void then(Object o) throws Exception {
+        if (isDone()) {
+          return;
+        } if (condition()) {
           body();
           doIterate();
-        } public void fail(Throwable t) {
-          BellLoop.this.ring(t);
+        } else {
+          BellLoop.this.ring();
         }
-      };
-    } catch (Throwable t) {
-      ring(t);
-    }
+      } public void fail(Throwable t) {
+        BellLoop.this.ring(t);
+      }
+    };
   }
 
   /**
@@ -66,10 +68,14 @@ public abstract class BellLoop extends Bell {
    */
   public abstract Bell lock();
 
+  /** Return {@code true} as long as the loop should run. */
+  public boolean condition() { return true; }
+
   /**
    * The iteration operation performed by the loop. This method should return a
    * {@code Bell} that will ring when the next iteration should be performed.
-   * This method may stop the loop by ringing the {@code BellLoop}.
+   * This method may stop the loop by ringing the {@code BellLoop}. Otherwise,
+   * the loop will be stopped when {@code condition()} is {@code false}.
    */
   public abstract void body() throws Exception;
 }

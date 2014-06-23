@@ -121,7 +121,14 @@ public class Pipe {
    * immediately.
    */
   protected Bell start() throws Exception {
-    return downstream().start();
+    try {
+      Bell bell = downstream().start();
+      if (bell == null)
+        bell = Bell.rungBell();
+      return bell;
+    } catch (Exception e) {
+      return new Bell(e);
+    }
   }
 
   /**
@@ -138,7 +145,10 @@ public class Pipe {
    */
   protected Bell drain(Slice slice) throws Exception {
     try {
-      return downstream().drain(slice);
+      Bell bell = downstream().drain(slice);
+      if (bell == null)
+        bell = Bell.rungBell();
+      return bell;
     } catch (Exception e) {
       return new Bell(e);
     }

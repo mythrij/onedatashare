@@ -13,6 +13,7 @@ import stork.feather.*;
  */
 public class HexDumpResource extends AnonymousResource {
   final PrintStream out;
+  static final Throughput throughput = new Throughput();
 
   public HexDumpResource() { this(Path.ROOT); }
 
@@ -26,7 +27,7 @@ public class HexDumpResource extends AnonymousResource {
   }
 
   public Bell<HexDumpResource> mkdir() {
-    out.println("Directory created at: "+path);
+    //out.println("Directory created at: "+path);
     return Bell.wrap(this);
   }
 
@@ -41,22 +42,28 @@ public class HexDumpResource extends AnonymousResource {
 }
 
 class HexDumpSink extends Sink<HexDumpResource> {
+  private long total = 0;
+
   /** Create a {@code HexDumpSink} that prints to {@code System.out}. */
   public HexDumpSink(HexDumpResource r) { super(r); }
 
   public Bell start() {
-    destination().out.println("Starting dump for: "+destination().path);
+    //destination().out.println("Starting dump for: "+destination().path);
     return null;
   }
 
   public Bell drain(Slice slice) {
     ByteBuf buf = slice.asByteBuf();
     //destination().out.println(ByteBufUtil.hexDump(buf));
-    destination().out.println(slice.length());
+    //destination().out.println(slice.length());
+    total += slice.length();
+    HexDumpResource.throughput.update(slice.length());
     return null;
   }
 
   public void finish() {
-    destination().out.println("End of dump: "+destination().path);
+    //destination().out.println("End of dump: "+destination().path);
+    //destination().out.println("Total bytes: "+total);
+    //destination().out.println("Throughput:  "+HexDumpResource.throughput);
   }
 }

@@ -18,9 +18,9 @@ import stork.util.*;
  * <p/>
  *   netwerk/streamconv/converters/ParseFTPList.cpp
  * <p/>
- * This parser will return a tree root that has its name set if and only
- * if information about the listed directory was able to be retrieved from
- * the listing results.
+ * This parser will return a tree root that has its name set if and only if
+ * information about the listed directory was able to be retrieved from the
+ * listing results.
  */
 public class FTPListParser extends Bell<Stat> {
   // TODO: Check out <http://cr.yp.to/ftpparse/ftpparse.c>.

@@ -1,6 +1,7 @@
 package stork.feather.util;
 
 import java.util.concurrent.*;
+import java.util.*;
 
 import stork.feather.*;
 
@@ -12,12 +13,12 @@ import stork.feather.*;
  * @param <T> The resolution type of this {@code ThreadBell}.
  */
 public abstract class ThreadBell<T> extends Bell<T> {
-  private boolean started = false;
   private Executor executor;
+  public String string;
 
   private Runnable runnable = new Runnable() {
     public void run() {
-      if (!isDone()) try {
+      try {
         ring(ThreadBell.this.run());
       } catch (Exception e) {
         ring(e);
@@ -49,13 +50,16 @@ public abstract class ThreadBell<T> extends Bell<T> {
    * @return This {@code ThreadBell}.
    */
   public synchronized ThreadBell<T> start() {
-    if (!started) {
-      if (executor != null)
+    if (runnable != null) {
+      if (executor != null) try {
         executor.execute(runnable);
-      else
+      } catch (Exception e) {
+        e.printStackTrace();
+        ring(e);
+      } else {
         new Thread(runnable).start();
+      }
       executor = null;
-      started = true;
       runnable = null;
     } return this;
   }

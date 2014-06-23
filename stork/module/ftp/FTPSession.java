@@ -12,8 +12,8 @@ import stork.util.*;
  * A session with an FTP server.
  */
 public class FTPSession extends Session<FTPSession, FTPResource> {
-  transient FTPChannel channel;
-  transient boolean mlstOptsAreSet = false;
+  FTPChannel channel;  // The connection to the FTP server.
+  boolean mlstOptsAreSet = false;  // Whether we sent OPT MLST.
 
   /**
    * Establish an {@code FTPSession} with the endpoint described by {@code uri}
@@ -69,20 +69,57 @@ public class FTPSession extends Session<FTPSession, FTPResource> {
     }}.as(FTPSession.this);
   }
 
-  public void finalize() {
+  public void cleanup() {
+    System.out.println("Closing...");
     channel.close();
   }
 
+  // These methods are used by list() in FTPResource. Different FTP servers
+  // respond in different ways to the MLSC and STAT commands used by list().
+  // Specifically, some servers will provide a listing along with it, while
+  // others will only return stats about a single resource.  These methods
+  // allow for MLSC and STAT to be tested on a per-session basis.
+  private Bell<Boolean> mlscCanList, statCanList;
+  synchronized Bell<Boolean> cmdCanList(final FTPListCommand cmd) {
+    Bell<Boolean> canList;
+    switch (cmd) {
+      case MLSC: canList = mlscCanList; break;
+      case STAT: canList = statCanList; break;
+      default  : return new Bell<Boolean>(cmd.canList());
+    } if (canList != null) {
+      return canList;
+    } else switch (cmd) {
+      case MLSC: canList = mlscCanList = new Bell<Boolean>(); break;
+      case STAT: canList = statCanList = new Bell<Boolean>();
+    } return channel.new Command(cmd, "/").new As<Boolean>() {
+      public Boolean convert(FTPChannel.Reply r) {
+        FTPListParser parser = new FTPListParser();
+        if (!r.isComplete())
+          return false;
+        parser.parseAll(r.message().getBytes());
+        Stat[] sub = parser.root.files;
+        if (sub == null || sub.length != 1)
+          return true;
+        return !"/".equals(sub[0].name);
+      } public Boolean convert(Throwable t) {
+        return false;
+      }
+    }.promise(canList).new Promise() {
+      public void done(Boolean b) {
+        System.out.println("Can support "+cmd+": "+b);
+      }
+    };
+  }
+
   public static void main(String[] args) {
-    URI uri = URI.create("ftp://didclab-ws8/asdasd/asdasd");
+    String suri = (args.length > 0) ? args[0] : "ftp://didclab-ws8/stuff/";
+    URI uri = URI.create(suri);
     final FTPResource r = new FTPModule().select(uri);
-    r.stat().new Promise() {
-      public void done(Stat s) {
-        System.out.println(s);
-      } public void fail(Throwable t) {
-        t.printStackTrace();
-      } public void always() {
-        r.session.close();
+    r.list().new ForEach() {
+      public void each(String name) {
+        System.out.println(name);
+      } public void done() {
+        System.out.println("Done!");
       }
     };
   }

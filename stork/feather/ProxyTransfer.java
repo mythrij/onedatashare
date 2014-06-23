@@ -1,6 +1,7 @@
 package stork.feather;
 
 import java.util.*;
+import java.util.concurrent.*;
 
 import stork.feather.util.*;
 
@@ -12,9 +13,11 @@ import stork.feather.util.*;
  */
 public class ProxyTransfer<S extends Resource<?,S>, D extends Resource<?,D>>
 extends Transfer<S,D> {
-  // Queue for pending transfers.
-  private Queue<Pending> queue = new LinkedList<Pending>();
-
+  private LinkedList<Pending> queue = new LinkedList<Pending>();
+  private Progress progress = new Progress();
+  private Throughput throughput = new Throughput();
+  
+  // A pending transfer and a bell to ring when it starts.
   private static class Pending {
     final Bell bell;
     final Path path;
@@ -26,7 +29,9 @@ extends Transfer<S,D> {
     }
   }
 
-  private volatile int ongoing = 0;
+  // Sets of ongoing transfers and listings.
+  private Set<Path> transfers = new HashSet<Path>();
+  private Set<Path> listings = new HashSet<Path>();
 
   /**
    * Create a {@code ProxyTransfer} that will transfer from {@code source} to
@@ -37,10 +42,11 @@ extends Transfer<S,D> {
    */
   public ProxyTransfer(S source, D destination) {
     super(source, destination);
+    starter.ring();
   }
 
   protected Bell start() {
-    System.out.println("Starting transfer...");
+    System.out.println("Transfer starting...");
     return transfer(Path.ROOT);
   }
 
@@ -48,87 +54,144 @@ extends Transfer<S,D> {
     System.out.println("Transfer complete.");
   }
 
-  private synchronized boolean canStartTransfer() {
+  // Check if we're able to start a data transfer according to the configured
+  // concurrency level.
+  private synchronized boolean canStartDataTransfer() {
     int c = concurrency();
-    return c <= 0 || ongoing < c;
+    return c <= 0 || transfers.size() < c;
   }
 
-  // Transfer a resource.
-  private synchronized Bell transfer(final Path path) {
-    final S src  = source.select(path);
-    final D dest = destination.select(path);
-    if (!canStartTransfer())
-      return enqueueTransfer(path);
-    ongoing++;
-    return src.stat().new Promise() {
-      public void then(Stat stat) {
-        Bell bell;
-        if (stat.link != null)
-          bell = Bell.rungBell();
-        else if (stat.dir)
-          bell = dest.mkdir().and(transfer(path, src.list()));
-        else if (stat.file)
-          bell = transfer(src.tap(), dest.sink());
-        else
-          bell = Bell.rungBell();
-        bell.as(stat).promise(this);
-      } public void done() {
-      } public void fail(Throwable t) {
-        System.out.println("Failed to transfer: "+path);
-        t.printStackTrace();
-        synchronized (ProxyTransfer.this) { ongoing--; }
-      }
-    };
+  // The total number of tasks pending.
+  private synchronized int pendingTasks() {
+    return queue.size() + transfers.size() + listings.size();
   }
 
-  private synchronized Bell enqueueTransfer(Path path) {
-    Pending pending = new Pending(path);
-    queue.add(pending);
-    return pending.bell;
-  }
-
-  private synchronized void popTransfer() {
-    if (canStartTransfer()) {
-      Pending pending = queue.poll();
-      if (pending != null)
-        transfer(pending.path).promise(pending.bell);
-      else
-        stopper.ring();
+  // Check if the transfer is complete. If there are no more pending tasks,
+  // declare the transfer to be complete.
+  private synchronized void checkIfComplete() {
+    if (pendingTasks() <= 0) {
+      stopper.ring();
     }
   }
 
-  // Transfer from tap to sink.
-  private Bell transfer(Tap<S> tap, Sink<D> sink) {
-    Pipe pipe = new Pipe() {
-      protected void finish() {
-        synchronized (ProxyTransfer.this) { ongoing--; }
-        popTransfer();
+  // Transfer a resource given its path, and return a bell that rings when the
+  // transfer begins.
+  private synchronized Bell transfer(final Path path) {
+    if (isDone()) {
+      return Bell.rungBell();
+    } if (!canStartDataTransfer()) {
+      return enqueueTransfer(path, false);
+    } try {
+      transferStarted(path);
+      return transfer0(path).new Promise() {
+        public void fail() { transferEnded(path); }
+      };
+    } catch (Exception e) {
+      transferEnded(path);
+      return new Bell(e);
+    } finally {
+    }
+  } private synchronized Bell transfer0(final Path path) {
+    if (isDone())
+      return Bell.rungBell();
+
+    S src  = source.select(path);
+    D dest = destination.select(path);
+
+    // Stat the source to see what it is.
+    return src.stat().new AsBell<Object>() {
+      public Bell<Object> convert(Stat stat) {
+        Bell b = Bell.rungBell();
+        if (stat.link != null)
+          throw new RuntimeException("Cannot transfer links.");
+        if (stat.dir)
+          b = b.and(transferList(path));
+        if (stat.file)
+          b = b.and(transferData(path));
+        else
+          transferEnded(path);
+        return b;
+      }
+    };
+  }
+
+  // If we are not yet able to start a transfer, put it in the transfer queue.
+  private synchronized Bell enqueueTransfer(Path path, boolean first) {
+    Pending pending = new Pending(path);
+    if (first)
+      queue.addFirst(pending);
+    else
+      queue.add(pending);
+    return pending.bell;
+  }
+
+  // Remove resource paths from the transfer queue and begin transferring them.
+  private synchronized void popTransfers() {
+    while (canStartDataTransfer()) {
+      Pending pending = queue.poll();
+      if (pending == null)
+        return;
+      transfer(pending.path).promise(pending.bell);
+    }
+  }
+
+  // Transfer a resource once we know it's a data resource.
+  private synchronized Bell transferData(final Path path) {
+    return source.select(path).tap().attach(new Pipe() {
+      protected Bell start() throws Exception {
+        return super.start();
+      } protected Bell drain(Slice slice) throws Exception {
+        progress.add(slice.length());
+        throughput.update(slice.length());
+        return super.drain(slice);
+      } protected void finish() {
         super.finish();
+        transferEnded(path);
       }
-    };
-    return tap.attach(pipe).attach(sink).tap().start().new Promise() {
-      public void fail() {
-        synchronized (ProxyTransfer.this) { ongoing--; }
-      }
-    };
+    }).attach(destination.select(path).sink()).tap().start();
   }
 
   // Transfer directory listing.
-  private synchronized Bell transfer(final Path path, Emitter<String> list) {
-    ongoing--;
-    return list.new ForEach() {
+  private synchronized Bell transferList(final Path path) {
+    Emitter<String> emitter = source.select(path).list();
+    final Bell bell = new Bell();
+    listingStarted(path);
+    emitter.new ForEach() {
       public void each(String name) {
-        transfer(path.appendLiteral(name));
-      } public void done() {
-        popTransfer();
-      } public void fail(Throwable t) {
-        handleFail(t);
+        enqueueTransfer(path.appendLiteral(name), true);
+      } public void always() {
+        listingEnded(path);
       }
-    }.isFailed() ? list : Bell.rungBell();
+    };
+    return Bell.rungBell();
   }
 
-  // TODO
-  private void handleFail(Throwable t) {
-    popTransfer();
+  // Called whenever a data transfer starts or completes.
+  private synchronized void transferStarted(Path path) {
+    transfers.add(path);
+  } private synchronized void transferEnded(Path path) {
+    transfers.remove(path);
+    popTransfers();
+    checkIfComplete();
+  }
+
+  // Called whenever a listing starts or completes.
+  private synchronized void listingStarted(Path path) {
+    listings.add(path);
+  } private synchronized void listingEnded(Path path) {
+    listings.remove(path);
+    popTransfers();
+    checkIfComplete();
+  }
+
+  { printDebug(); }
+
+  private void printDebug() {
+    Bell.timerBell(1).new Promise() {
+      public void done() {
+        System.out.println("Throughput: "+throughput);
+        printDebug();
+      }
+    };
   }
 }

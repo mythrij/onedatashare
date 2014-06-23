@@ -8,13 +8,36 @@ import stork.module.*;
 import stork.scheduler.*;
 import stork.util.*;
 
+import static stork.module.ftp.FTPListCommand.*;
+
 public class FTPResource extends Resource<FTPSession, FTPResource> {
   FTPResource(FTPSession session, Path path) {
     super(session, path);
   }
 
-  // TODO: If this is a non-singleton resource, use a crawler.
+  public synchronized Emitter<String> list() {
+    return new Emitter<String>() {{
+      final Emitter e = this;
+      stat(true).new Promise() {
+        public void done(Stat s) {
+          String[] names = new String[s.files.length];
+          for (int i = 0; i < s.files.length; i++)
+            names[i] = s.files[i].name;
+          e.emitAll(names);
+          e.ring();
+        } public void fail(Throwable t) {
+          e.ring(t);
+        }
+      };
+    }};
+  }
+
   public synchronized Bell<Stat> stat() {
+    return stat(false);
+  }
+
+  // Pass true if listing is necessary.
+  private synchronized Bell<Stat> stat(final boolean list) {
     return initialize().new AsBell<Stat>() {
       private FTPChannel channel = null;
 
@@ -23,31 +46,37 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
       // find one that works.
       public Bell<Stat> convert(FTPResource me) {
         channel = session.channel;
-        tryListing(FTPListCommand.values()[0]);
+        tryCommand(FTPListCommand.values()[0]);
         return null;
       }
 
       // This will call itself until it finds a supported command. If the
       // command is not supported, call itself again with the next available
       // command. If cmd is null, that means we've tried all commands.
-      private void tryListing(final FTPListCommand cmd) {
+      private void tryCommand(final FTPListCommand cmd) {
         if (isDone()) {
           return;
         } if (cmd == null) {
           ring(new Exception("Listing is not supported."));
-        } else channel.supports(cmd.toString()).new Promise() {
-          public void done(Boolean supported) {
+        } else channel.supports(cmd.toString()).new AsBell<Boolean>() {
+          public Bell<Boolean> convert(Boolean supported) {
+            if (supported && list)
+              return session.cmdCanList(cmd);
+            return new Bell<Boolean>(supported);
+          } public void done(Boolean supported) {
             if (supported)
-              sendListCommand(cmd);
+              sendCommand(cmd);
             else
-              tryListing(cmd.next());
+              tryCommand(cmd.next());
+          } public void fail() {
+            tryCommand(cmd.next());
           }
         };
       }
 
       // This will get called once we've found a command that is supported.
       // However, if this fails, fall back to the next command.
-      private void sendListCommand(final FTPListCommand cmd) {
+      private void sendCommand(final FTPListCommand cmd) {
         if (isDone())
           return;
 
@@ -60,7 +89,7 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
             tb.ring(stat);
           } public void fail() {
             // TODO: Check for permanent errors.
-            tryListing(cmd.next());
+            tryCommand(cmd.next());
           }
         };
 
@@ -115,8 +144,8 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
         if (p.startsWith("/~"))
           return p.substring(1);
         else if (!p.startsWith("/") && !p.startsWith("~"))
-          return "/"+p;
-        return p;
+          return "./"+p;
+        return "."+p;
       }
     };
   }

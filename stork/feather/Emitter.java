@@ -11,6 +11,8 @@ public class Emitter<T> extends Bell {
   // Bells which are awaiting pairing.
   private final Queue<Bell<T>> queue = new LinkedList<Bell<T>>();
   private boolean queueHasEmits = false;
+  private static final Bell endOfEmits = new Bell().ring();
+  private boolean finalized = false;
 
   // When done, finalize and clear the queue.
   {
@@ -52,7 +54,9 @@ public class Emitter<T> extends Bell {
 
   /** Emit an item via a {@code Bell}. */
   public final synchronized void emit(Bell<T> bell) {
-    if (bell == null) {
+    if (finalized) {
+      return;
+    } if (bell == null) {
       bell = (Bell<T>) Bell.rungBell();
     } if (isDone()) {
       bell.cancel();
@@ -78,8 +82,12 @@ public class Emitter<T> extends Bell {
   public final synchronized Bell<T> get(Bell<T> bell) {
     if (bell == null) {
       bell = new Bell<T>();
-    } else if (!queue.isEmpty() && queueHasEmits) {
-      queue.poll().promise(bell);
+    } if (!queue.isEmpty() && queueHasEmits) {
+      Bell<T> b = queue.poll();
+      if (b == endOfEmits)
+        bell.cancel();
+      else
+        b.promise(bell);
     } else if (isDone()) {
       bell.cancel();
     } else {
@@ -90,12 +98,15 @@ public class Emitter<T> extends Bell {
 
   // Upon ringing, cancel any queued bells.
   private final synchronized void finalizeRemaining(Throwable error) {
-    if (queue == null)
+    if (finalized)
       return;
-    if (error != null && !queueHasEmits)
-      for (Bell<T> b : queue) b.ring(error);
-    else if (!queueHasEmits)
-      for (Bell<T> b : queue) b.cancel();
+    if (!queue.isEmpty() && queueHasEmits)
+      queue.add(endOfEmits);
+    else if (error != null) for (Bell b : queue)
+      b.ring(error);
+    else for (Bell b : queue)
+      b.cancel();
+    finalized = true;
   }
 
   protected void finalize() {

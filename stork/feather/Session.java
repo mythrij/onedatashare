@@ -46,7 +46,7 @@ public abstract class Session<S extends Session<S,R>, R extends Resource<S,R>> {
 
   // Rung on close. Avoid letting this leak out.
   private final Bell<S> onClose = new Bell<S>() {
-    public void always() { Session.this.finalize(); }
+    public void always() { Session.this.cleanup(); }
   };
 
   /**
@@ -147,7 +147,9 @@ public abstract class Session<S extends Session<S,R>, R extends Resource<S,R>> {
    * Session}. This method should close any connections and finalize any
    * ongoing transactions.
    */
-  protected void finalize() { }
+  protected void cleanup() { }
+
+  protected void finalize() { close(); }
 
   /**
    * Close this {@code Session} and call {@code finalize()}. {@code

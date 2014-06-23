@@ -99,8 +99,8 @@ public final class Pipes {
         try {
           super.drain(new Slice(buf));
         } catch (Exception e) {
-          // Ugh, what should we do here?
-        } super.finish();
+          // What to do here...
+        }
       }
     };
   }

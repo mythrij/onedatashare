@@ -1,12 +1,12 @@
 package stork.feather.util;
 
-import java.io.*;
+import java.util.*;
 import java.util.concurrent.*;
 
 import stork.feather.*;
 
 /**
- * A session capable of interacting with the local file system. This is
+ * A {@code Session} capable of interacting with the local file system. This is
  * intended to serve as an example Feather implementation, but can also be used
  * for testing other implementations.
  * <p/>
@@ -18,7 +18,8 @@ import stork.feather.*;
  * method.
  */
 public class LocalSession extends Session<LocalSession,LocalResource> {
-  final ThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(4);
+  final ScheduledThreadPoolExecutor executor =
+    new ScheduledThreadPoolExecutor(1);
   final Path path;
 
   /** Create a {@code LocalSession} at the system root. */

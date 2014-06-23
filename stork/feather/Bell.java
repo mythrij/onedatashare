@@ -74,28 +74,15 @@ public class Bell<T> implements Future<T> {
    * @param error The error to ring the {@code Bell} with.
    * @return This {@code Bell}.
    */
-  private Bell<T> ring(T object, Throwable error) {
-    List<Bell<? super T>> proms;
-
-    synchronized (this) {
-      if (isDone())
-        return this;
-      state = (byte) ((error == null) ? 2 : 3);
+  private synchronized Bell<T> ring(T object, Throwable error) {
+    if (!isDone()) {
+      state = (error == null) ? (byte) 2 : 3;
       this.object = (error == null) ? object : error;
-      proms = promises;
-      promises = null;  // Take the set away so promise() blocks.
-    }
-
-    dispatchHandlers();
-
-    for (Bell<? super T> b : proms)
-      dispatchPromise(b);
-
-    promises = Collections.emptyList();
-
-    dispatchNotify();
-
-    return this;
+      dispatchHandlers();
+      dispatchPromises(promises);
+      promises = Collections.emptyList();
+      notifyAll();
+    } return this;
   }
 
   private void dispatchHandlers() {
@@ -116,47 +103,37 @@ public class Bell<T> implements Future<T> {
           // Discard.
         }
       }
-    };
+    }.dispatch();
   }
 
   // Dispatcher task for thenning a bell with an object.
   private static class DispatchDone<V> extends Task {
-    private final V object;
-    private final Bell<V> bell;
-    DispatchDone(Bell<? super V> bell, V object) {
-      this.bell = (Bell<V>) bell; this.object = object;
+    final V object;
+    final List<Bell> bells;
+    DispatchDone(List<Bell> bells, V object) {
+      this.bells = bells;
+      this.object = object;
+    } public void run() {
+      for (Bell b : bells) then(b);
+    } public void then(Bell b) {
+      b.then(object, null);
     }
-    public void run() { bell.then(object, null); }
-  }
-
-  // Dispatcher task for thenning a bell with an exception.
-  private static class DispatchFail extends Task {
-    private final Throwable error;
-    private final Bell bell;
-    DispatchFail(Bell bell, Throwable error) {
-      this.bell = bell; this.error = error;
-    }
-    public void run() { bell.then(null, error); }
-  }
-
-  private void dispatchPromise(final Bell<? super T> bell) {
-    synchronized (bell) {
-      if (bell.state > 0)
-        return;
-      bell.state = 1;
-      if (isFailed())
-        new DispatchFail(bell, error());
-      else
-        new DispatchDone<T>(bell, object());
+  } private static class DispatchFail extends DispatchDone<Throwable> {
+    DispatchFail(List<Bell> bells, Throwable error) {
+      super(bells, error);
+    } public void then(Bell b) {
+      b.then(null, object);
     }
   }
 
-  private void dispatchNotify() {
-    new Task() {
-      public void run() {
-        synchronized (Bell.this) { Bell.this.notifyAll(); }
-      }
-    };
+  private void dispatchPromise(Bell<? super T> bell) {
+    List<Bell<? super T>> list = (List) Collections.singletonList(bell);
+    dispatchPromises(list);
+  } private void dispatchPromises(List<Bell<? super T>> bells) {
+    if (isFailed())
+      new DispatchFail((List) bells, error()).dispatch();
+    else
+      new DispatchDone((List) bells, object()).dispatch();
   }
 
   /**
@@ -198,11 +175,6 @@ public class Bell<T> implements Future<T> {
   /** Return {@code true} if the {@code Bell} is unrung. */
   private synchronized boolean isUnrung() {
     return state == 0;
-  }
-
-  /** Return {@code true} if the {@code Bell} has been thenned. */
-  private synchronized boolean isThenned() {
-    return state == 1;
   }
 
   /** Return {@code true} if the {@code Bell} has been rung. */
@@ -270,6 +242,10 @@ public class Bell<T> implements Future<T> {
 
   // Run then() handlers and discard any exceptions.
   private synchronized void then(T object, Throwable error) {
+    if (state >= 1) return;
+
+    state = 1;  // Set to thenned state.
+
     if (error == null) try {
       then(object);
     } catch (Throwable t) {
@@ -355,13 +331,9 @@ public class Bell<T> implements Future<T> {
    * @param bell the {@code Bell} to promise to this {@code Bell}.
    * @return The value passed in for {@code bell}.
    */
-  public synchronized Bell<? super T> promise(Bell<? super T> bell) {
+  public synchronized <V extends Bell<? super T>> V promise(V bell) {
     if (bell.isDone()) {
       return bell;  // Don't be silly...
-    } while (promises == null) try {
-      wait();  // We're in the process of ringing...
-    } catch (InterruptedException e) {
-      // Keep going...
     } if (isDone()) {
       dispatchPromise(bell);  // We've already rung, dispatch.
     } else switch (promises.size()) {
@@ -558,9 +530,9 @@ public class Bell<T> implements Future<T> {
    * may remain unresolved.
    */
   public synchronized Bell<T> deadline(double deadline) {
-    if (!isDone()) new Task(deadline) {
+    if (!isDone()) new Task() {
       public void run() { ring(new TimeoutException()); }
-    }; 
+    }.dispatch(deadline); 
     return this;
   }
 
@@ -607,6 +579,21 @@ public class Bell<T> implements Future<T> {
    */
   public static Bell<?> failedBell() {
     return (Bell<?>) failedBell;
+  }
+
+  /**
+   * Create a {@code Bell} that will ring with {@code null} after {@code
+   * deadline} seconds.
+   *
+   * @param deadline the time in seconds after this call that {@code Bell} will
+   * ring.
+   */
+  public static Bell<?> timerBell(final double deadline) {
+    return (Bell<?>) new Bell() {{
+      new Task() {
+        public void run() { ring(); }
+      }.dispatch(deadline); 
+    }};
   }
 
   /**
@@ -754,9 +741,9 @@ public class Bell<T> implements Future<T> {
 
 /** A task for the dispatch loop. */
 abstract class Task implements Runnable {
-  Task() {
+  final void dispatch() {
     Dispatcher.dispatch(this);
-  } Task(double delay) {
+  } final void dispatch(double delay) {
     Dispatcher.dispatch(this, delay);
   }
   public abstract void run();
@@ -766,28 +753,35 @@ abstract class Task implements Runnable {
 final class Dispatcher {
   // Keep the thread pool at size 1 for now until we can figure out how to
   // better control ordering...
-  private static final ScheduledExecutorService pool =
-    Executors.newSingleThreadScheduledExecutor();
+  private static final ScheduledThreadPoolExecutor pool =
+    new ScheduledThreadPoolExecutor(1);
+
+  // Wrap a runnable for safety.
+  private static Runnable wrap(final Runnable r) {
+    return new Runnable() {
+      public void run() {
+        try {
+          r.run();
+        } catch (Exception e) {
+          System.out.print("Exception in bell loop:");
+          e.printStackTrace();
+        }
+      }
+    };
+  }
 
   /**
    * Schedule {@code runnable} to be executed as soon as possible.
    */
-  static void dispatch(final Runnable runnable) {
-    pool.submit(new Runnable() {
-      public void run() {
-        try {
-          runnable.run();
-        } catch (Exception e) {
-          //e.printStackTrace();
-        }
-      }
-    });
+  static synchronized void dispatch(final Runnable runnable) {
+    //pool.schedule(wrap(runnable), (long)1E3, TimeUnit.MICROSECONDS);
+    pool.schedule(wrap(runnable), 0, TimeUnit.MICROSECONDS);
   }
 
   /**
    * Schedule {@code runnable} to be executed after a delay.
    */
-  static void dispatch(Runnable runnable, double delay) {
-    pool.schedule(runnable, (long)(delay*1E6), TimeUnit.MICROSECONDS);
+  static synchronized void dispatch(Runnable runnable, double delay) {
+    pool.schedule(wrap(runnable), (long)(delay*1E6), TimeUnit.MICROSECONDS);
   }
 }

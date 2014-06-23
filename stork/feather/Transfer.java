@@ -111,6 +111,11 @@ public abstract class Transfer<S extends Resource, D extends Resource> {
     return starter.isDone();
   }
 
+  /** Check if the transfer is complete. */
+  public final boolean isDone() {
+    return stopper.isDone();
+  }
+
   /**
    * Check if the pipeline is capable of draining {@code Slice}s in arbitrary
    * order. The return value of this method should remain constant across

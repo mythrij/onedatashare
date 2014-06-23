@@ -244,6 +244,31 @@ public class FTPChannel {
     String codestr;
     int code;
 
+    // This will receive whole lines as buffers.
+    protected void decode(final ChannelHandlerContext ctx, 
+                          ByteBuf buffer, final List out) {
+      if (buffer != null) {
+        Bell<Reply> r = asyncDecode(buffer);
+        if (r != null) r.new Promise() {
+          public void done(Reply r) {
+            ctx.fireChannelRead(r);
+          } public void fail(Throwable t) throws Exception {
+            exceptionCaught(ctx, t);
+          }
+        };
+      }
+    }
+
+    // Asynchronously decode and unprotect a buffer.
+    protected Bell<Reply> asyncDecode(ByteBuf buffer) {
+      if (buffer == null || buffer.readableBytes() <= 0)
+        return null;  // We haven't gotten a full line.
+      Reply r = decodeReplyLine(buffer);
+      if (r == null)
+        return null;  // We haven't gotten a full reply.
+      return decodeProtectedReply(r);
+    }
+
     // Convenience method for parsing reply text in a self-contained byte
     // buffer, used by decodeProtectedReply and anywhere else this might be
     // needed. This works by simulating incoming data in a channel pipeline,
@@ -256,37 +281,15 @@ public class FTPChannel {
       // client code will know what to do.
       if (data.security == null || !reply.isProtected())
         return new Bell<Reply>(reply);
-
       return data.security.new AsBell<Reply>() {
         public Bell<Reply> convert(SecurityContext sc) throws Exception {
-          ReplyDecoder rd = new ReplyDecoder();
           for (ByteBuf eb : reply.lines) {
             ByteBuf db = sc.unprotect(Base64.decode(eb));
-            Bell<Reply> r = rd.asyncDecode(db, null);
+            Bell<Reply> r = asyncDecode(db);
             if (r != null)
               return r;
           } throw new RuntimeException("Bad reply from server.");
         }
-      };
-    }
-
-    // This will receive whole lines as buffers.
-    protected void decode(
-      ChannelHandlerContext ctx, ByteBuf buffer, final List out
-    ) throws Exception {
-      if (buffer != null) asyncDecode(buffer, out);
-    }
-
-    // Asynchronously decode and unprotect a buffer.
-    protected Bell<Reply> asyncDecode(ByteBuf buffer, final List out) {
-      if (buffer == null || buffer.readableBytes() <= 0)
-        return null;  // We haven't gotten a full line.
-      Reply r = decodeReplyLine(buffer);
-      if (r == null)
-        return null;  // We haven't gotten a full reply.
-      return new Bell<Reply>(r).new Promise() {
-        public void then(Reply r) { decodeProtectedReply(r).promise(this); }
-        public void done(Reply r) { if (out != null) out.add(r); }
       };
     }
 
@@ -340,8 +343,12 @@ public class FTPChannel {
 
   // Handles replies as they are received.
   class ReplyHandler extends SimpleChannelInboundHandler<Reply> {
+    public boolean acceptInboundMessage(Object msg) {
+      return msg instanceof Reply;
+    }
+
     public void messageReceived(ChannelHandlerContext ctx, Reply reply) {
-      Log.finer(this+": Got: "+reply);
+      Log.finer("Got: ", reply);
       switch (reply.code) {
         case 220:
           if (data.welcome == null)
@@ -440,19 +447,18 @@ public class FTPChannel {
     protected void encode
       (final ChannelHandlerContext ctx, Object msg, final List<Object> out)
     throws Exception {
-      Log.finer("Writing "+msg);
+      Log.finer("Writing ",msg);
       final ByteBuf raw =
         Unpooled.wrappedBuffer(msg.toString().getBytes(data.encoding));
 
       if (data.security == null) {
         out.add(raw);
         out.add(Unpooled.wrappedBuffer("\r\n".getBytes(data.encoding)));
-      } else data.security.new AsBell<ByteBuf>() {
-        public Bell<ByteBuf> convert(SecurityContext sc) throws Exception {
-          ring(Unpooled.wrappedBuffer(
+      } else data.security.new As<ByteBuf>() {
+        public ByteBuf convert(SecurityContext sc) throws Exception {
+          return Unpooled.wrappedBuffer(
             Unpooled.wrappedBuffer("ENC ".getBytes(data.encoding)),
-            Base64.encode(sc.protect(raw), false)));
-          return null;
+            Base64.encode(sc.protect(raw), false));
         } public void done(ByteBuf encoded) {
           out.add(encoded);
         } public void fail() {
@@ -567,25 +573,14 @@ public class FTPChannel {
   // specimen of overengineering.
   // TODO: This should probably propagate control channel errors.
   class FeatureSet {
-    private Set<String> features;
-    private Map<String,Set<CheckBell>> checks;
-
-    // Custom bell which is associated with a given command query.
-    class CheckBell extends Bell {
-      public final String cmd;
-      CheckBell(String cmd) {
-        this.cmd = cmd;
-        addCheck(this);
-      } public String toString() { return cmd; }
-    }
+    private Map<String,Bell> features;
 
     // Asynchronously check if a command is supported.
     private synchronized void init() {
       if (features != null)
         return;
 
-      features = new HashSet<String>();
-      checks = new HashMap<String,Set<CheckBell>>();
+      features = new HashMap<String,Bell>();
 
       // ...and pipe all the check commands.
       new Command("HELP") {
@@ -609,44 +604,28 @@ public class FTPChannel {
       };
     }
 
-    public Bell supports(String cmd) {
-      return new CheckBell(cmd);
-    }
-
-    // Synchronously check for command support. Used internally.
-    private synchronized boolean isSupported(String cmd) {
-      return features != null && features.contains(cmd);
+    public synchronized Bell supports(String cmd) {
+      init();
+      Bell bell = features.get(cmd);
+      if (bell == null)
+        features.put(cmd, bell = new Bell());
+      return bell;
     }
 
     private synchronized void addFeature(String cmd) {
-      if (features == null)
-        init();
-      features.add(cmd);
-      if (checks.containsKey(cmd)) for (CheckBell cb : checks.get(cmd))
-        cb.ring(true);
-    } private synchronized void addCheck(final CheckBell cb) {
-      // This is some really smelly code...
-      if (features == null)
-        init();
-      if (checks == null && isSupported(cb.cmd))
-        cb.ring();
-      else if (checks == null && isSupported(cb.cmd))
-        cb.ring(new RuntimeException());
-      else if (features.contains(cb.cmd))
-        cb.ring();
-      else if (!checks.containsKey(cb.cmd))
-        checks.put(cb.cmd, new HashSet<CheckBell>() {{ add(cb); }});
-      else
-        checks.get(cb.cmd).add(cb);
+      init();
+      Bell bell = features.get(cmd);
+      if (bell == null)
+        features.put(cmd, bell = new Bell());
+      bell.ring();
     }
 
     // Ring this when no more commands will be issued to check support. It will
     // resolve all unsupported commands with false and update the state to
     // reflect the command list has been finalized.
     private synchronized void finalizeChecks() {
-      for (Set<CheckBell> cbs : checks.values()) for (CheckBell b : cbs)
-        b.ring(false);
-      checks = null;
+      for (Bell b : features.values())
+        b.ring(new RuntimeException());
     }
   }
 
