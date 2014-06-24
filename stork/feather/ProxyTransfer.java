@@ -59,6 +59,11 @@ extends Transfer<S,D> {
     System.out.println("Avg.Th: "+progress.rate(timer));
   }
 
+  protected void fail(Path path, Throwable t) {
+    System.out.println("Transfer failed! "+path);
+    t.printStackTrace();
+  }
+
   // Check if we're able to start a data transfer according to the configured
   // concurrency level.
   private synchronized boolean canStartDataTransfer() {
@@ -89,12 +94,14 @@ extends Transfer<S,D> {
     } try {
       transferStarted(path);
       return transfer0(path).new Promise() {
-        public void fail() { transferEnded(path); }
+        public void fail(Throwable t) {
+          transferEnded(path);
+          ProxyTransfer.this.fail(path, t);
+        }
       };
     } catch (Exception e) {
       transferEnded(path);
       return new Bell(e);
-    } finally {
     }
   } private synchronized Bell transfer0(final Path path) {
     if (isDone())
@@ -152,6 +159,8 @@ extends Transfer<S,D> {
       } protected void finish() {
         super.finish();
         transferEnded(path);
+      } protected void finish(Exception e) {
+        fail(path, e);
       }
     }).attach(destination.select(path).sink()).tap().start();
   }
@@ -173,6 +182,7 @@ extends Transfer<S,D> {
 
   // Called whenever a data transfer starts or completes.
   private synchronized void transferStarted(Path path) {
+    System.out.println("Starting transfer: "+path);
     transfers.add(path);
   } private synchronized void transferEnded(Path path) {
     transfers.remove(path);
@@ -182,6 +192,7 @@ extends Transfer<S,D> {
 
   // Called whenever a listing starts or completes.
   private synchronized void listingStarted(Path path) {
+    System.out.println("Starting listing: "+path);
     listings.add(path);
   } private synchronized void listingEnded(Path path) {
     listings.remove(path);

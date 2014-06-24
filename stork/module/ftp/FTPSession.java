@@ -31,14 +31,12 @@ public class FTPSession extends Session<FTPSession, FTPResource> {
     return new Bell<Object>() {{
       String user = "anonymous";
       String pass = "stork@storkcloud.org";
-
+ 
       // Initialize connection to server.
       channel = new FTPChannel(uri);
 
       // If the channel is closed by the server, finalize the session.
-      channel.onClose().new Promise() {
-        public void always() { FTPSession.this.finalize(); }
-      };
+      closeWhen(channel.onClose());
 
       // Pull userinfo from URI.
       if (uri.username() != null)
@@ -70,7 +68,6 @@ public class FTPSession extends Session<FTPSession, FTPResource> {
   }
 
   public void cleanup() {
-    System.out.println("Closing...");
     channel.close();
   }
 
@@ -112,10 +109,10 @@ public class FTPSession extends Session<FTPSession, FTPResource> {
   }
 
   public static void main(String[] args) {
-    String suri = (args.length > 0) ? args[0] : "ftp://didclab-ws8/stuff/";
-    URI uri = URI.create(suri);
-    final Resource src = new FTPModule().select(uri);
-    final Resource dest = new stork.feather.util.LocalSession(Path.create("/home/bwross/test")).root();
+    String uri1 = (args.length > 0) ? args[0] : "ftp://didclab-ws8/stuff/";
+    String uri2 = (args.length > 1) ? args[1] : "ftp://didclab-ws8/stuff2/";
+    final Resource src = new FTPModule().select(URI.create(uri1));
+    final Resource dest = new FTPModule().select(URI.create(uri2));
     src.transferTo(dest);
   }
 }

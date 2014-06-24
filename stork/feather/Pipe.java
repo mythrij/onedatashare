@@ -105,6 +105,8 @@ public class Pipe {
    * connected to just a {@code Sink}, it is sink-oriented. If it has both a
    * {@code Tap} and {@code Sink}, it is connected. If it has neither, it is
    * ambiguously oriented.
+   *
+   * @return The {@code Orientation} of this {@code Pipe}.
    */
   public Orientation orientation() {
     Pipe tap = tap(), sink = sink();
@@ -135,15 +137,21 @@ public class Pipe {
 
   /**
    * Drain a {@code Slice} through the pipeline. This method returns as soon as
-   * possible, with the actual I/O operation taking place asynchronously.
+   * possible, with the actual I/O operation taking place asynchronously. The
+   * default implementation is guaranteed never to throw an {@code Exception}.
+   * Any {@code Exception} thrown by a downstream {@code Pipe} will be wrapped
+   * in a {@code Bell}.
    *
    * @param slice a {@code Slice} being drained through the pipeline.
    * @return A {@code Bell} that rings when the pipeline is ready for more
-   * data, or {@code null} if more data is ready to be drained immediately.
+   * data, or {@code null} if more data is ready to be drained immediately. If
+   * the returned {@code Bell} fails, the upstream {@code Pipe} should cease
+   * the draining of {@code Slice}s.
    * @throws IllegalStateException if this method is called when the pipeline
    * has not been initialized.
-   * @throws Exception if this transfer element cannot be started for a reason
-   * known immediately.
+   * @throws Exception if {@code Pipe} is unable to drain {@code slice} for
+   * some reason known immediately. The default implementation will never
+   * throw.
    */
   protected synchronized Bell drain(Slice slice) throws Exception {
     if (!finished) try {
@@ -153,16 +161,59 @@ public class Pipe {
       return lastDrain = bell;
     } catch (Exception e) {
       return lastDrain = new Bell(e);
-    } return null;
+    } throw new RuntimeException("The pipeline is finished.");
   }
 
   /**
-   * Finalize the flow of data through this {@code Pipe}.
+   * Called when an upstream {@code Pipe} encounters an {@code Throwable} while
+   * draining. By default, this propagates the {@code Throwable} downstream for
+   * handling by the {@code Sink}.
+   *
+   * @param error a {@code Throwable} indicating what error occurred.
+   * @return A {@code Bell} that rings when the pipeline is ready for more
+   * data, or {@code null} if more data is ready to be drained immediately.
+   * @throws IllegalStateException if this method is called when the pipeline
+   * has not been initialized.
+   */
+  protected synchronized Bell drain(Throwable error) {
+    if (!finished) try {
+      Bell bell = downstream().drain(error);
+      if (bell == null)
+        bell = Bell.rungBell();
+      return lastDrain = bell;
+    } catch (Exception e) {
+      return lastDrain = new Bell(e);
+    } throw new RuntimeException("The pipeline is finished.");
+  }
+
+  /**
+   * Finalize the flow of data through this {@code Pipe}. Calling this
+   * indicates the successful completion of the data transfer. Once called, no
+   * more {@code Slice}s will be drained through this {@code Pipe}. It will not
+   * propagate the call until the last {@code Slice} has been drained.
    */
   protected synchronized void finish() {
     if (!finished) {
       lastDrain.new Promise() {
         public void always() { downstream().finish(); }
+      };
+      lastDrain = null;
+      finished = true;
+    }
+  }
+
+  /**
+   * Finalize the flow of data through this {@code Pipe}. This is called when
+   * the transfer of data by an upstream {@code Pipe} has failed. Once called,
+   * no more {@code Slice}s will be drained through this {@code Pipe}. It will
+   * not propagate the call until the last {@code Slice} has been drained.
+   *
+   * @param error a {@code Throwable} indicating what error occurred.
+   */
+  protected synchronized void finish(final Throwable error) {
+    if (!finished) {
+      lastDrain.new Promise() {
+        public void always() { downstream().finish(error); }
       };
       lastDrain = null;
       finished = true;

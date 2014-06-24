@@ -1,10 +1,9 @@
 package stork.feather;
 
 /**
- * A {@code Tap} emits {@link Slice}s through a pipeline. {@code Tap}s should
- * provide methods for regulating the flow of {@code Slice}s to let downstream
- * to prevent the {@code Tap} from overwhelming them.
- * <p/>
+ * A {@code Tap} emits {@link Slice}s through a pipeline. The {@code Tap} is
+ * responsible for producing data from a source {@code Resource} and "draining"
+ * it to an attached {@code Sink}.
  *
  * @see Sink
  * @see Slice
@@ -64,6 +63,10 @@ public abstract class Tap<S extends Resource> extends Pipe {
   }
 
   public final Bell start() {
+    return start0().new Promise() {
+      public void fail(Throwable t) { finish(t); }
+    };
+  } private final Bell start0() {
     try {
       // Start downstream elements.
       Bell b1 = super.start();

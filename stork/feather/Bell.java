@@ -500,7 +500,8 @@ public class Bell<T> implements Future<T> {
   public final <V> Bell<V> as(final V done) {
     final Bell<V> bell = new Bell<V>();
     new Promise() {
-      public void done() { bell.ring(done); }
+      public void then() { bell.ring(done); }
+      public void fail(Throwable t) { bell.ring(t); }
     };
     return bell;
   }
@@ -764,6 +765,24 @@ public class Bell<T> implements Future<T> {
   /** Return a {@code Bell} rung with {@code error}. */
   public static <V> Bell<V> wrap(Throwable error) {
     return new Bell<V>(error);
+  }
+
+  /** Print diagnostic information when this {@code Bell} rings. */
+  public Bell<T> debugOnRing() {
+    final StackTraceElement ste = new Throwable().getStackTrace()[1];
+    return promise(new Bell<T>() {
+      public void done(T t) {
+        System.err.println(Bell.this+" created at...");
+        System.err.println("  "+ste);
+        System.err.println("...rang successfully with: ");
+        System.err.println("  "+t);
+      } public void fail(Throwable t) {
+        System.err.println(Bell.this+" created at...");
+        System.err.println("  "+ste);
+        System.err.println("...failed with: ");
+        t.printStackTrace();
+      }
+    });
   }
 
   /**

@@ -7,12 +7,6 @@ import stork.feather.util.*;
  * It is the {@code Sink}'s responsibility to "drain" {@code Slice}s to the
  * associated physical resource (or other data consumer). {@code Slice}s should
  * be drained as soon as possible to, and be retained only if necessary.
- * <p/>
- * If a {@code Slice} cannot be drained immediately, the {@code Sink} should
- * call {@code pause()} to prevent the attached {@code Tap} from emitting
- * further {@code Slice}s. Once a {@code Slice} is drained to the {@code Sink},
- * the {@code Slice} cannot be requested again, and it is the {@code Sink}'s
- * responsibility to guarantee that the {@code Slice} is eventually drained.
  *
  * @see Tap
  * @see Slice

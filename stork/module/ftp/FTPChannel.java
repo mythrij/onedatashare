@@ -361,15 +361,15 @@ public class FTPChannel {
           feedHandler(reply);
       }
     }
-  
-    public void channelInactive(ChannelHandlerContext ctx) {
+
+    public void close(ChannelHandlerContext ctx, ChannelPromise promise) {
       FTPChannel.this.close();
     }
 
     // TODO: How should we handle exceptions? Which exceptions can this thing
     // receive anyway?
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable t) {
-      t.printStackTrace();
+      FTPChannel.this.close();
     }
   }
 
@@ -900,9 +900,11 @@ public class FTPChannel {
 
     public DataChannel(boolean preferPassive) {
       dc = preferPassive ? tryPassiveThenActive() : tryActiveThenPassive();
-      dc.new Promise() {
-        public void done() {
-          init();
+      dc.new AsBell<SocketChannel>() {
+        public Bell<SocketChannel> convert(SocketChannel c) {
+          return init().as(c);
+        } public void fail(Throwable t) {
+          close(t);
         } public void always() {
           DataChannel.super.unlock();
         }
@@ -1028,12 +1030,13 @@ public class FTPChannel {
     }
 
     /** Pipe commands to be run in the lock. */
-    public void init() { }
+    public Bell init() { return Bell.rungBell(); }
 
     /** Close the channel. */
-    public final void close() {
-      onClose.ring(this);
-    }
+    public final void close() { onClose.ring(this); }
+
+    /** Close the channel with a failure. */
+    public final void close(Throwable t) { onClose.ring(t); }
 
     /** Subclasses use this to handle slices. */
     public void receive(Slice slice) { }

@@ -42,7 +42,7 @@ public abstract class Session<S extends Session<S,R>, R extends Resource<S,R>> {
   public final Credential credential;
 
   // If we've already started initializing, this will be non-null.
-  private volatile Bell<S> initializeBell;
+  private volatile Bell initializeBell;
 
   // Rung on close. Avoid letting this leak out.
   private final Bell<S> onClose = new Bell<S>() {
@@ -109,13 +109,11 @@ public abstract class Session<S extends Session<S,R>, R extends Resource<S,R>> {
     if (initializeBell != null) {
       return initializeBell;
     } try {
-      initializeBell = initialize();
-      if (initializeBell == null)
-        initializeBell = new Bell<S>().ring((S)this);
-      return initializeBell;
+      Bell ib = initialize();
+      initializeBell = (ib != null) ? ib : Bell.rungBell();
     } catch (Exception e) {
-      return initializeBell = new Bell<S>().ring(e);
-    }
+      initializeBell = new Bell<S>(e);
+    } return initializeBell.as(this);
   }
 
   /**
@@ -157,11 +155,36 @@ public abstract class Session<S extends Session<S,R>, R extends Resource<S,R>> {
    *
    * @return This {@code Session}.
    */
-  public final synchronized S close() {
-    initializeBell = new Bell<S>(
-      new IllegalStateException("Session is closed."));
+  public final synchronized S close() { return close(null); }
+
+  /**
+   * Close this {@code Session} due to the given {@code reason}. {@code
+   * initialize()} will never be called after this has been called.
+   *
+   * @param reason a {@code Throwable} explaining why the {@code Session} was
+   * closed.
+   * @return This {@code Session}.
+   */
+  public final synchronized S close(Throwable reason) {
+    if (reason == null)
+      reason = new IllegalStateException("Session is closed.");
+    if (initializeBell != null)
+      initializeBell.ring(reason);
+    initializeBell = new Bell<S>(reason);
     onClose.ring((S) this);
     return (S) this;
+  }
+
+  /**
+   * Promise to close this channel when {@code bell} rings.
+   *
+   * @param bell the {@code Bell} to promise the closing of this channel to.
+   */
+  public final synchronized void closeWhen(Bell bell) {
+    bell.new Promise() {
+      public void done()            { close(); }
+      public void fail(Throwable t) { close(t); }
+    };
   }
 
   /**

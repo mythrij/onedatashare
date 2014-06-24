@@ -152,19 +152,16 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
 
         // Otherwise we're doing a data channel listing.
         else channel.new DataChannel() {
-          public void init() {
-            channel.new Command(cmd, makePath()) {
-              public void done(FTPChannel.Reply r) {
-                if (r.code/100 > 2) {
-                  parser.ring(r.asError());
-                  close();
-                }
+          {
+            onClose().new Promise() {
+              public void always() {
               }
             };
+          }
+          public Bell init() {
+            return channel.new Command(cmd, makePath()).expectComplete();
           } public void receive(Slice slice) {
             parser.write(slice.asBytes());
-          } public void done() {
-            parser.finish();
           }
         };
       }
@@ -175,9 +172,10 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
   public Bell<FTPResource> mkdir() {
     if (!isSingleton())
       throw new UnsupportedOperationException();
-    return initialize().new Promise() {
-      public void then(FTPResource r) {
-        session.channel.new Command("MKD", path).as(r).promise(this);
+    return initialize().new AsBell<FTPChannel.Reply>() {
+      public Bell<FTPChannel.Reply> convert(FTPResource r) {
+        String path = makePath();
+        return session.channel.new Command("MKD", path).expectComplete();
       }
     }.as(this);
   }
@@ -189,9 +187,9 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
     return stat().new AsBell<FTPChannel.Reply>() {
       public Bell<FTPChannel.Reply> convert(Stat stat) {
         if (stat.dir)
-          return session.channel.new Command("RMD", path);
+          return session.channel.new Command("RMD", makePath());
         else
-          return session.channel.new Command("DELE", path);
+          return session.channel.new Command("DELE", makePath());
       }
     }.as(this);
   }
@@ -225,14 +223,16 @@ class FTPTap extends Tap<FTPResource> {
 
   protected Bell start(final Bell bell) {
     dc = source().session.channel.new DataChannel() {
-      public void init() {
-        new Command("RETR", source().makePath()).expectComplete();;
+      public Bell init() {
+        String path = source().makePath();
+        return new Command("RETR", path).expectComplete();
       } public void receive(Slice slice) {  
         pauseUntil(drain(slice));
       }
     }.startWhen(bell);
     dc.onClose().new Promise() {
-      public void always() { finish(); }
+      public void done()            { finish();  }
+      public void fail(Throwable t) { finish(t); }
     };
     return dc.onConnect();
   }
@@ -243,16 +243,16 @@ class FTPTap extends Tap<FTPResource> {
  */
 class FTPSink extends Sink<FTPResource> {
   private FTPChannel.DataChannel dc;
-
   public FTPSink(FTPResource resource) { super(resource); }
 
   protected Bell start() {
     dc = destination().session.channel.new DataChannel() {
-      public void init() {
-        new Command("STOR", destination().makePath());
+      public Bell init() {
+        String path = destination().makePath();
+        return new Command("STOR", path).expectComplete();
       }
     };
-    return dc.onConnect();
+    return dc.onConnect().debugOnRing();
   }
 
   public Bell drain(final Slice slice) {
