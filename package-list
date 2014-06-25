@@ -9,4 +9,5 @@ stork.module.ftp
 stork.net
 stork.optimizers
 stork.scheduler
+stork.test
 stork.util
