@@ -1,7 +1,7 @@
 package stork.module.irods;
 
-import java.io.InputStream;
-import java.io.OutputStream;
+import java.util.*;
+import java.io.*;
 
 import org.irods.jargon.core.connection.IRODSAccount;
 import org.irods.jargon.core.connection.IRODSSession;
@@ -11,7 +11,6 @@ import org.irods.jargon.core.pub.IRODSGenericAO;
 import org.irods.jargon.core.pub.io.IRODSFile;
 import org.irods.jargon.core.utils.MiscIRODSUtils;
 
-import edu.emory.mathcs.backport.java.util.Arrays;
 
 
 public class IRODSStreams extends IRODSGenericAO{

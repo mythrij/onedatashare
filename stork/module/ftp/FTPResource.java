@@ -175,7 +175,15 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
     return initialize().new AsBell<FTPChannel.Reply>() {
       public Bell<FTPChannel.Reply> convert(FTPResource r) {
         String path = makePath();
-        return session.channel.new Command("MKD", path).expectComplete();
+        return session.channel.new Command("MKD", path);
+      }
+    }.new Promise() {
+      public void then(FTPChannel.Reply r) {
+        // Warning, REALLY unfortunate hack ahead.
+        if (r.isComplete() || r.toString().indexOf("exists") >= 0)
+          ring();
+        else
+          ring(new RuntimeException("Could not create directory."));
       }
     }.as(this);
   }
@@ -222,19 +230,26 @@ class FTPTap extends Tap<FTPResource> {
   public FTPTap(FTPResource resource) { super(resource); }
 
   protected Bell start(final Bell bell) {
-    dc = source().session.channel.new DataChannel() {
-      public Bell init() {
-        String path = source().makePath();
-        return new Command("RETR", path).expectComplete();
-      } public void receive(Slice slice) {  
-        pauseUntil(drain(slice));
+    return null;
+    /**
+    return source().initialize().new AsBell<FTPChannel.DataChannel>() {
+      public void then(FTPResource r) {
+        dc = source().session.channel.new DataChannel() {
+          public Bell init() {
+            String path = source().makePath();
+            return new Command("RETR", path).expectComplete();
+          } public void receive(Slice slice) {  
+            pauseUntil(drain(slice));
+          }
+        }.startWhen(bell);
+        dc.onClose().new Promise() {
+          public void done()            { finish();  }
+          public void fail(Throwable t) { finish(t); }
+        };
+        return dc.onConnect();
       }
-    }.startWhen(bell);
-    dc.onClose().new Promise() {
-      public void done()            { finish();  }
-      public void fail(Throwable t) { finish(t); }
     };
-    return dc.onConnect();
+    */
   }
 }
 
@@ -246,18 +261,23 @@ class FTPSink extends Sink<FTPResource> {
   public FTPSink(FTPResource resource) { super(resource); }
 
   protected Bell start() {
-    dc = destination().session.channel.new DataChannel() {
-      public Bell init() {
-        String path = destination().makePath();
-        return new Command("STOR", path).expectComplete();
+    return destination().initialize().new AsBell<FTPChannel.DataChannel>() {
+      public Bell<FTPChannel.DataChannel> convert(FTPResource r) {
+        dc = destination().session.channel.new DataChannel() {
+          public Bell init() {
+            String path = destination().makePath();
+            return new Command("STOR", path).expectComplete();
+          }
+        };
+        return dc.onConnect();
       }
     };
-    return dc.onConnect().debugOnRing();
   }
 
   public Bell drain(final Slice slice) {
     return dc.send(slice);
   }
 
-  public void finish() { }
+  public void finish()            { dc.close(); }
+  public void finish(Throwable t) { dc.close(); }
 }

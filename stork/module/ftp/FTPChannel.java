@@ -75,6 +75,9 @@ public class FTPChannel {
 
     Bell<Character> mode = new Bell<Character>('S');
     Bell<Character> type = new Bell<Character>('A');
+
+    // Whether or not we prefer to put the server in passive mode.
+    boolean preferPassive = true;
   }
 
   // Deferred commands
@@ -887,7 +890,9 @@ public class FTPChannel {
     private volatile boolean read = false;
     private ChannelHandlerContext context;
     private Bell writeBell;  // Ring when we can write again.
+    private Bell lastSend = Bell.rungBell();
 
+    // Ring this to close the channel.
     private final Bell<DataChannel> onClose = new Bell<DataChannel>() {
       public void always() {
         dc.cancel().new Promise() {
@@ -896,7 +901,9 @@ public class FTPChannel {
       }
     };
 
-    public DataChannel() { this(true); }
+    public DataChannel() {
+      this(FTPChannel.this.data.preferPassive);
+    }
 
     public DataChannel(boolean preferPassive) {
       dc = preferPassive ? tryPassiveThenActive() : tryActiveThenPassive();
@@ -970,17 +977,25 @@ public class FTPChannel {
       } public void channelInactive(ChannelHandlerContext ctx) {
         DataChannel.this.close();
       } public void read(ChannelHandlerContext ctx) {
-        if (read)
-          ctx.read();
-        else if (context == null)
-          context = ctx;
-      } public void channelWritabilityChanged(ChannelHandlerContext ctx) {
-        if (!ctx.channel().isWritable()) {
-          if (writeBell == null) writeBell = new Bell();
-        } else if (writeBell != null) {
-          writeBell.ring();
-          writeBell = null;
+        synchronized (FTPChannel.this) {
+          if (read)
+            ctx.read();
+          else if (context == null)
+            context = ctx;
         }
+      } public void channelWritabilityChanged(ChannelHandlerContext ctx) {
+        System.out.println(ctx.channel().isWritable());
+        writable(ctx.channel().isWritable());
+      }
+    }
+
+    /** Called to change writability. */
+    private synchronized void writable(boolean writable) {
+      if (!writable && writeBell == null) {
+        writeBell = new Bell();
+      } else if (writable && writeBell != null) {
+        writeBell.ring();
+        writeBell = null;
       }
     }
 
@@ -1042,16 +1057,12 @@ public class FTPChannel {
     public void receive(Slice slice) { }
 
     /** Send a slice through the data channel. */
-    public Bell send(final Slice slice) {
-      return dc.new Promise() {
-        public void then(SocketChannel ch) {
-          ch.write(slice.asByteBuf());
-          if (writeBell == null)
-            ring();
-          else
-            writeBell.promise(this);
+    public synchronized Bell send(final Slice slice) {
+      return lastSend = dc.new Promise() {
+        public void done(SocketChannel ch) {
+          ch.writeAndFlush(slice.asByteBuf());
         }
-      };
+      }.and(writeBell);
     }
   }
 
