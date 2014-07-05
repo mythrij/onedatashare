@@ -46,7 +46,6 @@ class HTTPMessageHandler extends ChannelHandlerAdapter {
 
     	if (msg instanceof HttpResponse) {
     		HttpResponse resp = (HttpResponse) msg;
-    		HttpResponseStatus status = resp.getStatus();
     		String connection = resp.headers().get(HttpHeaders.Names.CONNECTION);
 
 			if (connection != null && connection.equals(HttpHeaders.Values.CLOSE)) {
@@ -110,7 +109,7 @@ class HTTPMessageHandler extends ChannelHandlerAdapter {
     	}
     	hc.close().addListener(new GenericFutureListener<ChannelFuture>() {
 
-			@Override
+    		@Override
 			public void operationComplete(ChannelFuture arg0) throws Exception {
 				if (!utility.isKeepAlive()) {
 					synchronized (utility.tapBellQueue) {

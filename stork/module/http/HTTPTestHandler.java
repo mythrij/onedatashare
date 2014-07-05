@@ -39,7 +39,7 @@ class HTTPTestHandler extends ChannelHandlerAdapter {
 					code = 2;
 					throw new HTTPException(utility.getHost() + " " + status.toString());
 				} else if (HTTPCodes.isInvalid(status)) {
-					code = -1;
+					code = 3;
 					throw new HTTPException(
 							utility.getHost() + " HEADER method unsupported");
 				} else if (HTTPCodes.isOK(status)) {
