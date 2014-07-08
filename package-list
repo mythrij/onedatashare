@@ -6,6 +6,8 @@ stork.feather
 stork.feather.util
 stork.module
 stork.module.ftp
+stork.module.http
+stork.module.irods
 stork.net
 stork.optimizers
 stork.scheduler
