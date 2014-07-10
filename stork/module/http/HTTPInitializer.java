@@ -1,5 +1,4 @@
 package stork.module.http;
-import java.security.NoSuchAlgorithmException;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
@@ -10,8 +9,10 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.codec.http.HttpClientCodec;
 import io.netty.handler.codec.http.HttpContentDecompressor;
 import io.netty.handler.ssl.SslHandler;
-import io.netty.handler.timeout.ReadTimeoutHandler;
 
+/**
+ * Convenient HTTP initializer for startup
+ */
 class HTTPInitializer extends ChannelInitializer<SocketChannel> {
 
 	private boolean ssl;
@@ -34,7 +35,7 @@ class HTTPInitializer extends ChannelInitializer<SocketChannel> {
 		
 		if (ssl) {
 			// HTTPs connection
-			SSLEngine sslEng = getSsl(null);
+			//SSLEngine sslEng = getSsl(null);
 			//pipe.addLast("SSL", new SslHandler(sslEng));
 		}
 		
@@ -43,10 +44,11 @@ class HTTPInitializer extends ChannelInitializer<SocketChannel> {
 		pipe.addLast("Tester", new HTTPTestHandler(utility));
 	}
 
+	/* HTTPS transmission
 	private SSLEngine getSsl(String proto) throws NoSuchAlgorithmException {
 		String protocol = (proto == null) ? "TLS" : proto;
 		SSLContext context = SSLContext.getInstance(protocol);
 		//TODO https layer
 		return null;
-	}
+	}*/
 }

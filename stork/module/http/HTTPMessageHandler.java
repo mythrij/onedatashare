@@ -1,9 +1,7 @@
 package stork.module.http;
 
-import java.text.DateFormat;
 import java.text.ParseException;
 import java.util.Date;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import stork.feather.Bell;
 import stork.feather.Slice;
@@ -23,19 +21,19 @@ import io.netty.handler.timeout.ReadTimeoutException;
 import io.netty.util.concurrent.GenericFutureListener;
 
 /**
- * Handles a client-side channel.
+ * Handles a client-side downstream channel.
  */
 class HTTPMessageHandler extends ChannelHandlerAdapter {
 	
 	private HTTPUtility utility;
 	private HTTPTap tap;
-	private AtomicInteger messageStatus;	// '0' for the first response packet
-											// '1' for the subsequent responses
-											// '2' for path moved case
+	private int messageStatus;	// '0' for the first response packet
+								// '1' for the subsequent responses
+								// '2' for path moved case
 	
 	public HTTPMessageHandler(HTTPUtility  util) {
 		this.utility = util;
-		messageStatus = new AtomicInteger(0);
+		messageStatus = 0;
 	}
 	
     @Override
@@ -43,9 +41,10 @@ class HTTPMessageHandler extends ChannelHandlerAdapter {
 
 		final HTTPChannel ch = (HTTPChannel) ctx.channel();
 
-    	if (messageStatus.compareAndSet(0, 1)) {
+    	if (messageStatus == 0) {
     		// This is the first packet of a response, need to know the 
     		// resource request of it.
+    		messageStatus = 1;
     		tap = ch.tapQueue.poll();
     	}
 
@@ -68,7 +67,7 @@ class HTTPMessageHandler extends ChannelHandlerAdapter {
 			
 			caseHandler(resp, ch);
     		
-			if (messageStatus.get() == 1) {
+			if (messageStatus == 1) {
 	    		if (!tap.hasStat()) {
 	    			// The resource this tap belongs to has not 
 	    			// received meta data yet. Do it now.
@@ -79,8 +78,7 @@ class HTTPMessageHandler extends ChannelHandlerAdapter {
 					try {
 						time = HttpHeaders.getDate(resp);
 					} catch (ParseException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
+						// This means date meta data is not available
 					}
 	    			stat.dir = false;
 	    			stat.file = true;
@@ -100,7 +98,7 @@ class HTTPMessageHandler extends ChannelHandlerAdapter {
     	if (msg instanceof HttpContent) {
 	    	HttpContent content = (HttpContent) msg;
 	    	
-    		if (messageStatus.get() == 1) {
+    		if (messageStatus == 1) {
 	    		ByteBuf buf = content.content();
 	    		Slice slice = new Slice(buf);
 	    		
@@ -111,12 +109,11 @@ class HTTPMessageHandler extends ChannelHandlerAdapter {
     		}
 
     		if (content instanceof LastHttpContent) {
-    			//System.out.println(" END OF CONTENT");	// TODO content ends
-    			if (messageStatus.get() == 1) {
+    			if (messageStatus == 1) {
     				tap.finish();
     			}
 	    		if (utility.isKeepAlive()) {
-	    			messageStatus.set(0);	// Reset status.
+	    			messageStatus = 0;	// Reset status.
 	    		}
     		}
     	}
@@ -124,11 +121,12 @@ class HTTPMessageHandler extends ChannelHandlerAdapter {
     
     @Override
     public void channelInactive(ChannelHandlerContext ctx) {
-    	final HTTPChannel hc = (HTTPChannel) ctx.channel();
-    	if (hc.isOpen()) {
-				hc.disconnect();
+    	final HTTPChannel ch = (HTTPChannel) ctx.channel();
+    	
+    	if (ch.isOpen()) {
+				ch.disconnect();
     	}
-    	hc.close().addListener(new GenericFutureListener<ChannelFuture>() {
+    	ch.close().addListener(new GenericFutureListener<ChannelFuture>() {
 
     		@Override
 			public void operationComplete(ChannelFuture arg0) throws Exception {
@@ -136,16 +134,15 @@ class HTTPMessageHandler extends ChannelHandlerAdapter {
 					synchronized (utility.tapBellQueue) {
 						Bell<Void> bell = utility.tapBellQueue.poll();
 						if (bell == null) {
-							utility.onInactiveBell.ring();
+							ch.onInactiveBell.ring();
 						} else {
-							utility.onInactiveBell.promise(bell);
-							utility.onInactiveBell.ring();
-							utility.onInactiveBell = new Bell<Void>();
+							ch.onInactiveBell.promise(bell);
+							ch.onInactiveBell.ring();
 						}
 					}
 				} else {
 					// close this channel resource
-					utility.onInactiveBell.ring();
+					ch.onInactiveBell.ring();
 					utility.close();
 				}
 			}
@@ -155,6 +152,7 @@ class HTTPMessageHandler extends ChannelHandlerAdapter {
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         // Close the connection when an exception is raised.
+    	tap.finish();
     	if (cause instanceof ReadTimeoutException) {
     		ctx.fireChannelInactive();
     	} else {
@@ -168,7 +166,7 @@ class HTTPMessageHandler extends ChannelHandlerAdapter {
     	HttpResponseStatus status = response.getStatus();
 		try {
 			if (HTTPCodes.isMoved(status)) {
-				messageStatus.addAndGet(1);
+				messageStatus += 1;
 				String newLocation =
 						response.headers().get(HttpHeaders.Names.LOCATION);
 				newLocation = newLocation.startsWith("/") ?

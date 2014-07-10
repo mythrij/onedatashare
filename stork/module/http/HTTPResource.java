@@ -7,14 +7,17 @@ import stork.feather.Slice;
 import stork.feather.Stat;
 import stork.feather.Tap;
 
+/**
+ * HTTP resource and tap
+ */
 public class HTTPResource extends Resource<HTTPSession, HTTPResource> {
 	
 	// Rung when the first resource response header is received
-	private Bell<Stat> onHeadBell;
+	private Bell<Stat> statBell;
 	
 	protected HTTPResource(HTTPSession session, Path path) {
 		super(session, path);
-		onHeadBell = new Bell<Stat>();
+		statBell = new Bell<Stat>();
 	}
 
 	@Override
@@ -24,7 +27,7 @@ public class HTTPResource extends Resource<HTTPSession, HTTPResource> {
 	
 	@Override
 	public Bell<Stat> stat() {
-		return onHeadBell;
+		return statBell;
 	}
 	
 	public class HTTPTap extends Tap<HTTPResource> {
@@ -47,10 +50,11 @@ public class HTTPResource extends Resource<HTTPSession, HTTPResource> {
 			sinkReadyBell = bell;
 			
 			synchronized (utility.getChannel()) {
+				HTTPChannel ch = utility.getChannel();
+				
 				if (utility.isKeepAlive()) {
-						utility.getChannel().addChannelTask(this);
-						utility.getChannel().writeAndFlush(
-								utility.prepareGet(resourcePath));
+						ch.addChannelTask(this);
+						ch.writeAndFlush(utility.prepareGet(resourcePath));
 				} else {
 						utility.resetConnection(this);
 				}
@@ -71,11 +75,11 @@ public class HTTPResource extends Resource<HTTPSession, HTTPResource> {
 		public void finish() { super.finish(); } 
 		
 		protected boolean hasStat() {
-			return onHeadBell.isDone();
+			return statBell.isDone();
 		}
 		
 		protected void setStat(Stat stat) {
-			onHeadBell.ring(stat);
+			statBell.ring(stat);
 		}
 		
 		protected void setPath(Path path) {

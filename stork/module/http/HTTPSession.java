@@ -41,7 +41,7 @@ public class HTTPSession extends Session<HTTPSession, HTTPResource> {
 			utility = new HTTPUtility(HTTPSession.this);
 			utility.onConnectBell.promise(this);
 			
-			// Set up the channel close reaction
+			// Set up the session close reaction
 			utility.onClose().new Promise() {
 				
 				@Override

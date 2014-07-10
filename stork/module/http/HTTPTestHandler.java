@@ -63,10 +63,11 @@ class HTTPTestHandler extends ChannelHandlerAdapter {
 	}
 	
 	private void endTest(ChannelHandlerContext ctx) {
+		final HTTPChannel ch = (HTTPChannel) ctx.channel();
+		
 		if (utility.isKeepAlive && (code == 0)) {
-			utility.onEstablishBell.ring();
+			utility.onTestBell.ring();
 		} else {
-			final HTTPChannel ch = (HTTPChannel) ctx.channel();
 			ch.disconnect();
 			ch.close().addListener(new GenericFutureListener<ChannelFuture> () {
 
@@ -75,8 +76,8 @@ class HTTPTestHandler extends ChannelHandlerAdapter {
 					
 					switch(code) {
 					case 3: 
-						if (utility.testMethod.equals(HttpMethod.HEAD)) {
-							utility.testMethod = HttpMethod.GET;
+						if (ch.testMethod.equals(HttpMethod.HEAD)) {
+							ch.testMethod = HttpMethod.GET;
 						} else {
 							utility.close();
 							System.err.println("Error: Bad request on " + 
@@ -87,7 +88,7 @@ class HTTPTestHandler extends ChannelHandlerAdapter {
 					case 1: utility.setupWithTest();
 					case 2: break;
 					case 0: 
-						utility.onInactiveBell.ring();
+						ch.onInactiveBell.ring();
 						utility.setupWithoutTest();
 						break;
 					default:
