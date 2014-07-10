@@ -4,17 +4,27 @@ import stork.feather.Bell;
 import stork.feather.Path;
 import stork.feather.Resource;
 import stork.feather.Slice;
+import stork.feather.Stat;
 import stork.feather.Tap;
 
 public class HTTPResource extends Resource<HTTPSession, HTTPResource> {
-
+	
+	// Rung when the first resource response header is received
+	private Bell<Stat> onHeadBell;
+	
 	protected HTTPResource(HTTPSession session, Path path) {
 		super(session, path);
+		onHeadBell = new Bell<Stat>();
 	}
 
 	@Override
 	public HTTPTap tap() {
-		return new HTTPTap(this, this.session.utility);
+		return new HTTPTap();
+	}
+	
+	@Override
+	public Bell<Stat> stat() {
+		return onHeadBell;
 	}
 	
 	public class HTTPTap extends Tap<HTTPResource> {
@@ -23,9 +33,9 @@ public class HTTPResource extends Resource<HTTPSession, HTTPResource> {
 		private HTTPUtility utility;
 		private Path resourcePath;
 
-		public HTTPTap(HTTPResource resource, HTTPUtility utility) {
-			super(resource);
-			this.utility = utility;
+		public HTTPTap() {
+			super(HTTPResource.this);
+			this.utility = HTTPResource.this.session.utility;
 			onStartBell = new Bell<Void> ();
 			setPath(path);
 		}
@@ -59,6 +69,14 @@ public class HTTPResource extends Resource<HTTPSession, HTTPResource> {
 		public Bell drain(Slice slice) { return super.drain(slice); }
 		
 		public void finish() { super.finish(); } 
+		
+		protected boolean hasStat() {
+			return onHeadBell.isDone();
+		}
+		
+		protected void setStat(Stat stat) {
+			onHeadBell.ring(stat);
+		}
 		
 		protected void setPath(Path path) {
 			resourcePath = path;

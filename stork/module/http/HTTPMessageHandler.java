@@ -1,9 +1,13 @@
 package stork.module.http;
 
+import java.text.DateFormat;
+import java.text.ParseException;
+import java.util.Date;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import stork.feather.Bell;
 import stork.feather.Slice;
+import stork.feather.Stat;
 import stork.feather.URI;
 import stork.module.http.HTTPResource.HTTPTap;
 import io.netty.buffer.ByteBuf;
@@ -27,6 +31,7 @@ class HTTPMessageHandler extends ChannelHandlerAdapter {
 	private HTTPTap tap;
 	private AtomicInteger messageStatus;	// '0' for the first response packet
 											// '1' for the subsequent responses
+											// '2' for path moved case
 	
 	public HTTPMessageHandler(HTTPUtility  util) {
 		this.utility = util;
@@ -51,8 +56,7 @@ class HTTPMessageHandler extends ChannelHandlerAdapter {
 			if (connection != null && connection.equals(HttpHeaders.Values.CLOSE)) {
 				if (utility.isKeepAlive()) {
 					// Normally, this shouldn't happen. It is assumed that
-					// a http server always remain in the connection state
-					// what it was.
+					// a http server would always remain the same connection state.
     				synchronized (ch) {
 						for (HTTPTap tap: ch.tapQueue) {
 							utility.resetConnection(tap);
@@ -63,12 +67,29 @@ class HTTPMessageHandler extends ChannelHandlerAdapter {
 			}
 			
 			caseHandler(resp, ch);
-			/*
-    		if (HttpHeaders.isTransferEncodingChunked(resp)) {
-    			System.out.println("CHUNKED CONTENT {");
-    		} else {
-    			System.out.println("CONTENT {");
-    		}*/ // TODO print header
+    		
+			if (messageStatus.get() == 1) {
+	    		if (!tap.hasStat()) {
+	    			// The resource this tap belongs to has not 
+	    			// received meta data yet. Do it now.
+	    			Stat stat = new Stat(tap.getPath().toString());
+	    			String length = resp.headers().
+	    					get(HttpHeaders.Names.CONTENT_LENGTH);
+	    			Date time = null;
+					try {
+						time = HttpHeaders.getDate(resp);
+					} catch (ParseException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+	    			stat.dir = false;
+	    			stat.file = true;
+	    			stat.link = tap.getPath();
+	    			stat.size = (length == null) ? -1l : Long.valueOf(length);
+	    			stat.time = (time == null) ? -1l : time.getTime();
+	    			tap.setStat(stat);
+	    		}
+			}
     		
     		ch.setReadable(false);
     		tap.sinkReadyBell.new Promise() {

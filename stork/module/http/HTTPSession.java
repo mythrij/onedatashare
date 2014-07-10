@@ -6,6 +6,7 @@ import stork.feather.Bell;
 import stork.feather.Path;
 import stork.feather.Resource;
 import stork.feather.Session;
+import stork.feather.Stat;
 import stork.feather.URI;
 import stork.feather.util.HexDumpResource;
 import stork.module.ftp.FTPModule;
@@ -84,6 +85,15 @@ public class HTTPSession extends Session<HTTPSession, HTTPResource> {
         //dest.initialize().sync();
         //s.select(p3).tap().attach(dest.sink()).tap().start().sync();
         
+        HTTPResource r1 = s.select(p3);
+        HTTPResource r2 = s.select(p4);
+        Bell<Stat> b1 = r1.stat();
+        Bell<Stat> b2 = r2.stat();
+        r1.tap().attach(new HexDumpResource().sink()).tap().start();
+        System.out.println(b1.get().path() + " - " + b1.get().size() + " - " + b1.get().time);
+        r2.tap().attach(new HexDumpResource().sink()).tap().start().sync();        
+        System.out.println(b2.get().path() + " - " + b2.get().size() + " - " + b2.get().time);
+
         s.select(p5).tap().attach(new HexDumpResource().sink()).tap().start().sync();
         s.select(p5).tap().attach(new HexDumpResource().sink()).tap().start().sync();
         s.select(p5).tap().attach(new HexDumpResource().sink()).tap().start().sync();
