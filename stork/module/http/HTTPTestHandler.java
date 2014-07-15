@@ -14,13 +14,24 @@ import io.netty.util.concurrent.GenericFutureListener;
 /**
  * Handles connection test channel.
  */
+
+/*
+ * Actions to take according to response code status
+ */
+enum ActionCode {
+	OK,
+	Redirect,
+	NotFound,
+	Bad
+}
+
 class HTTPTestHandler extends ChannelHandlerAdapter {
 	
-	private HTTPUtility utility;
-	private int code;	// Action code
+	private HTTPBuilder builder;
+	private ActionCode code;
 	
-	public HTTPTestHandler(HTTPUtility utility) {
-		this.utility = utility;
+	public HTTPTestHandler(HTTPBuilder utility) {
+		this.builder = utility;
 	}
 	
 	@Override
@@ -29,28 +40,28 @@ class HTTPTestHandler extends ChannelHandlerAdapter {
 			HttpResponse response = (HttpResponse) msg;
 			HttpResponseStatus status = response.getStatus();
 			try {
-				if (HTTPCodes.isMoved(status)) {
+				if (HTTPResponseCode.isMoved(status)) {
 					URI uri = URI.create(
 							response.headers().get(HttpHeaders.Names.LOCATION));
-					utility.setUri(URI.create(uri.endpoint()));
-					code = 1;
-					throw new HTTPException(utility.getHost() + " " + status.toString());
-				} else if (HTTPCodes.isNotFound(status)) {
-					code = 2;
-					throw new HTTPException(utility.getHost() + " " + status.toString());
-				} else if (HTTPCodes.isInvalid(status)) {
-					code = 3;
+					builder.setUri(URI.create(uri.endpoint()));
+					code = ActionCode.Redirect;
+					throw new HTTPException(builder.getHost() + " " + status.toString());
+				} else if (HTTPResponseCode.isNotFound(status)) {
+					code = ActionCode.NotFound;
+					throw new HTTPException(builder.getHost() + " " + status.toString());
+				} else if (HTTPResponseCode.isInvalid(status)) {
+					code = ActionCode.Bad;
 					throw new HTTPException(
-							utility.getHost() + " HEADER method unsupported");
-				} else if (HTTPCodes.isOK(status)) {
+							builder.getHost() + " HEADER method unsupported");
+				} else if (HTTPResponseCode.isOK(status)) {
 					// Valid HTTP server found
-					code = 0;
+					code = ActionCode.OK;
 					if (response.headers()
 							.get(HttpHeaders.Names.CONNECTION)
 							.equalsIgnoreCase(HttpHeaders.Values.CLOSE.toString())) {
-						utility.setKeepAlive(false);
+						builder.setKeepAlive(false);
 					} else {
-						utility.setKeepAlive(true);
+						builder.setKeepAlive(true);
 					}
 				}
 			} catch (HTTPException e) {
@@ -65,8 +76,8 @@ class HTTPTestHandler extends ChannelHandlerAdapter {
 	private void endTest(ChannelHandlerContext ctx) {
 		final HTTPChannel ch = (HTTPChannel) ctx.channel();
 		
-		if (utility.isKeepAlive && (code == 0)) {
-			utility.onTestBell.ring();
+		if (builder.isKeepAlive && (code == ActionCode.OK)) {
+			builder.onTestBell.ring();
 		} else {
 			ch.disconnect();
 			ch.close().addListener(new GenericFutureListener<ChannelFuture> () {
@@ -74,27 +85,28 @@ class HTTPTestHandler extends ChannelHandlerAdapter {
 				@Override
 				public void operationComplete(ChannelFuture future) {
 					
-					switch(code) {
-					case 3: 
+					switch(code.ordinal()) {
+					case 3:
 						if (ch.testMethod.equals(HttpMethod.HEAD)) {
 							ch.testMethod = HttpMethod.GET;
 						} else {
-							utility.close();
+							builder.close();
 							System.err.println("Error: Bad request on " + 
-									utility.getHost() +
+									builder.getHost() +
 									". The session has been closed.");
 							break;
 						}
-					case 1: utility.setupWithTest();
+					case 1: builder.setupWithTest();
 					case 2: break;
 					case 0: 
 						ch.onInactiveBell.ring();
-						utility.setupWithoutTest();
+						builder.onTestBell.promise(builder.onConnectBell);
+						builder.onTestBell.ring();
 						break;
 					default:
-						utility.close();
+						builder.close();
 						System.err.println("Error: Unimplemented response code on "
-								+ utility.getHost() + ". The session has been closed.");
+								+ builder.getHost() + ". The session has been closed.");
 						break;
 					}
 				}

@@ -19,14 +19,16 @@ import stork.module.http.HTTPResource.HTTPTap;
 /**
  * HTTP utility that provides necessary functions to the session
  */
-class HTTPUtility {
+class HTTPBuilder {
 	// Bell used to indicate the close state of session
     protected final Bell<Void> onCloseBell = new Bell<Void> ();
-    // Bell rung when connected channel is tested
+    // Bell rung when channel passes the connection test before using
     protected Bell<Void> onTestBell;
-    // Bell rung when the channel finally connects.
+    // Bell rung when the channel is ready to use
     protected Bell<Void> onConnectBell;
+    // Queue that stores all unhandled requested taps
     protected Queue<Bell<Void>> tapBellQueue;
+    // Tells the connection state, set by final connection test result 
     protected boolean isKeepAlive = true;
     
     private HTTPChannel channel;
@@ -35,7 +37,7 @@ class HTTPUtility {
     private int port;
     
     // Constructor for base HTTP channel
-    public HTTPUtility(HTTPSession session) {        
+    public HTTPBuilder(HTTPSession session) {        
         try {
             boot = new Bootstrap();
             boot.group(session.workGroup)
@@ -62,11 +64,17 @@ class HTTPUtility {
     	return onCloseBell.isDone();
     }
     
-    /* Close and clear up the channel */
+    /** 
+     * Close and clear up the channel 
+     */
     public void close() {
     	if (!isClosed()) {
-	    	channel.clear();
-	    	onCloseBell.ring();
+    		tapBellQueue.clear();
+    		synchronized (channel) {
+		    	channel.clear();
+		    	channel.close();
+				onCloseBell.ring();
+    		}
     	}
     }
 
@@ -78,7 +86,9 @@ class HTTPUtility {
         	isKeepAlive = v;
     }
     
-    /* Establish a new socket connection with connection test at first */
+    /**
+     * Establish a new socket connection with connection test
+     */
     protected void setupWithTest() {
 		ChannelFuture future = boot.connect(uri.host(), port);
 		future.addListener(new GenericFutureListener<ChannelFuture>() {
@@ -87,7 +97,6 @@ class HTTPUtility {
 			public void operationComplete(ChannelFuture f) {
 				if (f.isSuccess()) {
 					channel = (HTTPChannel) f.channel();
-					channel.installUtility(HTTPUtility.this);
 					testConnection();
 					onTestBell.promise(onConnectBell);
 				} else {
@@ -97,29 +106,11 @@ class HTTPUtility {
 		});
     }
     
-    /* Establish a new socket connection without testing */
-    protected void setupWithoutTest() {
-		ChannelFuture future = boot.connect(uri.host(), port);
-		future.addListener(new GenericFutureListener<ChannelFuture>() {
-			@Override
-			public void operationComplete(ChannelFuture f) {
-				if (f.isSuccess()) {
-					channel = (HTTPChannel) f.channel();
-					channel.installUtility(HTTPUtility.this);
-					onTestBell.promise(onConnectBell);
-					onTestBell.ring();
-				} else {
-					onConnectBell.ring(f.cause());
-				}
-			}
-		});
-    }
-    
-    /* 
+    /**
      * Create a new socket connection in case that keep-alive option 
      * is not available.
-     * */
-    protected Bell<HTTPChannel> resetConnection(HTTPTap tap) {
+     */
+    protected Bell<HTTPChannel> tryResetConnection(HTTPTap tap) {
     	// Bell rung when the channel has been established
     	final HTTPTap localTap = tap;
 		final Bell<HTTPChannel> connectBell = new Bell<HTTPChannel>() {
@@ -141,8 +132,6 @@ class HTTPUtility {
     				public void operationComplete(ChannelFuture f) {
     					if (f.isSuccess()) {
     						channel = (HTTPChannel) f.channel();
-    						channel.installUtility(HTTPUtility.this);
-    						channel.updatePipeline();
     						connectBell.ring(channel);
     					} else {
     						connectBell.ring(f.cause());
@@ -153,7 +142,7 @@ class HTTPUtility {
     			return connectBell;
     		}
     	}
-
+    	
     	// Otherwise, add the resource request to the waiting queue
     	// Bell rung when the channel finishes previous task
     	Bell<Void> waitBell	= new Bell<Void>();
@@ -168,8 +157,6 @@ class HTTPUtility {
     				public void operationComplete(ChannelFuture f) {
     					if (f.isSuccess()) {
     						channel = (HTTPChannel) f.channel();
-    						channel.installUtility(HTTPUtility.this);
-    						channel.updatePipeline();
     						connectBell.ring(channel);
     					} else {
     						connectBell.ring(f.cause());
@@ -225,11 +212,14 @@ class HTTPUtility {
     	onTestBell = new Bell<Void>() {
     		@Override
     		protected void done() {
-    			channel.updatePipeline();
     			channel.config().setKeepAlive(isKeepAlive);
+    			if (isKeepAlive) {
+    				channel.restorePipeline(HTTPBuilder.this);
+    			}
     		}
     	};
     	request.setMethod(channel.testMethod);
+    	channel.testerPipeline(this);
     	channel.config().setKeepAlive(true);
     	channel.writeAndFlush(request);
     }

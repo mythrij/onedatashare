@@ -25,7 +25,6 @@ public class HTTPChannel extends NioSocketChannel {
     protected HttpMethod testMethod = HttpMethod.HEAD;
 
 	private boolean readable = true;
-	private HTTPUtility utility;
 
 	/* Constructors */
 	public HTTPChannel(Channel parent, EventLoop eventLoop, SocketChannel socket) {
@@ -37,11 +36,7 @@ public class HTTPChannel extends NioSocketChannel {
 	public HTTPChannel(EventLoop eventLoop) {
 		super(eventLoop);
 	}
-	
-	protected void installUtility(HTTPUtility utility) {
-		this.utility = utility;
-	}
-	
+
 	/* Add a new task to the queue before starting receiving data */
 	protected void addChannelTask(HTTPTap tap) {
 		tapQueue.offer(tap);
@@ -68,11 +63,21 @@ public class HTTPChannel extends NioSocketChannel {
 		}
 	}
     
-    /* Remove test handler, and install message receiver handler */
-    protected void updatePipeline() {
-    	pipeline().remove("Tester");
+    /**
+     * Install test handler at the first run
+     */
+    protected void testerPipeline(HTTPBuilder builder) {
+		pipeline().remove("Timer");
+		pipeline().remove("Handler");
+		pipeline().addLast("Tester", new HTTPTestHandler(builder));
+    }
+    
+    /**
+     * Install message receiver handler back after connection test
+     */
+    protected void restorePipeline(HTTPBuilder builder) {
+		pipeline().remove("Tester");
 		pipeline().addFirst("Timer", new ReadTimeoutHandler(30));
-		pipeline().addLast(
-				"Handler", new HTTPMessageHandler(utility));
+		pipeline().addLast("Handler", new HTTPMessageHandler(builder));
     }
 }

@@ -20,7 +20,7 @@ import io.netty.channel.nio.NioEventLoopGroup;
 public class HTTPSession extends Session<HTTPSession, HTTPResource> {
 	
 	protected EventLoopGroup workGroup;
-	protected HTTPUtility utility;    
+	protected HTTPBuilder builder;    
 
     public HTTPSession(URI uri) {
     	super(uri);
@@ -38,11 +38,11 @@ public class HTTPSession extends Session<HTTPSession, HTTPResource> {
 	public Bell<HTTPSession> initialize() {
 		return new Bell<Object> () {{
 			// Initialize the connection
-			utility = new HTTPUtility(HTTPSession.this);
-			utility.onConnectBell.promise(this);
+			builder = new HTTPBuilder(HTTPSession.this);
+			builder.onConnectBell.promise(this);
 			
 			// Set up the session close reaction
-			utility.onClose().new Promise() {
+			builder.onClose().new Promise() {
 				
 				@Override
 				public void always() {workGroup.shutdownGracefully();}
@@ -51,8 +51,7 @@ public class HTTPSession extends Session<HTTPSession, HTTPResource> {
 	}
  
     public void finalize() {
-    	// TODO handle the closed channel resource
-    	utility.close();
+    	builder.close();
     }
 
     public static void main(String[] args) throws InterruptedException, ExecutionException {

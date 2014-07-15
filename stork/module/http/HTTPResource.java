@@ -13,11 +13,10 @@ import stork.feather.Tap;
 public class HTTPResource extends Resource<HTTPSession, HTTPResource> {
 	
 	// Rung when the first resource response header is received
-	private Bell<Stat> statBell;
+	private Bell<Stat> statBell = new Bell<Stat> ();
 	
 	protected HTTPResource(HTTPSession session, Path path) {
 		super(session, path);
-		statBell = new Bell<Stat>();
 	}
 
 	@Override
@@ -33,34 +32,39 @@ public class HTTPResource extends Resource<HTTPSession, HTTPResource> {
 	public class HTTPTap extends Tap<HTTPResource> {
 		
 		protected Bell<Void> onStartBell, sinkReadyBell;
-		private HTTPUtility utility;
+		private HTTPBuilder builder;
 		private Path resourcePath;
 
 		public HTTPTap() {
 			super(HTTPResource.this);
-			this.utility = HTTPResource.this.session.utility;
+			this.builder = HTTPResource.this.session.builder;
 			onStartBell = new Bell<Void> ();
 			setPath(path);
 		}
 		
 		@Override 
-		public Bell start(Bell bell) {
+		public Bell<?> start(Bell bell) {
 			if (bell.isFailed())
 				return bell;
 			sinkReadyBell = bell;
 			
-			synchronized (utility.getChannel()) {
-				HTTPChannel ch = utility.getChannel();
-				
-				if (utility.isKeepAlive()) {
-						ch.addChannelTask(this);
-						ch.writeAndFlush(utility.prepareGet(resourcePath));
+			synchronized (builder.getChannel()) {
+				if (!builder.isClosed()) {
+					HTTPChannel ch = builder.getChannel();
+					
+					if (builder.isKeepAlive()) {
+							ch.addChannelTask(this);
+							ch.writeAndFlush(builder.prepareGet(resourcePath));
+					} else {
+							builder.tryResetConnection(this);
+					}
 				} else {
-						utility.resetConnection(this);
+					onStartBell.ring(new HTTPException("Http session " +
+							builder.getHost() + " has been closed."));
 				}
 			}
 			
-			bell.new Promise() {
+			sinkReadyBell.new Promise() {
 				public void fail(Throwable t) {
 					onStartBell.ring(t);
 					finish(t);
@@ -70,7 +74,7 @@ public class HTTPResource extends Resource<HTTPSession, HTTPResource> {
 			return onStartBell;
 		}
 		
-		public Bell drain(Slice slice) { return super.drain(slice); }
+		public Bell<?> drain(Slice slice) { return super.drain(slice); }
 		
 		public void finish() { super.finish(); } 
 		

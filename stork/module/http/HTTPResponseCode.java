@@ -3,9 +3,9 @@ package stork.module.http;
 import io.netty.handler.codec.http.HttpResponseStatus;
 
 /**
- * Convenient function for testing http response code
+ * Convenient function collections for testing Http response code
  */
-class HTTPCodes {
+class HTTPResponseCode {
 
 	public static boolean isMoved(HttpResponseStatus status) {
 		if (status.equals(HttpResponseStatus.FOUND) ||

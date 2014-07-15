@@ -23,17 +23,24 @@ import io.netty.util.concurrent.GenericFutureListener;
 /**
  * Handles a client-side downstream channel.
  */
+
+/*
+ * Message packet receiving status
+ */
+enum Status {
+	Header,
+	Content,
+	NotFound
+}
+
 class HTTPMessageHandler extends ChannelHandlerAdapter {
 	
-	private HTTPUtility utility;
+	private HTTPBuilder builder;
 	private HTTPTap tap;
-	private int messageStatus;	// '0' for the first response packet
-								// '1' for the subsequent responses
-								// '2' for path moved case
+	private Status status = Status.Header;
 	
-	public HTTPMessageHandler(HTTPUtility  util) {
-		this.utility = util;
-		messageStatus = 0;
+	public HTTPMessageHandler(HTTPBuilder  util) {
+		this.builder = util;
 	}
 	
     @Override
@@ -41,10 +48,10 @@ class HTTPMessageHandler extends ChannelHandlerAdapter {
 
 		final HTTPChannel ch = (HTTPChannel) ctx.channel();
 
-    	if (messageStatus == 0) {
-    		// This is the first packet of a response, need to know the 
-    		// resource request of it.
-    		messageStatus = 1;
+    	if (status == Status.Header) {
+    		// This is the first packet of response, need to know the 
+    		// request resource of it.
+    		status = Status.Content;
     		tap = ch.tapQueue.poll();
     	}
 
@@ -53,21 +60,19 @@ class HTTPMessageHandler extends ChannelHandlerAdapter {
     		String connection = resp.headers().get(HttpHeaders.Names.CONNECTION);
 
 			if (connection != null && connection.equals(HttpHeaders.Values.CLOSE)) {
-				if (utility.isKeepAlive()) {
+				if (builder.isKeepAlive()) {
 					// Normally, this shouldn't happen. It is assumed that
-					// a http server would always remain the same connection state.
-    				synchronized (ch) {
-						for (HTTPTap tap: ch.tapQueue) {
-							utility.resetConnection(tap);
-						}
-						utility.setKeepAlive(false);
-    				}
+					// a Http server would always remain in same connection state.
+					for (HTTPTap tap: ch.tapQueue) {
+						builder.tryResetConnection(tap);
+					}
+					builder.setKeepAlive(false);
 				}
 			}
 			
 			caseHandler(resp, ch);
     		
-			if (messageStatus == 1) {
+			if (status == Status.Content) {
 	    		if (!tap.hasStat()) {
 	    			// The resource this tap belongs to has not 
 	    			// received meta data yet. Do it now.
@@ -98,7 +103,7 @@ class HTTPMessageHandler extends ChannelHandlerAdapter {
     	if (msg instanceof HttpContent) {
 	    	HttpContent content = (HttpContent) msg;
 	    	
-    		if (messageStatus == 1) {
+    		if (status == Status.Content) {
 	    		ByteBuf buf = content.content();
 	    		Slice slice = new Slice(buf);
 	    		
@@ -109,11 +114,11 @@ class HTTPMessageHandler extends ChannelHandlerAdapter {
     		}
 
     		if (content instanceof LastHttpContent) {
-    			if (messageStatus == 1) {
+    			if (status == Status.Content) {
     				tap.finish();
     			}
-	    		if (utility.isKeepAlive()) {
-	    			messageStatus = 0;	// Reset status.
+	    		if (builder.isKeepAlive()) {
+	    			status = Status.Header;	// Reset status.
 	    		}
     		}
     	}
@@ -130,9 +135,9 @@ class HTTPMessageHandler extends ChannelHandlerAdapter {
 
     		@Override
 			public void operationComplete(ChannelFuture arg0) throws Exception {
-				if (!utility.isKeepAlive()) {
-					synchronized (utility.tapBellQueue) {
-						Bell<Void> bell = utility.tapBellQueue.poll();
+				if (!builder.isKeepAlive()) {
+					synchronized (builder.tapBellQueue) {
+						Bell<Void> bell = builder.tapBellQueue.poll();
 						if (bell == null) {
 							ch.onInactiveBell.ring();
 						} else {
@@ -143,7 +148,7 @@ class HTTPMessageHandler extends ChannelHandlerAdapter {
 				} else {
 					// close this channel resource
 					ch.onInactiveBell.ring();
-					utility.close();
+					builder.close();
 				}
 			}
 		});
@@ -165,8 +170,9 @@ class HTTPMessageHandler extends ChannelHandlerAdapter {
     private void caseHandler(HttpResponse response, HTTPChannel channel) {
     	HttpResponseStatus status = response.getStatus();
 		try {
-			if (HTTPCodes.isMoved(status)) {
-				messageStatus += 1;
+			if (HTTPResponseCode.isMoved(status)) {
+				this.status = Status.NotFound;
+				// Redirect to new location
 				String newLocation =
 						response.headers().get(HttpHeaders.Names.LOCATION);
 				newLocation = newLocation.startsWith("/") ?
@@ -178,15 +184,15 @@ class HTTPMessageHandler extends ChannelHandlerAdapter {
 					uri = URI.create(newLocation);
 				}
 				tap.setPath(uri.path());
-				if (utility.isKeepAlive()) {
+				if (builder.isKeepAlive()) {
 					channel.addChannelTask(tap);
-					channel.writeAndFlush(utility.prepareGet(tap.getPath()));
+					channel.writeAndFlush(builder.prepareGet(tap.getPath()));
 				} else {
-					utility.resetConnection(tap);
+					builder.tryResetConnection(tap);
 				}
 				throw new HTTPException(
 						tap.getPath() + " " + status.toString());
-			} else if (HTTPCodes.isNotFound(status)) {
+			} else if (HTTPResponseCode.isNotFound(status)) {
 				throw new HTTPException(
 						tap.source().uri() + " " + status.toString());
 			}

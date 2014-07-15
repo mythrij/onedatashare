@@ -9,6 +9,7 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.codec.http.HttpClientCodec;
 import io.netty.handler.codec.http.HttpContentDecompressor;
 import io.netty.handler.ssl.SslHandler;
+import io.netty.handler.timeout.ReadTimeoutHandler;
 
 /**
  * Convenient HTTP initializer for startup
@@ -16,9 +17,9 @@ import io.netty.handler.ssl.SslHandler;
 class HTTPInitializer extends ChannelInitializer<SocketChannel> {
 
 	private boolean ssl;
-	private HTTPUtility utility;
+	private HTTPBuilder builder;
 	
-	public HTTPInitializer (String scheme, HTTPUtility utility) throws HTTPException {
+	public HTTPInitializer (String scheme, HTTPBuilder utility) throws HTTPException {
 		ssl = false;
 		if (scheme == null) {
 			throw new HTTPException("Error: null http scheme");
@@ -26,7 +27,7 @@ class HTTPInitializer extends ChannelInitializer<SocketChannel> {
 			ssl = true;
 		}
 		
-		this.utility = utility;
+		this.builder = utility;
 	}
 	
 	@Override
@@ -38,10 +39,11 @@ class HTTPInitializer extends ChannelInitializer<SocketChannel> {
 			//SSLEngine sslEng = getSsl(null);
 			//pipe.addLast("SSL", new SslHandler(sslEng));
 		}
-		
+
+		pipe.addFirst("Timer", new ReadTimeoutHandler(30));
 		pipe.addLast("Codec", new HttpClientCodec());
 		pipe.addLast("Inflater", new HttpContentDecompressor());
-		pipe.addLast("Tester", new HTTPTestHandler(utility));
+		pipe.addLast("Handler", new HTTPMessageHandler(builder));
 	}
 
 	/* HTTPS transmission
