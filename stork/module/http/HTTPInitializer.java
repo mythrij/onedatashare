@@ -12,14 +12,14 @@ import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.timeout.ReadTimeoutHandler;
 
 /**
- * Convenient HTTP initializer for startup
+ * Convenient HTTP initializer for handler setting up.
  */
 class HTTPInitializer extends ChannelInitializer<SocketChannel> {
 
 	private boolean ssl;
 	private HTTPBuilder builder;
 	
-	public HTTPInitializer (String scheme, HTTPBuilder utility) throws HTTPException {
+	public HTTPInitializer (String scheme, HTTPBuilder builder) throws HTTPException {
 		ssl = false;
 		if (scheme == null) {
 			throw new HTTPException("Error: null http scheme");
@@ -27,7 +27,7 @@ class HTTPInitializer extends ChannelInitializer<SocketChannel> {
 			ssl = true;
 		}
 		
-		this.builder = utility;
+		this.builder = builder;
 	}
 	
 	@Override

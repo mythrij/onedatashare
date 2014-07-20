@@ -14,7 +14,7 @@ import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.timeout.ReadTimeoutHandler;
 
 /**
- * HTTP channel class, control data transmissions on the channel
+ * Controls data transmissions on this connection.
  */
 public class HTTPChannel extends NioSocketChannel {
 
@@ -37,15 +37,26 @@ public class HTTPChannel extends NioSocketChannel {
 		super(eventLoop);
 	}
 
-	/* Add a new task to the queue before starting receiving data */
+	/**
+	 * Adds a new task to the waiting queue, which would be processed in future.
+	 * 
+	 * @param tap A {@link HTTPTap} transmission request
+	 */
 	protected void addChannelTask(HTTPTap tap) {
 		tapQueue.offer(tap);
 	}
 	
+	/**
+	 * Stops/starts receiving data.
+	 * 
+	 * @param readable {@code true} for enabling to receive data;
+	 * {@code false} for the opposite.
+	 */
 	protected synchronized void setReadable(boolean readable) {
 		this.readable = readable;
 	}
 	
+	/** Clears all fields stored on this channel. */
 	protected void clear() {
 		tapQueue.clear();
 		for (HTTPTap tap : tapQueue) {
@@ -64,7 +75,9 @@ public class HTTPChannel extends NioSocketChannel {
 	}
     
     /**
-     * Install test handler at the first run
+     * Installs test handler at the initial run of this {@link HTTPSession}.
+     * 
+     * @param builder {@link HTTPBuilder} for this {@link HTTPSession}
      */
     protected void testerPipeline(HTTPBuilder builder) {
 		pipeline().remove("Timer");
@@ -73,7 +86,9 @@ public class HTTPChannel extends NioSocketChannel {
     }
     
     /**
-     * Install message receiver handler back after connection test
+     * Installs message receiver handler back after {@code test} state.
+     * 
+     * @param builder {@link HTTPBuilder} for this {@link HTTPSession}
      */
     protected void restorePipeline(HTTPBuilder builder) {
 		pipeline().remove("Tester");

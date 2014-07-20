@@ -8,7 +8,10 @@ import stork.feather.Stat;
 import stork.feather.Tap;
 
 /**
- * HTTP resource and tap
+ * Stores the requested full {@link Path}, and state information of the 
+ * connection. It creates {@link HTTPTap} instances.
+ * 
+ * @see {@link Resource}
  */
 public class HTTPResource extends Resource<HTTPSession, HTTPResource> {
 	
@@ -29,6 +32,12 @@ public class HTTPResource extends Resource<HTTPSession, HTTPResource> {
 		return statBell;
 	}
 	
+	/**
+	 * This can be considered as a specific download task for the
+	 * request from a {@link HTTPResource}.
+	 *
+	 * @see {@link Tap}
+	 */
 	public class HTTPTap extends Tap<HTTPResource> {
 		
 		protected Bell<Void> onStartBell, sinkReadyBell;
@@ -49,12 +58,13 @@ public class HTTPResource extends Resource<HTTPSession, HTTPResource> {
 			sinkReadyBell = bell;
 			
 			synchronized (builder.getChannel()) {
-				if (!builder.isClosed()) {
+				if (!builder.onCloseBell.isDone()) {
 					HTTPChannel ch = builder.getChannel();
 					
 					if (builder.isKeepAlive()) {
 							ch.addChannelTask(this);
-							ch.writeAndFlush(builder.prepareGet(resourcePath));
+							ch.writeAndFlush(
+									builder.prepareGet(resourcePath));
 					} else {
 							builder.tryResetConnection(this);
 					}
@@ -74,22 +84,35 @@ public class HTTPResource extends Resource<HTTPSession, HTTPResource> {
 			return onStartBell;
 		}
 		
+		@Override
 		public Bell<?> drain(Slice slice) { return super.drain(slice); }
 		
+		@Override
 		public void finish() { super.finish(); } 
 		
+		/** 
+		 * Tells whether this {@link HTTPTap} instance has acquired
+		 * state info.
+		 */
 		protected boolean hasStat() {
 			return statBell.isDone();
 		}
 		
+		/** Sets state info and rings its {@code state} {@link Bell}. */
 		protected void setStat(Stat stat) {
 			statBell.ring(stat);
 		}
 		
+		/**
+		 * Reconfigures its {@code path}. 
+		 * 
+		 * @param path new {@link Path} instance to be changed to
+		 */
 		protected void setPath(Path path) {
 			resourcePath = path;
 		}
 		
+		/*** Gets reconfigured {@code path}. */
 		protected Path getPath() {
 			return resourcePath;
 		}

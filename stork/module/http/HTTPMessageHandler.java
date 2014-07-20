@@ -21,11 +21,7 @@ import io.netty.handler.timeout.ReadTimeoutException;
 import io.netty.util.concurrent.GenericFutureListener;
 
 /**
- * Handles a client-side downstream channel.
- */
-
-/*
- * Message packet receiving status
+ * Message handler receiving status.
  */
 enum Status {
 	Header,
@@ -33,6 +29,9 @@ enum Status {
 	NotFound
 }
 
+/**
+ * Handles client-side downstream.
+ */
 class HTTPMessageHandler extends ChannelHandlerAdapter {
 	
 	private HTTPBuilder builder;
@@ -49,8 +48,8 @@ class HTTPMessageHandler extends ChannelHandlerAdapter {
 		final HTTPChannel ch = (HTTPChannel) ctx.channel();
 
     	if (status == Status.Header) {
-    		// This is the first packet of response, need to know the 
-    		// request resource of it.
+    		// This is the first packet of response, needs to know the 
+    		// requesting resource of it.
     		status = Status.Content;
     		tap = ch.tapQueue.poll();
     	}
@@ -62,7 +61,7 @@ class HTTPMessageHandler extends ChannelHandlerAdapter {
 			if (connection != null && connection.equals(HttpHeaders.Values.CLOSE)) {
 				if (builder.isKeepAlive()) {
 					// Normally, this shouldn't happen. It is assumed that
-					// a Http server would always remain in same connection state.
+					// a HTTP server always remains in the same connection state.
 					for (HTTPTap tap: ch.tapQueue) {
 						builder.tryResetConnection(tap);
 					}
@@ -83,7 +82,7 @@ class HTTPMessageHandler extends ChannelHandlerAdapter {
 					try {
 						time = HttpHeaders.getDate(resp);
 					} catch (ParseException e) {
-						// This means date meta data is not available
+						// This means date metadata is not available
 					}
 	    			stat.dir = false;
 	    			stat.file = true;
@@ -166,7 +165,12 @@ class HTTPMessageHandler extends ChannelHandlerAdapter {
     	}
     }
     
-    // Handles various abnormal reponse codes
+    /**
+     * Handles various abnormal response codes.
+     * 
+     * @param response response header
+     * @param channel receiver channel 
+     */
     private void caseHandler(HttpResponse response, HTTPChannel channel) {
     	HttpResponseStatus status = response.getStatus();
 		try {

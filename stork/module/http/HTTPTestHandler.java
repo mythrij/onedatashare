@@ -12,11 +12,7 @@ import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.util.concurrent.GenericFutureListener;
 
 /**
- * Handles connection test channel.
- */
-
-/*
- * Actions to take according to response code status
+ * Actions to take according to response code status.
  */
 enum ActionCode {
 	OK,
@@ -25,6 +21,9 @@ enum ActionCode {
 	Bad
 }
 
+/**
+ * Handles downstream test connection.
+ */
 class HTTPTestHandler extends ChannelHandlerAdapter {
 	
 	private HTTPBuilder builder;
@@ -73,6 +72,12 @@ class HTTPTestHandler extends ChannelHandlerAdapter {
 		}
 	}
 	
+	/**
+	 * Decides the action to take after receiving contents at the 
+	 * {@code test} phase.
+	 * 
+	 * @param ctx handler context of {@code test} {@link HTTPChannel}
+	 */
 	private void endTest(ChannelHandlerContext ctx) {
 		final HTTPChannel ch = (HTTPChannel) ctx.channel();
 		

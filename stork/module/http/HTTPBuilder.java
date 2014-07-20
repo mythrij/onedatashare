@@ -17,7 +17,25 @@ import stork.feather.URI;
 import stork.module.http.HTTPResource.HTTPTap;
 
 /**
- * HTTP utility that provides necessary functions to the session
+ * Sets up {@link HTTPChannel} for a {@link HTTPSession}. It also maintains
+ * multiple states for the session.
+ * <p>
+ * {@code Test state}: Collects connection information before initializing
+ * the connection. Represented by a {@link Bell}, which rings after the 
+ * test phase is complete.
+ * <p>
+ * {@code Connect state}: Be able to start downloading {@link HTTPResource}
+ * requests. Represented by a {@link Bell}, which rings when the test
+ * phase is passed, and the connection has been fully established.
+ * <p>
+ * {@code Close state}: Rings when this {@link HTTPSession} is asked to get
+ * closed.
+ * <p>
+ * {@code Keep-alive state}: Tells whether the connection can always be
+ * open. If this session is able to keep alive, its {@link HTTPChannel}
+ * would be kept open until a {@code close} method is called. Otherwise,
+ * its {@link HTTPChannel} would be reset for each new {@link HTTPTap} task
+ * extracted from the queue waited in this local {@code HTTPBuilder}.
  */
 class HTTPBuilder {
 	// Bell used to indicate the close state of session
@@ -36,7 +54,7 @@ class HTTPBuilder {
     private URI uri;
     private int port;
     
-    // Constructor for base HTTP channel
+    /** Constructor that sets up the connection */
     public HTTPBuilder(HTTPSession session) {        
         try {
             boot = new Bootstrap();
@@ -56,19 +74,11 @@ class HTTPBuilder {
         }
     }
     
-    public Bell<?> onClose() {
-    	return onCloseBell;
-    }
-    
-    public boolean isClosed() {
-    	return onCloseBell.isDone();
-    }
-    
     /** 
-     * Close and clear up the channel 
+     * Closes and clears up {@code HTTPChannel} for this session
      */
     public void close() {
-    	if (!isClosed()) {
+    	if (!onCloseBell.isDone()) {
     		tapBellQueue.clear();
     		synchronized (channel) {
 		    	channel.clear();
@@ -78,20 +88,32 @@ class HTTPBuilder {
     	}
     }
 
+    /**
+     * Tells if the connection supports keep-alive option 
+     * 
+     * @return current connection support on keep-alive option
+     */
     public boolean isKeepAlive() {
     	return isKeepAlive;
     }
     
+    /**
+     * Sets during the {@code Test state} 
+     * 
+     * @param v {@code true} for supporting keep-alive option.
+     * Otherwise, uses {@code false};
+     */
     protected void setKeepAlive(boolean v) {
         	isKeepAlive = v;
     }
     
     /**
-     * Establish a new socket connection with connection test
+     * Establishes a new socket connection with connection test
      */
     protected void setupWithTest() {
 		ChannelFuture future = boot.connect(uri.host(), port);
-		future.addListener(new GenericFutureListener<ChannelFuture>() {
+		future.addListener(
+				new GenericFutureListener<ChannelFuture>() {
 
 			@Override
 			public void operationComplete(ChannelFuture f) {
@@ -107,13 +129,20 @@ class HTTPBuilder {
     }
     
     /**
-     * Create a new socket connection in case that keep-alive option 
+     * Recreates a new socket connection in case that keep-alive option 
      * is not available.
+     * 
+     * @param tap the tap that the connection resets for
+     * 
+     * @return A {@link Bell} that rings whenever the new connection is
+     * established. This method may work without necessarily using the
+     * returned value.
      */
     protected Bell<HTTPChannel> tryResetConnection(HTTPTap tap) {
     	// Bell rung when the channel has been established
     	final HTTPTap localTap = tap;
-		final Bell<HTTPChannel> connectBell = new Bell<HTTPChannel>() {
+		final Bell<HTTPChannel> connectBell = 
+				new Bell<HTTPChannel>() {
 			
 			@Override
 			protected void done() {
@@ -122,11 +151,18 @@ class HTTPBuilder {
 			}
 		};
 
-    	// Start a new connection immediately if the channel is in idle status
+    	// Case 1. Starts a new connection immediately if the channel is 
+		// in idle status
     	synchronized (tapBellQueue) {
-    		if (channel.onInactiveBell.isDone() && tapBellQueue.isEmpty()) {
+    		if (channel.onInactiveBell.isDone() &&
+    				tapBellQueue.isEmpty()) {
+    			// Reinitializes immediately onInactiveBell in
+    			// case of data race
+    			channel.onInactiveBell = new Bell<Void>();
+    			// Starts reconnecting
     			ChannelFuture f = boot.connect(uri.host(), port);
-    			f.addListener(new GenericFutureListener<ChannelFuture>() {
+    			f.addListener(
+    					new GenericFutureListener<ChannelFuture>() {
 
     				@Override
     				public void operationComplete(ChannelFuture f) {
@@ -143,15 +179,17 @@ class HTTPBuilder {
     		}
     	}
     	
-    	// Otherwise, add the resource request to the waiting queue
-    	// Bell rung when the channel finishes previous task
+    	// Case 2. Otherwise, adds the resource request to waiting queue.
+    	// Bell rung when the channel finishes all its previous tasks in
+    	// the queue.
     	Bell<Void> waitBell	= new Bell<Void>();
     	Bell<Void> createBell = new Bell<Void>() {
     		
     		@Override
     		protected void done() {
     			ChannelFuture f = boot.connect(uri.host(), port);
-    			f.addListener(new GenericFutureListener<ChannelFuture>() {
+    			f.addListener(
+    					new GenericFutureListener<ChannelFuture>() {
 
     				@Override
     				public void operationComplete(ChannelFuture f) {
@@ -171,6 +209,11 @@ class HTTPBuilder {
     	return connectBell;
     }
     
+    /** 
+     * Modifies the host {@link URI} for a valid connection of this session.
+     * 
+     * @param uri new host name {@link URI}
+     * */
     protected void setUri(URI uri) {
     	String strUri = uri.toString();
     	if (strUri.endsWith("/")) {
@@ -184,19 +227,39 @@ class HTTPBuilder {
 		}
     }
     
+    /** 
+     * Gets modified host name 
+     * 
+     * @return host name in string
+     */
     protected String getHost() {
     	return uri.host();
     }
     
+    /**
+     * Gets connection port number 
+     * 
+     * @return port number 
+     */
     protected int getPort() {
     	return port;
     }
     
+    /**
+     * Gets available {@link HTTPChannel} instance
+     * 
+     * @return A HTTP channel
+     */
     protected HTTPChannel getChannel() {
     	return channel;
     }
     
-    /* Prepare request message to be sent*/
+    /**
+     * Prepares request message to be sent
+     * 
+     * @param path specific file path under this host
+     * @return HTTP GET method message to be sent
+     */
     protected HttpRequest prepareGet(Path path) {
 		HttpRequest request = new DefaultFullHttpRequest( 
 	    		HttpVersion.HTTP_1_1, HttpMethod.GET, "" + path);
@@ -206,7 +269,7 @@ class HTTPBuilder {
 		return request;
     }
     
-    /* Test whether the connection could be keep-alive */
+    /** Tests whether the connection supports keep-alive */
     private void testConnection() {
     	HttpRequest request = prepareGet(uri.path());
     	onTestBell = new Bell<Void>() {
@@ -224,8 +287,11 @@ class HTTPBuilder {
     	channel.writeAndFlush(request);
     }
     
-    /*
-     * Return an appropriate port number from given URL
+    /**
+     * Returns an appropriate port number from given URL
+     * 
+     * @param uri A HTTP {@link URI}
+     * @return corresponding port number to the {@link URI}
      */
     private int analURI(URI uri) throws HTTPException {
     	int port = -1;

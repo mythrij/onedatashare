@@ -15,13 +15,21 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 
 /**
- * HTTP download session
+ * A HTTP download session
+ * 
+ * @see {@link Session}
  */
 public class HTTPSession extends Session<HTTPSession, HTTPResource> {
 	
 	protected EventLoopGroup workGroup;
 	protected HTTPBuilder builder;    
 
+	/**
+	 * A constructor of {@code HTTPSession} with a domain described
+	 * by {@link URI}.
+	 * 
+	 * @param uri A URL with host name
+	 */
     public HTTPSession(URI uri) {
     	super(uri);
     	workGroup = new NioEventLoopGroup();
@@ -42,7 +50,7 @@ public class HTTPSession extends Session<HTTPSession, HTTPResource> {
 			builder.onConnectBell.promise(this);
 			
 			// Set up the session close reaction
-			builder.onClose().new Promise() {
+			builder.onCloseBell.new Promise() {
 				
 				@Override
 				public void always() {workGroup.shutdownGracefully();}
@@ -50,7 +58,8 @@ public class HTTPSession extends Session<HTTPSession, HTTPResource> {
 		}}.as(this);
 	}
  
-    public void finalize() {
+	@Override
+    public void cleanup() {
     	builder.close();
     }
 
@@ -99,6 +108,6 @@ public class HTTPSession extends Session<HTTPSession, HTTPResource> {
         s.select(p5).tap().attach(new HexDumpResource().sink()).tap().start().sync();
         
         //Thread.sleep(6000);
-        //s.finalize();
+        //s.cleanup();
     }
 }
