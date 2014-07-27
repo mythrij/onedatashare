@@ -53,8 +53,9 @@ public class HTTPResource extends Resource<HTTPSession, HTTPResource> {
 		
 		@Override 
 		public Bell<?> start(Bell bell) {
-			if (bell.isFailed())
+			if (bell.isFailed()) {
 				return bell;
+			}
 			sinkReadyBell = bell;
 			
 			synchronized (builder.getChannel()) {

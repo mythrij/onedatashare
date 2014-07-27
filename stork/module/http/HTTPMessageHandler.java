@@ -135,7 +135,7 @@ class HTTPMessageHandler extends ChannelHandlerAdapter {
     		@Override
 			public void operationComplete(ChannelFuture arg0) throws Exception {
 				if (!builder.isKeepAlive()) {
-					synchronized (builder.tapBellQueue) {
+					synchronized(ch) {
 						Bell<Void> bell = builder.tapBellQueue.poll();
 						if (bell == null) {
 							ch.onInactiveBell.ring();

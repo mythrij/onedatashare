@@ -47,7 +47,7 @@ class HTTPBuilder {
     // Queue that stores all unhandled requested taps
     protected Queue<Bell<Void>> tapBellQueue;
     // Tells the connection state, set by final connection test result 
-    protected boolean isKeepAlive = true;
+    volatile protected boolean isKeepAlive = true;
     
     private HTTPChannel channel;
     private Bootstrap boot;
@@ -133,12 +133,8 @@ class HTTPBuilder {
      * is not available.
      * 
      * @param tap the tap that the connection resets for
-     * 
-     * @return A {@link Bell} that rings whenever the new connection is
-     * established. This method may work without necessarily using the
-     * returned value.
      */
-    protected Bell<HTTPChannel> tryResetConnection(HTTPTap tap) {
+    protected void tryResetConnection(HTTPTap tap) {
     	// Bell rung when the channel has been established
     	final HTTPTap localTap = tap;
 		final Bell<HTTPChannel> connectBell = 
@@ -153,12 +149,9 @@ class HTTPBuilder {
 
     	// Case 1. Starts a new connection immediately if the channel is 
 		// in idle status
-    	synchronized (tapBellQueue) {
+    	synchronized (channel) {
     		if (channel.onInactiveBell.isDone() &&
     				tapBellQueue.isEmpty()) {
-    			// Reinitializes immediately onInactiveBell in
-    			// case of data race
-    			channel.onInactiveBell = new Bell<Void>();
     			// Starts reconnecting
     			ChannelFuture f = boot.connect(uri.host(), port);
     			f.addListener(
@@ -174,39 +167,36 @@ class HTTPBuilder {
     					}
     				}
     			});
-    			
-    			return connectBell;
+    		} else {
+		    	// Case 2. Otherwise, adds the resource request to 
+    			// waiting queue. Bell rung when the channel finishes
+    			// all its previous tasks in the queue.
+		    	Bell<Void> waitBell	= new Bell<Void>();
+		    	Bell<Void> createBell = new Bell<Void>() {
+		    		
+		    		@Override
+		    		protected void done() {
+		    			ChannelFuture f = boot.connect(uri.host(), port);
+		    			f.addListener(
+		    					new GenericFutureListener<ChannelFuture>() {
+		
+		    				@Override
+		    				public void operationComplete(ChannelFuture f) {
+		    					if (f.isSuccess()) {
+		    						channel = (HTTPChannel) f.channel();
+		    						connectBell.ring(channel);
+		    					} else {
+		    						connectBell.ring(f.cause());
+		    					}
+		    				}
+		    			});
+		    		}
+		    	};
+		    	
+		    	waitBell.promise(createBell);
+		    	tapBellQueue.offer(waitBell);
     		}
     	}
-    	
-    	// Case 2. Otherwise, adds the resource request to waiting queue.
-    	// Bell rung when the channel finishes all its previous tasks in
-    	// the queue.
-    	Bell<Void> waitBell	= new Bell<Void>();
-    	Bell<Void> createBell = new Bell<Void>() {
-    		
-    		@Override
-    		protected void done() {
-    			ChannelFuture f = boot.connect(uri.host(), port);
-    			f.addListener(
-    					new GenericFutureListener<ChannelFuture>() {
-
-    				@Override
-    				public void operationComplete(ChannelFuture f) {
-    					if (f.isSuccess()) {
-    						channel = (HTTPChannel) f.channel();
-    						connectBell.ring(channel);
-    					} else {
-    						connectBell.ring(f.cause());
-    					}
-    				}
-    			});
-    		}
-    	};
-    	
-    	waitBell.promise(createBell);
-    	tapBellQueue.offer(waitBell);
-    	return connectBell;
     }
     
     /** 
