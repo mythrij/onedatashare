@@ -69,14 +69,18 @@ public class HTTPMessageHandler extends ChannelHandlerAdapter {
     		HttpResponse resp = (HttpResponse) msg;
     		String connection = resp.headers().get(HttpHeaders.Names.CONNECTION);
 
-			if (connection != null && connection.equals(HttpHeaders.Values.CLOSE)) {
-				if (builder.isKeepAlive()) {
-					// Normally, this shouldn't happen. It is assumed that
-					// a HTTP server always remains in the same connection state.
+			// Normally, this shouldn't happen. It is assumed that
+			// a HTTP server always remains in the same connection state.
+			if (connection != null) {
+				if (connection.equals(HttpHeaders.Values.CLOSE) &&
+						builder.isKeepAlive()) {
 					for (HTTPTap tap: ch.tapQueue) {
 						builder.tryResetConnection(tap);
 					}
 					builder.setKeepAlive(false);
+				} else if (connection.equals(HttpHeaders.Values.KEEP_ALIVE) &&
+						!builder.isKeepAlive()) {
+					//ch.addChannelTask(builder.tapBellQueue.poll());
 				}
 			}
 			
@@ -86,21 +90,7 @@ public class HTTPMessageHandler extends ChannelHandlerAdapter {
 	    		if (!tap.hasStat()) {
 	    			// The resource this tap belongs to has not 
 	    			// received meta data yet. Do it now.
-	    			Stat stat = new Stat(tap.getPath().toString());
-	    			String length = resp.headers().
-	    					get(HttpHeaders.Names.CONTENT_LENGTH);
-	    			Date time = null;
-					try {
-						time = HttpHeaders.getDate(resp);
-					} catch (ParseException e) {
-						// This means date metadata is not available
-					}
-	    			stat.dir = false;
-	    			stat.file = true;
-	    			stat.link = tap.getPath();
-	    			stat.size = (length == null) ? -1l : Long.valueOf(length);
-	    			stat.time = (time == null) ? -1l : time.getTime();
-	    			tap.setStat(stat);
+	    			tap.setStat(getStat(resp));
 	    		}
 			}
     		
@@ -109,10 +99,9 @@ public class HTTPMessageHandler extends ChannelHandlerAdapter {
     			public void done() { ch.setReadable(true); }
     		};
     	}
-		
-    	if (msg instanceof HttpContent) {
+    	else if (msg instanceof HttpContent) {
 	    	HttpContent content = (HttpContent) msg;
-	    	
+
     		if (status == Status.Content) {
 	    		ByteBuf buf = content.content();
 	    		Slice slice = new Slice(buf);
@@ -143,6 +132,7 @@ public class HTTPMessageHandler extends ChannelHandlerAdapter {
     @Override
     public void channelInactive(ChannelHandlerContext ctx) {
     	final HTTPChannel ch = (HTTPChannel) ctx.channel();
+    	ch.setReadable(false);
     	
     	if (ch.isOpen()) {
 				ch.disconnect();
@@ -222,5 +212,26 @@ public class HTTPMessageHandler extends ChannelHandlerAdapter {
 		} catch (HTTPException e) {
 			System.err.println(e.getMessage());
 		}
+    }
+    
+    // Gathers meta data information
+    private Stat getStat(HttpResponse response) {
+    	Stat stat = new Stat(tap.getPath().toString());
+		String length = response.headers().
+				get(HttpHeaders.Names.CONTENT_LENGTH);
+		Date time = null;
+		
+		try {
+			time = HttpHeaders.getDate(response);
+		} catch (ParseException e) {
+			// This means date meta data is not available
+		}
+		stat.dir = false;
+		stat.file = true;
+		stat.link = tap.getPath();
+		stat.size = (length == null) ? -1l : Long.valueOf(length);
+		stat.time = (time == null) ? -1l : time.getTime();
+		
+		return stat;
     }
 }

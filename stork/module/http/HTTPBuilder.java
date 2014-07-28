@@ -2,6 +2,7 @@ package stork.module.http;
 
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutionException;
 
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.ChannelFuture;
@@ -76,16 +77,21 @@ public class HTTPBuilder {
     
     /** 
      * Closes and clears up {@code HTTPChannel} for this session
+     * 
+     * @throws HTTPException a channel fails to close
      */
-    public void close() {
+    public void close() throws HTTPException {System.out.println("closing");
     	if (!onCloseBell.isDone()) {
+			onCloseBell.ring();
+			try {
+				channel.doClose();
+			} catch(Exception e) {
+				throw new HTTPException(
+						"Channel " + channel.toString() +
+						"failed to close: " + e.getMessage());
+			}
     		tapBellQueue.clear();
-    		synchronized (channel) {
-		    	channel.clear();
-		    	channel.close();
-				onCloseBell.ring();
-    		}
-    	}
+    	}System.out.println("closed");
     }
 
     /**
@@ -138,13 +144,25 @@ public class HTTPBuilder {
     protected void tryResetConnection(HTTPTap tap) {
     	// Bell rung when the channel has been established
     	final HTTPTap localTap = tap;
-		final Bell<HTTPChannel> connectBell = 
+		final Bell<HTTPChannel> connectBell =
 				new Bell<HTTPChannel>() {
 			
 			@Override
-			protected void done() {
-				channel.addChannelTask(localTap);
-				channel.writeAndFlush(prepareGet(localTap.getPath()));
+			protected void done() throws InterruptedException {
+				try {
+					HTTPChannel channel = (HTTPChannel) this.get();
+					HTTPBuilder.this.channel = channel;
+					channel.addChannelTask(localTap);
+					channel.writeAndFlush(prepareGet(localTap.getPath()));
+				} catch (ExecutionException e) {
+					System.err.println(e.getMessage());
+					try {
+						HTTPBuilder.this.channel.doClose();
+					} catch(Exception e1) {
+						System.err.println("Attempt on closing this " +
+								"failed. " + e1.getMessage());
+					}
+				}
 			}
 		};
 
@@ -161,8 +179,7 @@ public class HTTPBuilder {
     				@Override
     				public void operationComplete(ChannelFuture f) {
     					if (f.isSuccess()) {
-    						channel = (HTTPChannel) f.channel();
-    						connectBell.ring(channel);
+    						connectBell.ring((HTTPChannel) f.channel());
     					} else {
     						connectBell.ring(f.cause());
     					}
@@ -184,8 +201,7 @@ public class HTTPBuilder {
 		    				@Override
 		    				public void operationComplete(ChannelFuture f) {
 		    					if (f.isSuccess()) {
-		    						channel = (HTTPChannel) f.channel();
-		    						connectBell.ring(channel);
+		    						connectBell.ring((HTTPChannel) f.channel());
 		    					} else {
 		    						connectBell.ring(f.cause());
 		    					}

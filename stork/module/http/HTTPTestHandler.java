@@ -105,10 +105,14 @@ public class HTTPTestHandler extends ChannelHandlerAdapter {
 						if (ch.testMethod.equals(HttpMethod.HEAD)) {
 							ch.testMethod = HttpMethod.GET;
 						} else {
-							builder.close();
 							System.err.println("Error: Bad request on " + 
 									builder.getHost() +
-									". The session has been closed.");
+									". The session will be closed.");
+							try {
+								builder.close();
+							} catch (HTTPException e) {
+								System.err.printf(e.getMessage());
+							}
 							break;
 						}
 					case 1: builder.setupWithTest();
@@ -119,9 +123,14 @@ public class HTTPTestHandler extends ChannelHandlerAdapter {
 						builder.onTestBell.ring();
 						break;
 					default:
-						builder.close();
-						System.err.println("Error: Unimplemented response code on "
-								+ builder.getHost() + ". The session has been closed.");
+						System.err.println(
+								"Error: Unimplemented response code on " +
+								builder.getHost() + ". The session will be closed.");
+						try {
+							builder.close();
+						} catch (HTTPException e) {
+							System.err.println(e.getMessage());
+						}
 						break;
 					}
 				}

@@ -23,9 +23,10 @@ public class HTTPChannel extends NioSocketChannel {
     // Bell rung when the channel goes to inactive state
     protected Bell<Void> onInactiveBell = new Bell<Void>();
     protected HttpMethod testMethod = HttpMethod.HEAD;
-
+    // Current tap that is being considered
+    protected HTTPTap tap;
 	private boolean readable = true;
-
+	
 	/* Constructors */
 	public HTTPChannel(Channel parent, EventLoop eventLoop, SocketChannel socket) {
 		super(parent, eventLoop, socket);
@@ -52,17 +53,17 @@ public class HTTPChannel extends NioSocketChannel {
 	 * @param readable {@code true} for enabling to receive data;
 	 * {@code false} for the opposite.
 	 */
-	protected synchronized void setReadable(boolean readable) {
+	protected void setReadable(boolean readable) {
 		this.readable = readable;
 	}
 	
-	/** Clears all fields stored on this channel. */
-	protected void clear() {
-		tapQueue.clear();
+	/** Clears all fields stored on this channel and close. */
+	@Override
+	protected void doClose() throws Exception {
 		for (HTTPTap tap : tapQueue) {
 			tap.onStartBell.cancel();
 		}
-		tapQueue.clear();
+		super.doClose();
 	}
 	
 	@Override

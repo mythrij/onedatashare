@@ -60,7 +60,11 @@ public class HTTPSession extends Session<HTTPSession, HTTPResource> {
  
 	@Override
     public void cleanup() {
-    	builder.close();
+    	try {
+			builder.close();
+		} catch (Exception e) {
+			System.err.println(e.getMessage());
+		}
     }
 
     public static void main(String[] args) throws InterruptedException, ExecutionException {
@@ -99,14 +103,14 @@ public class HTTPSession extends Session<HTTPSession, HTTPResource> {
         Bell<Stat> b2 = r2.stat();
         r1.tap().attach(new HexDumpResource().sink()).tap().start().sync();
         System.out.println(b1.get().path() + " size- " + b1.get().size() + " time- " + b1.get().time);
-        r2.tap().attach(new HexDumpResource().sink()).tap().start().sync();        
+        r2.tap().attach(new HexDumpResource().sink()).tap().start();        
         System.out.println(b2.get().path() + " size- " + b2.get().size() + " time- " + b2.get().time);
 
-        s.select(p5).tap().attach(new HexDumpResource().sink()).tap().start().sync();
-        s.select(p5).tap().attach(new HexDumpResource().sink()).tap().start().sync();
-        s.select(p5).tap().attach(new HexDumpResource().sink()).tap().start().sync();
-        s.select(p5).tap().attach(new HexDumpResource().sink()).tap().start().sync();
-        
+        s.select(p5).tap().attach(new HexDumpResource().sink()).tap().start();
+        s.select(p5).tap().attach(new HexDumpResource().sink()).tap().start();
+        s.select(p5).tap().attach(new HexDumpResource().sink()).tap().start();
+        s.select(p5).tap().attach(new HexDumpResource().sink()).tap().start();
+
         //Thread.sleep(6000);
         //s.cleanup();
     }
