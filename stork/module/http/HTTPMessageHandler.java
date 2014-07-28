@@ -32,16 +32,27 @@ enum Status {
 /**
  * Handles client-side downstream.
  */
-class HTTPMessageHandler extends ChannelHandlerAdapter {
+public class HTTPMessageHandler extends ChannelHandlerAdapter {
 	
 	private HTTPBuilder builder;
 	private HTTPTap tap;
 	private Status status = Status.Header;
 	
+	/**
+	 * Constructs a data receiver channel
+	 * 
+	 * @param util {@link HTTPBuilder} that initiates this channel
+	 */
 	public HTTPMessageHandler(HTTPBuilder  util) {
 		this.builder = util;
 	}
 	
+	/**
+	 * Receives meta data and data from remote HTTP server.
+	 * 
+	 * @param ctx handler context of this channel
+	 * @param msg received content
+	 */
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) {
 
@@ -123,6 +134,12 @@ class HTTPMessageHandler extends ChannelHandlerAdapter {
     	}
     }
     
+    /**
+     * Called whenever this current channel is in inactive state.
+     * It usually happens after finishing the data receiving from server.
+     * 
+     * @param ctx handler context of this channel
+     */
     @Override
     public void channelInactive(ChannelHandlerContext ctx) {
     	final HTTPChannel ch = (HTTPChannel) ctx.channel();
@@ -153,6 +170,13 @@ class HTTPMessageHandler extends ChannelHandlerAdapter {
 		});
     }
 
+    /**
+     * Called when an exception is caught, usually by a read time-out from
+     * remote server.
+     * 
+     * @param ctx handler context of this channel
+     * @param cause {@link Throwable} that tells the exception
+     */
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         // Close the connection when an exception is raised.
@@ -165,12 +189,7 @@ class HTTPMessageHandler extends ChannelHandlerAdapter {
     	}
     }
     
-    /**
-     * Handles various abnormal response codes.
-     * 
-     * @param response response header
-     * @param channel receiver channel 
-     */
+    // Handles various abnormal response codes.
     private void caseHandler(HttpResponse response, HTTPChannel channel) {
     	HttpResponseStatus status = response.getStatus();
 		try {

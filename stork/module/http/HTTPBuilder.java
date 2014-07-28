@@ -37,7 +37,7 @@ import stork.module.http.HTTPResource.HTTPTap;
  * its {@link HTTPChannel} would be reset for each new {@link HTTPTap} task
  * extracted from the queue waited in this local {@code HTTPBuilder}.
  */
-class HTTPBuilder {
+public class HTTPBuilder {
 	// Bell used to indicate the close state of session
     protected final Bell<Void> onCloseBell = new Bell<Void> ();
     // Bell rung when channel passes the connection test before using
@@ -89,9 +89,10 @@ class HTTPBuilder {
     }
 
     /**
-     * Tells if the connection supports keep-alive option 
+     * Tells if the connection supports {@code keep-alive} option 
      * 
-     * @return current connection support on keep-alive option
+     * @return current connection support on {@code keep-alive}
+     * option
      */
     public boolean isKeepAlive() {
     	return isKeepAlive;
@@ -100,8 +101,8 @@ class HTTPBuilder {
     /**
      * Sets during the {@code Test state} 
      * 
-     * @param v {@code true} for supporting keep-alive option.
-     * Otherwise, uses {@code false};
+     * @param v {@code true} for supporting {@code keep-alive}
+     * option. Otherwise, uses {@code false};
      */
     protected void setKeepAlive(boolean v) {
         	isKeepAlive = v;
@@ -129,8 +130,8 @@ class HTTPBuilder {
     }
     
     /**
-     * Recreates a new socket connection in case that keep-alive option 
-     * is not available.
+     * Recreates a new socket connection in case that 
+     * {@code keep-alive} option is not available.
      * 
      * @param tap the tap that the connection resets for
      */
@@ -200,7 +201,7 @@ class HTTPBuilder {
     }
     
     /** 
-     * Modifies the host {@link URI} for a valid connection of this session.
+     * Modifies the host {@code URI} for a valid connection of this session.
      * 
      * @param uri new host name {@link URI}
      * */
@@ -225,18 +226,9 @@ class HTTPBuilder {
     protected String getHost() {
     	return uri.host();
     }
-    
+
     /**
-     * Gets connection port number 
-     * 
-     * @return port number 
-     */
-    protected int getPort() {
-    	return port;
-    }
-    
-    /**
-     * Gets available {@link HTTPChannel} instance
+     * Gets available {@code HTTPChannel} instance.
      * 
      * @return A HTTP channel
      */
@@ -245,7 +237,7 @@ class HTTPBuilder {
     }
     
     /**
-     * Prepares request message to be sent
+     * Prepares request message to be sent.
      * 
      * @param path specific file path under this host
      * @return HTTP GET method message to be sent
@@ -259,7 +251,7 @@ class HTTPBuilder {
 		return request;
     }
     
-    /** Tests whether the connection supports keep-alive */
+    // Tests whether the connection supports keep-alive.
     private void testConnection() {
     	HttpRequest request = prepareGet(uri.path());
     	onTestBell = new Bell<Void>() {
@@ -277,12 +269,7 @@ class HTTPBuilder {
     	channel.writeAndFlush(request);
     }
     
-    /**
-     * Returns an appropriate port number from given URL
-     * 
-     * @param uri A HTTP {@link URI}
-     * @return corresponding port number to the {@link URI}
-     */
+    // Returns an appropriate port number from given URL.
     private int analURI(URI uri) throws HTTPException {
     	int port = -1;
     	

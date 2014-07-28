@@ -5,12 +5,12 @@ import io.netty.handler.codec.http.HttpResponseStatus;
 /**
  * Collection of functions that tests HTTP response code.
  */
-class HTTPResponseCode {
+public class HTTPResponseCode {
 
 	/**
 	 * Tells if HTTP response server has moved its {@code URL}.
 	 * 
-	 * @param status instance of {@link HttpResponseStatus}
+	 * @param status instance of {@code HttpResponseStatus}
 	 * @return {@code true} if {@code URL} is moved; otherwise,
 	 * {@code false}
 	 */
@@ -27,7 +27,7 @@ class HTTPResponseCode {
 	/**
 	 * Tells if HTTP response server is not found.
 	 * 
-	 * @param status instance of {@link HttpResponseStatus}
+	 * @param status instance of {@code HttpResponseStatus}
 	 * @return {@code true} if page is not found; otherwise,
 	 * {@code false}
 	 */
@@ -42,7 +42,7 @@ class HTTPResponseCode {
 	/**
 	 * Tells if HTTP response server failed to accept the request.
 	 * 
-	 * @param status instance of {@link HttpResponseStatus}
+	 * @param status instance of {@code HttpResponseStatus}
 	 * @return {@code true} if it is bad request; otherwise,
 	 * {@code false}
 	 */
@@ -58,7 +58,7 @@ class HTTPResponseCode {
 	/**
 	 * Tells if HTTP response server successfully accepts the request.
 	 * 
-	 * @param status instance of {@link HttpResponseStatus}
+	 * @param status instance of {@code HttpResponseStatus}
 	 * @return {@code true} if it accepts; otherwise, {@code false}
 	 */
 	public static boolean isOK(HttpResponseStatus status) {

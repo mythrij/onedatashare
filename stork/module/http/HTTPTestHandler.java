@@ -24,15 +24,29 @@ enum ActionCode {
 /**
  * Handles downstream test connection.
  */
-class HTTPTestHandler extends ChannelHandlerAdapter {
+public class HTTPTestHandler extends ChannelHandlerAdapter {
 	
 	private HTTPBuilder builder;
 	private ActionCode code;
 	
+	/**
+	 * Constructs a channel for testing this HTTP connection. Specifically,
+	 * the support on {@code keep-alive} option, existence of its host, and
+	 * correctness of domain name would be tested.
+	 * 
+	 * @param utility {@link HTTPBuilder} that initiates this test channel
+	 */
 	public HTTPTestHandler(HTTPBuilder utility) {
 		this.builder = utility;
 	}
 	
+	/**
+	 * Reads the header part of response from remote HTTP server. Tests
+	 * the validity of this connection.
+	 * 
+	 * @param ctx handler context of this channel
+	 * @param msg received message
+	 */
 	@Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) {
 		if (msg instanceof HttpResponse) {
@@ -72,12 +86,8 @@ class HTTPTestHandler extends ChannelHandlerAdapter {
 		}
 	}
 	
-	/**
-	 * Decides the action to take after receiving contents at the 
-	 * {@code test} phase.
-	 * 
-	 * @param ctx handler context of {@code test} {@link HTTPChannel}
-	 */
+	// Decides the action to take after receiving contents at the 
+	// test phase.
 	private void endTest(ChannelHandlerContext ctx) {
 		final HTTPChannel ch = (HTTPChannel) ctx.channel();
 		

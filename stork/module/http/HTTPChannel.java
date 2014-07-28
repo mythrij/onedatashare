@@ -75,7 +75,7 @@ public class HTTPChannel extends NioSocketChannel {
 	}
     
     /**
-     * Installs test handler at the initial run of this {@link HTTPSession}.
+     * Installs test handler at the initial run of this {@code HTTPSession}.
      * 
      * @param builder {@link HTTPBuilder} for this {@link HTTPSession}
      */

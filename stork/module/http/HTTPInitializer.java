@@ -14,7 +14,7 @@ import io.netty.handler.timeout.ReadTimeoutHandler;
 /**
  * Convenient HTTP initializer for handler setting up.
  */
-class HTTPInitializer extends ChannelInitializer<SocketChannel> {
+public class HTTPInitializer extends ChannelInitializer<SocketChannel> {
 
 	private boolean ssl;
 	private HTTPBuilder builder;
@@ -30,6 +30,11 @@ class HTTPInitializer extends ChannelInitializer<SocketChannel> {
 		this.builder = builder;
 	}
 	
+	/**
+	 * Adds pipelines to channel.
+	 * 
+	 *  @param ch channel to be operated on
+	 */
 	@Override
 	protected void initChannel(SocketChannel ch) throws Exception {
 		ChannelPipeline pipe = ch.pipeline();

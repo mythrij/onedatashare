@@ -18,6 +18,12 @@ public class HTTPResource extends Resource<HTTPSession, HTTPResource> {
 	// Rung when the first resource response header is received
 	private Bell<Stat> statBell = new Bell<Stat> ();
 	
+	/**
+	 * Constructs a {@code resource} with HTTP connection request.
+	 * 
+	 * @param session the class where this request made from
+	 * @param path requested resource {@code path}
+	 */
 	protected HTTPResource(HTTPSession session, Path path) {
 		super(session, path);
 	}
@@ -44,6 +50,10 @@ public class HTTPResource extends Resource<HTTPSession, HTTPResource> {
 		private HTTPBuilder builder;
 		private Path resourcePath;
 
+		/**
+		 * Constructs a {@code tap} associated with a {@code resource}
+		 * that receives data from HTTP connection.
+		 */
 		public HTTPTap() {
 			super(HTTPResource.this);
 			this.builder = HTTPResource.this.session.builder;
@@ -92,14 +102,14 @@ public class HTTPResource extends Resource<HTTPSession, HTTPResource> {
 		public void finish() { super.finish(); } 
 		
 		/** 
-		 * Tells whether this {@link HTTPTap} instance has acquired
+		 * Tells whether this {@code HTTPTap} instance has acquired
 		 * state info.
 		 */
 		protected boolean hasStat() {
 			return statBell.isDone();
 		}
 		
-		/** Sets state info and rings its {@code state} {@link Bell}. */
+		/** Sets state info and rings its {@code state Bell}. */
 		protected void setStat(Stat stat) {
 			statBell.ring(stat);
 		}
