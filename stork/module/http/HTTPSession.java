@@ -11,8 +11,11 @@ import stork.feather.URI;
 import stork.feather.util.HexDumpResource;
 import stork.module.ftp.FTPModule;
 import stork.module.ftp.FTPResource;
+import io.netty.channel.ChannelFuture;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.GenericFutureListener;
 
 /**
  * A HTTP download session
@@ -53,7 +56,7 @@ public class HTTPSession extends Session<HTTPSession, HTTPResource> {
 			builder.onCloseBell.new Promise() {
 				
 				@Override
-				public void always() {workGroup.shutdownGracefully();}
+				public void always() {builder.tapBellQueue.clear();}
 			};
 		}}.as(this);
 	}
@@ -71,9 +74,9 @@ public class HTTPSession extends Session<HTTPSession, HTTPResource> {
     	//URI u = URI.create("http://www.indeed.com");	// Test 'keep-alive' connection
     	Path p1 = Path.create("l-Rochester,-NY-jobs.html");
     	Path p2 = Path.create("l-Buffalo,-NY-jobs.html");
-    	URI u = URI.create("http://www.nytimes.com");	// Test 'close' connection
+    	//URI u = URI.create("http://www.nytimes.com");	// Test 'close' connection
     	//URI u = URI.create("http://bing.co");	// Test host 'moved' fault
-    	//URI u = URI.create("http://www.microsoft.com");	// Test path 'moved' fault
+    	URI u = URI.create("http://www.microsoft.com");	// Test path 'moved' fault
     	Path p3 = Path.create("pages/national/index.html");
     	Path p4 = Path.create("pages/nyregion/index.html");
     	Path p5 = Path.create("");
@@ -106,12 +109,18 @@ public class HTTPSession extends Session<HTTPSession, HTTPResource> {
         r2.tap().attach(new HexDumpResource().sink()).tap().start();        
         System.out.println(b2.get().path() + " size- " + b2.get().size() + " time- " + b2.get().time);
 
+        s.cleanup();
         s.select(p5).tap().attach(new HexDumpResource().sink()).tap().start();
         s.select(p5).tap().attach(new HexDumpResource().sink()).tap().start();
         s.select(p5).tap().attach(new HexDumpResource().sink()).tap().start();
         s.select(p5).tap().attach(new HexDumpResource().sink()).tap().start();
-
-        //Thread.sleep(6000);
-        //s.cleanup();
+        
+        Thread.sleep(3000);System.out.println(
+		s.builder.channel.isActive() + " " +
+		s.builder.channel.isInputShutdown() + " " +
+		s.builder.channel.isOutputShutdown() + " " +
+		s.builder.channel.isOpen() + " " +
+		s.builder.channel.toString());
+        s.workGroup.shutdownGracefully();
     }
 }

@@ -90,7 +90,7 @@ public class HTTPTestHandler extends ChannelHandlerAdapter {
 	// test phase.
 	private void endTest(ChannelHandlerContext ctx) {
 		final HTTPChannel ch = (HTTPChannel) ctx.channel();
-		
+
 		if (builder.isKeepAlive && (code == ActionCode.OK)) {
 			builder.onTestBell.ring();
 		} else {
@@ -108,11 +108,9 @@ public class HTTPTestHandler extends ChannelHandlerAdapter {
 							System.err.println("Error: Bad request on " + 
 									builder.getHost() +
 									". The session will be closed.");
-							try {
-								builder.close();
-							} catch (HTTPException e) {
-								System.err.printf(e.getMessage());
-							}
+							builder.close();
+							ch.clear();
+							ch.close();
 							break;
 						}
 					case 1: builder.setupWithTest();
@@ -126,15 +124,12 @@ public class HTTPTestHandler extends ChannelHandlerAdapter {
 						System.err.println(
 								"Error: Unimplemented response code on " +
 								builder.getHost() + ". The session will be closed.");
-						try {
-							builder.close();
-						} catch (HTTPException e) {
-							System.err.println(e.getMessage());
-						}
+						builder.close();
+						ch.close();
 						break;
 					}
 				}
 			});
-		}
+		}	
 	}
 }

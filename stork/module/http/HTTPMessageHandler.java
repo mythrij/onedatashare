@@ -14,6 +14,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelHandlerAdapter;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpHeaders;
+import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.LastHttpContent;
@@ -26,7 +27,8 @@ import io.netty.util.concurrent.GenericFutureListener;
 enum Status {
 	Header,
 	Content,
-	NotFound
+	NotFound,
+	Closed
 }
 
 /**
@@ -55,19 +57,30 @@ public class HTTPMessageHandler extends ChannelHandlerAdapter {
 	 */
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) {
-
 		final HTTPChannel ch = (HTTPChannel) ctx.channel();
-
-    	if (status == Status.Header) {
-    		// This is the first packet of response, needs to know the 
-    		// requesting resource of it.
-    		status = Status.Content;
-    		tap = ch.tapQueue.poll();
-    	}
 
     	if (msg instanceof HttpResponse) {
     		HttpResponse resp = (HttpResponse) msg;
     		String connection = resp.headers().get(HttpHeaders.Names.CONNECTION);
+    		
+	    	if (status == Status.Header) {
+	    		// This is the first packet of response, needs to know the 
+	    		// requesting resource of it.
+	    		status = Status.Content;
+	    		tap = ch.tapQueue.poll();
+	    	}
+
+			// Directly closes local end if remote
+			// server does not comprehend the sent close request
+			if (status == Status.Closed) {
+		    	if (connection == null) {
+		    		ch.close();
+		    		return;
+		    	} else if (connection.equals(HttpHeaders.Values.KEEP_ALIVE)) {
+		    		ch.close();
+		    		return;
+		    	}
+			}
 
 			// Normally, this shouldn't happen. It is assumed that
 			// a HTTP server always remains in the same connection state.
@@ -78,8 +91,8 @@ public class HTTPMessageHandler extends ChannelHandlerAdapter {
 						builder.tryResetConnection(tap);
 					}
 					builder.setKeepAlive(false);
-				} else if (connection.equals(HttpHeaders.Values.KEEP_ALIVE) &&
-						!builder.isKeepAlive()) {
+				} else if (connection.equals(HttpHeaders.Values.KEEP_ALIVE)) {
+					//	!builder.isKeepAlive()) {
 					//ch.addChannelTask(builder.tapBellQueue.poll());
 				}
 			}
@@ -117,7 +130,15 @@ public class HTTPMessageHandler extends ChannelHandlerAdapter {
     				tap.finish();
     			}
 	    		if (builder.isKeepAlive()) {
-	    			status = Status.Header;	// Reset status.
+	    			if (builder.onCloseBell.isDone()) {
+	    				// Creates a close request to
+	    				// remote server if session is closed
+	    				if (status != Status.Closed) {
+	    					notifyClose(ch);
+	    				}
+	    			} else {
+	    				status = Status.Header;	// Reset status.
+	    			}
 	    		}
     		}
     	}
@@ -132,29 +153,30 @@ public class HTTPMessageHandler extends ChannelHandlerAdapter {
     @Override
     public void channelInactive(ChannelHandlerContext ctx) {
     	final HTTPChannel ch = (HTTPChannel) ctx.channel();
-    	ch.setReadable(false);
-    	
-    	if (ch.isOpen()) {
-				ch.disconnect();
-    	}
+
     	ch.close().addListener(new GenericFutureListener<ChannelFuture>() {
 
     		@Override
 			public void operationComplete(ChannelFuture arg0) throws Exception {
 				if (!builder.isKeepAlive()) {
-					synchronized(ch) {
-						Bell<Void> bell = builder.tapBellQueue.poll();
-						if (bell == null) {
-							ch.onInactiveBell.ring();
-						} else {
-							ch.onInactiveBell.promise(bell);
-							ch.onInactiveBell.ring();
+					if (builder.onCloseBell.isDone()) {
+						ch.clear();
+					} else {
+						synchronized(ch) {
+							Bell<Void> bell = builder.tapBellQueue.poll();
+							if (bell == null) {
+								ch.onInactiveBell.ring();
+							} else {
+								ch.onInactiveBell.promise(bell);
+								ch.onInactiveBell.ring();
+							}
 						}
 					}
 				} else {
 					// close this channel resource
 					ch.onInactiveBell.ring();
-					builder.close();
+					ch.clear();
+					ch.close();
 				}
 			}
 		});
@@ -233,5 +255,15 @@ public class HTTPMessageHandler extends ChannelHandlerAdapter {
 		stat.time = (time == null) ? -1l : time.getTime();
 		
 		return stat;
+    }
+    
+    // Notifies remote HTTP server to close connection
+    private void notifyClose(HTTPChannel ch) {
+		ch.clear();
+		HttpRequest request =
+				builder.prepareGet(tap.getPath());
+		HttpHeaders.setKeepAlive(request, false);
+		ch.writeAndFlush(request);
+		status = Status.Closed;
     }
 }

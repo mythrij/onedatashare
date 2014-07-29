@@ -57,13 +57,12 @@ public class HTTPChannel extends NioSocketChannel {
 		this.readable = readable;
 	}
 	
-	/** Clears all fields stored on this channel and close. */
-	@Override
-	protected void doClose() throws Exception {
+	/** Clears all fields stored on this channel. */
+	protected void clear() {
 		for (HTTPTap tap : tapQueue) {
 			tap.onStartBell.cancel();
 		}
-		super.doClose();
+		tapQueue.clear();
 	}
 	
 	@Override

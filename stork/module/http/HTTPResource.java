@@ -66,6 +66,9 @@ public class HTTPResource extends Resource<HTTPSession, HTTPResource> {
 			if (bell.isFailed()) {
 				return bell;
 			}
+			if (builder.onCloseBell.isDone()) {
+				return onStartBell.cancel();
+			}
 			sinkReadyBell = bell;
 			
 			synchronized (builder.getChannel()) {

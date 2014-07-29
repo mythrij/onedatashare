@@ -50,7 +50,7 @@ public class HTTPBuilder {
     // Tells the connection state, set by final connection test result 
     volatile protected boolean isKeepAlive = true;
     
-    private HTTPChannel channel;
+    public HTTPChannel channel;
     private Bootstrap boot;
     private URI uri;
     private int port;
@@ -76,22 +76,14 @@ public class HTTPBuilder {
     }
     
     /** 
-     * Closes and clears up {@code HTTPChannel} for this session
-     * 
-     * @throws HTTPException a channel fails to close
+     * Closes and clears up {@code HTTPChannel} for this session.
+     * It is completely closed when all unfinished connection is done.
      */
-    public void close() throws HTTPException {System.out.println("closing");
+    public void close() {
     	if (!onCloseBell.isDone()) {
 			onCloseBell.ring();
-			try {
-				channel.doClose();
-			} catch(Exception e) {
-				throw new HTTPException(
-						"Channel " + channel.toString() +
-						"failed to close: " + e.getMessage());
-			}
-    		tapBellQueue.clear();
-    	}System.out.println("closed");
+			channel.clear();
+    	}
     }
 
     /**
@@ -156,12 +148,8 @@ public class HTTPBuilder {
 					channel.writeAndFlush(prepareGet(localTap.getPath()));
 				} catch (ExecutionException e) {
 					System.err.println(e.getMessage());
-					try {
-						HTTPBuilder.this.channel.doClose();
-					} catch(Exception e1) {
-						System.err.println("Attempt on closing this " +
-								"failed. " + e1.getMessage());
-					}
+					HTTPBuilder.this.channel.clear();
+					HTTPBuilder.this.channel.close();
 				}
 			}
 		};
