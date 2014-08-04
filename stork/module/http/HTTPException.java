@@ -1,6 +1,7 @@
 package stork.module.http;
 
-class HTTPException extends Exception {
+/** Exception class for HTTP module. */
+public class HTTPException extends Exception {
 
 	private static final long serialVersionUID = 1L;
 

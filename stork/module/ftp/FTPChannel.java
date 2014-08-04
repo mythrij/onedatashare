@@ -13,6 +13,7 @@ import io.netty.channel.socket.nio.*;
 import io.netty.handler.codec.*;
 import io.netty.handler.codec.string.*;
 import io.netty.handler.codec.base64.*;
+import io.netty.handler.codec.base64.Base64;
 import io.netty.util.*;
 import io.netty.util.concurrent.*;
 
@@ -856,7 +857,7 @@ public class FTPChannel {
      * range (inclusive), instead of ringing successfully with the reply.
      */
     public Bell<Reply> expect(final int lo, final int hi) {
-      return new Promise() {
+      return this.new Promise() {
         public void then(Reply r) {
           if (r.code < lo || r.code > hi)
             throw r.asError();
@@ -906,6 +907,7 @@ public class FTPChannel {
     }
 
     public DataChannel(boolean preferPassive) {
+      FTPChannel.this.super();
       dc = preferPassive ? tryPassiveThenActive() : tryActiveThenPassive();
       dc.new AsBell<SocketChannel>() {
         public Bell<SocketChannel> convert(SocketChannel c) {

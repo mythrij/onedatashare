@@ -1,9 +1,11 @@
 package stork.module.http;
 
-import java.util.concurrent.atomic.AtomicInteger;
+import java.text.ParseException;
+import java.util.Date;
 
 import stork.feather.Bell;
 import stork.feather.Slice;
+import stork.feather.Stat;
 import stork.feather.URI;
 import stork.module.http.HTTPResource.HTTPTap;
 import io.netty.buffer.ByteBuf;
@@ -12,6 +14,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelHandlerAdapter;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpHeaders;
+import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.LastHttpContent;
@@ -19,68 +22,100 @@ import io.netty.handler.timeout.ReadTimeoutException;
 import io.netty.util.concurrent.GenericFutureListener;
 
 /**
- * Handles a client-side channel.
+ * Message handler receiving status.
  */
-class HTTPMessageHandler extends ChannelHandlerAdapter {
+enum Status {
+	Header,
+	Content,
+	NotFound,
+	Closed
+}
+
+/**
+ * Handles client-side downstream.
+ */
+public class HTTPMessageHandler extends ChannelHandlerAdapter {
 	
-	private HTTPUtility utility;
+	private HTTPBuilder builder;
 	private HTTPTap tap;
-	private AtomicInteger messageStatus;	// '0' for the first response packet
-											// '1' for the subsequent responses
+	private Status status = Status.Header;
 	
-	public HTTPMessageHandler(HTTPUtility  util) {
-		this.utility = util;
-		messageStatus = new AtomicInteger(0);
+	/**
+	 * Constructs a data receiver channel
+	 * 
+	 * @param util {@link HTTPBuilder} that initiates this channel
+	 */
+	public HTTPMessageHandler(HTTPBuilder  util) {
+		this.builder = util;
 	}
 	
+	/**
+	 * Receives meta data and data from remote HTTP server.
+	 * 
+	 * @param ctx handler context of this channel
+	 * @param msg received content
+	 */
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) {
-
 		final HTTPChannel ch = (HTTPChannel) ctx.channel();
-
-    	if (messageStatus.compareAndSet(0, 1)) {
-    		// This is the first packet of a response, need to know the 
-    		// resource request of it.
-    		tap = ch.tapQueue.poll();
-    	}
 
     	if (msg instanceof HttpResponse) {
     		HttpResponse resp = (HttpResponse) msg;
-    		HttpResponseStatus status = resp.getStatus();
     		String connection = resp.headers().get(HttpHeaders.Names.CONNECTION);
+    		
+	    	if (status == Status.Header) {
+	    		// This is the first packet of response, needs to know the 
+	    		// requesting resource of it.
+	    		status = Status.Content;
+	    		tap = ch.tapQueue.poll();
+	    	}
 
-			if (connection != null && connection.equals(HttpHeaders.Values.CLOSE)) {
-				if (utility.isKeepAlive()) {
-					// Normally, this shouldn't happen. It is assumed that
-					// a http server always remain in the connection state
-					// what it was.
-    				synchronized (ch) {
-						for (HTTPTap tap: ch.tapQueue) {
-							utility.resetConnection(tap);
-						}
-						utility.setKeepAlive(false);
-    				}
+			// Directly closes local end if remote
+			// server does not comprehend the sent close request
+			if (status == Status.Closed) {
+		    	if (connection == null) {
+		    		ch.close();
+		    		return;
+		    	} else if (connection.equals(HttpHeaders.Values.KEEP_ALIVE)) {
+		    		ch.close();
+		    		return;
+		    	}
+			}
+
+			// Normally, this shouldn't happen. It is assumed that
+			// a HTTP server always remains in the same connection state.
+			if (connection != null) {
+				if (connection.equals(HttpHeaders.Values.CLOSE) &&
+						builder.isKeepAlive()) {
+					for (HTTPTap tap: ch.tapQueue) {
+						builder.tryResetConnection(tap);
+					}
+					builder.setKeepAlive(false);
+				} else if (connection.equals(HttpHeaders.Values.KEEP_ALIVE)) {
+					//	!builder.isKeepAlive()) {
+					//ch.addChannelTask(builder.tapBellQueue.poll());
 				}
 			}
 			
 			caseHandler(resp, ch);
-			/*
-    		if (HttpHeaders.isTransferEncodingChunked(resp)) {
-    			System.out.println("CHUNKED CONTENT {");
-    		} else {
-    			System.out.println("CONTENT {");
-    		}*/ // TODO print header
+    		
+			if (status == Status.Content) {
+	    		if (!tap.hasStat()) {
+	    			// The resource this tap belongs to has not 
+	    			// received meta data yet. Do it now.
+	    			tap.setStat(getStat(resp));
+	    		}
+			}
     		
     		ch.setReadable(false);
     		tap.sinkReadyBell.new Promise() {
     			public void done() { ch.setReadable(true); }
     		};
     	}
-		
-    	if (msg instanceof HttpContent) {
+    	else if (msg instanceof HttpContent) {
 	    	HttpContent content = (HttpContent) msg;
-	    	
-    		if (messageStatus.get() == 1) {
+
+    		if (status == Status.Content) {
 	    		ByteBuf buf = content.content();
 	    		Slice slice = new Slice(buf);
 	    		
@@ -91,50 +126,73 @@ class HTTPMessageHandler extends ChannelHandlerAdapter {
     		}
 
     		if (content instanceof LastHttpContent) {
-    			//System.out.println(" END OF CONTENT");	// TODO content ends
-    			if (messageStatus.get() == 1) {
+    			if (status == Status.Content) {
     				tap.finish();
     			}
-	    		if (utility.isKeepAlive()) {
-	    			messageStatus.set(0);	// Reset status.
+	    		if (builder.isKeepAlive()) {
+	    			if (builder.onCloseBell.isDone()) {
+	    				// Creates a close request to
+	    				// remote server if session is closed
+	    				if (status != Status.Closed) {
+	    					notifyClose(ch);
+	    				}
+	    			} else {
+	    				status = Status.Header;	// Reset status.
+	    			}
 	    		}
     		}
     	}
     }
     
+    /**
+     * Called whenever this current channel is in inactive state.
+     * It usually happens after finishing the data receiving from server.
+     * 
+     * @param ctx handler context of this channel
+     */
     @Override
     public void channelInactive(ChannelHandlerContext ctx) {
-    	final HTTPChannel hc = (HTTPChannel) ctx.channel();
-    	if (hc.isOpen()) {
-				hc.disconnect();
-    	}
-    	hc.close().addListener(new GenericFutureListener<ChannelFuture>() {
+    	final HTTPChannel ch = (HTTPChannel) ctx.channel();
 
-			@Override
+    	ch.close().addListener(new GenericFutureListener<ChannelFuture>() {
+
+    		@Override
 			public void operationComplete(ChannelFuture arg0) throws Exception {
-				if (!utility.isKeepAlive()) {
-					synchronized (utility.tapBellQueue) {
-						Bell<Void> bell = utility.tapBellQueue.poll();
-						if (bell == null) {
-							utility.onInactiveBell.ring();
-						} else {
-							utility.onInactiveBell.promise(bell);
-							utility.onInactiveBell.ring();
-							utility.onInactiveBell = new Bell<Void>();
+				if (!builder.isKeepAlive()) {
+					if (builder.onCloseBell.isDone()) {
+						ch.clear();
+					} else {
+						synchronized(ch) {
+							Bell<Void> bell = builder.tapBellQueue.poll();
+							if (bell == null) {
+								ch.onInactiveBell.ring();
+							} else {
+								ch.onInactiveBell.promise(bell);
+								ch.onInactiveBell.ring();
+							}
 						}
 					}
 				} else {
 					// close this channel resource
-					utility.onInactiveBell.ring();
-					utility.close();
+					ch.onInactiveBell.ring();
+					ch.clear();
+					ch.close();
 				}
 			}
 		});
     }
 
+    /**
+     * Called when an exception is caught, usually by a read time-out from
+     * remote server.
+     * 
+     * @param ctx handler context of this channel
+     * @param cause {@link Throwable} that tells the exception
+     */
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         // Close the connection when an exception is raised.
+    	tap.finish();
     	if (cause instanceof ReadTimeoutException) {
     		ctx.fireChannelInactive();
     	} else {
@@ -143,12 +201,13 @@ class HTTPMessageHandler extends ChannelHandlerAdapter {
     	}
     }
     
-    // Handles various abnormal reponse codes
+    // Handles various abnormal response codes.
     private void caseHandler(HttpResponse response, HTTPChannel channel) {
     	HttpResponseStatus status = response.getStatus();
 		try {
-			if (HTTPCodes.isMoved(status)) {
-				messageStatus.addAndGet(1);
+			if (HTTPResponseCode.isMoved(status)) {
+				this.status = Status.NotFound;
+				// Redirect to new location
 				String newLocation =
 						response.headers().get(HttpHeaders.Names.LOCATION);
 				newLocation = newLocation.startsWith("/") ?
@@ -160,20 +219,51 @@ class HTTPMessageHandler extends ChannelHandlerAdapter {
 					uri = URI.create(newLocation);
 				}
 				tap.setPath(uri.path());
-				if (utility.isKeepAlive()) {
+				if (builder.isKeepAlive()) {
 					channel.addChannelTask(tap);
-					channel.writeAndFlush(utility.prepareGet(tap.getPath()));
+					channel.writeAndFlush(builder.prepareGet(tap.getPath()));
 				} else {
-					utility.resetConnection(tap);
+					builder.tryResetConnection(tap);
 				}
 				throw new HTTPException(
 						tap.getPath() + " " + status.toString());
-			} else if (HTTPCodes.isNotFound(status)) {
+			} else if (HTTPResponseCode.isNotFound(status)) {
 				throw new HTTPException(
 						tap.source().uri() + " " + status.toString());
 			}
 		} catch (HTTPException e) {
 			System.err.println(e.getMessage());
 		}
+    }
+    
+    // Gathers meta data information
+    private Stat getStat(HttpResponse response) {
+    	Stat stat = new Stat(tap.getPath().toString());
+		String length = response.headers().
+				get(HttpHeaders.Names.CONTENT_LENGTH);
+		Date time = null;
+		
+		try {
+			time = HttpHeaders.getDate(response);
+		} catch (ParseException e) {
+			// This means date meta data is not available
+		}
+		stat.dir = false;
+		stat.file = true;
+		stat.link = tap.getPath();
+		stat.size = (length == null) ? -1l : Long.valueOf(length);
+		stat.time = (time == null) ? -1l : time.getTime();
+		
+		return stat;
+    }
+    
+    // Notifies remote HTTP server to close connection
+    private void notifyClose(HTTPChannel ch) {
+		ch.clear();
+		HttpRequest request =
+				builder.prepareGet(tap.getPath());
+		HttpHeaders.setKeepAlive(request, false);
+		ch.writeAndFlush(request);
+		status = Status.Closed;
     }
 }
