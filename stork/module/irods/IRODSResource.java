@@ -1,122 +1,81 @@
 package stork.module.irods;
 
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
+import java.util.*;
 
-import org.irods.jargon.core.exception.JargonException;
-import org.irods.jargon.core.pub.domain.UserFilePermission;
-import org.irods.jargon.core.query.CollectionAndDataObjectListingEntry;
+import org.irods.jargon.core.exception.*;
+import org.irods.jargon.core.pub.domain.*;
+import org.irods.jargon.core.query.*;
+import static org.irods.jargon.core.query.CollectionAndDataObjectListingEntry.ObjectType.*;
 
-import stork.feather.Bell;
-import stork.feather.Emitter;
-import stork.feather.Path;
+import stork.feather.*;
+import stork.feather.util.*;
 import stork.feather.Resource;
-import stork.feather.Stat;
-import stork.feather.Tap;
 
-public class IRODSResource extends Resource<FeatherIRODSSession,IRODSResource>{
+public class IRODSResource extends Resource<IRODSSession,IRODSResource>{
+  protected IRODSResource(IRODSSession session, Path path) {
+    super(session, path);
+  }
 
+  public Emitter<String> list() {
+    final Emitter<String> emitter = new Emitter<String>();
 
-	protected IRODSResource(FeatherIRODSSession session, Path path) {
-		super(session, path);
-		// TODO Auto-generated constructor stub
-	}
+    stat().promise(new Bell<Stat>() {
+      public void done(Stat s) {
+        for (Stat ss : s.files)
+          emitter.emit(ss.name);
+        emitter.ring();
+      } public void fail(Throwable t) {
+        emitter.ring(t);
+      }
+    });
 
-	public Emitter<String> list() {
-		final Emitter<String> emitter = new Emitter<String>();
-		stat().promise(new Bell<Stat>() {
-			public void done(Stat s) {
-				for (Stat ss : s.files)
-					emitter.emit(ss.name);
-				emitter.ring();
-			} public void fail(Throwable t) {
-				emitter.ring(t);
-			}
-		});
-		return emitter;
-	}
-	
-	public Bell<Stat> stat() {
-		final Bell<Stat> bell = new Bell<Stat>();
-		final String targetIrodsCollection = (null != path)?(path.toString()):null;
-		initialize().promise(new Bell<IRODSResource>() {
-			public void done() {
-				new Thread(){
-					public void run(){
-						List<Stat> fileList = new ArrayList<Stat>();
-				        List<CollectionAndDataObjectListingEntry> entries = null;
-				        try {
-				        	entries = session.actualCollection.listDataObjectsAndCollectionsUnderPathWithPermissions(targetIrodsCollection);
-				        } catch (org.irods.jargon.core.exception.FileNotFoundException e1) {
-				            e1.printStackTrace();
-				            bell.ring(e1);
-				        } catch (JargonException e1) {
-				            e1.printStackTrace();
-				            bell.ring(e1);
-				        }
-				        Iterator<CollectionAndDataObjectListingEntry> datacursor = entries.iterator();
-				        while(datacursor.hasNext()){
-				        	CollectionAndDataObjectListingEntry entry = datacursor.next();
-				        	Stat fileinfo = new Stat();
-				        	fileList.add(fileinfo);
-				        	switch (entry.getObjectType()){
-				        	case DATA_OBJECT:
-				        		fileinfo.file = true;
-				        		break;
-				        	case COLLECTION:
-				        		fileinfo.dir = true;
-				        		break;
-				        	default:
-				        		break;
-				        	}
-				            fileinfo.name = entry.getNodeLabelDisplayValue();
-				        	fileinfo.size = entry.getDataSize();
-				        	fileinfo.time = entry.getModifiedAt().getTime();
-				        	//System.out.println("owner: " + entry.getOwnerName());
-				        	//fileinfo.setOwner(entry.getOwnerName());
-				            //System.out.println("Ctime: " + entry.getCreatedAt());
-				            //fileinfo.setDate(entry.getCreatedAt().toString());
-				        	
-				            List<UserFilePermission> permissionlist = entry.getUserFilePermission();
-				            fileinfo.perm = permissionlist.toString();
-				        }
-			            Stat rootStat = new Stat(targetIrodsCollection);
-			            rootStat.setFiles(fileList);
-				        if(entries.isEmpty()){
-				        	rootStat.file = true;
-				        }else{
-				        	rootStat.dir = true;
-				        }
-			            bell.ring(rootStat);
-					}
-				}.run();				
-			} public void fail(Throwable t) {
-				bell.ring(t);
-			}
-		});
- 
-        return bell;
-	}
-	
-	 // Create a directory at the end-point, as well as any parent directories.
-	public Bell<IRODSResource> mkdir() {
-		return null;
-	}
+    return emitter;
+  }
+  
+  public Bell<Stat> stat() {
+    return new ThreadBell<Stat>(session.executor) {
+      public Stat run() throws Exception {
+        List<Stat> fileList = new LinkedList<Stat>();
+        List<CollectionAndDataObjectListingEntry> entries = session.actualCollection.
+          listDataObjectsAndCollectionsUnderPathWithPermissions(path.toString());
 
-	// Remove a file or directory.
-	public Bell<IRODSResource> unlink() {
-		return null;
-	}
+        for (CollectionAndDataObjectListingEntry entry : entries) {
+          Stat fileInfo = new Stat();
+          fileList.add(fileInfo);
 
-	
-	/*read*/
-	public IRODSTap tap() {
-	    return new IRODSTap(this);
-	}
-	/*write*/
-	public IRODSSink sink() {
-	    return new IRODSSink(this);
-	}	
-	
+          fileInfo.file = entry.getObjectType() == DATA_OBJECT;
+          fileInfo.dir  = entry.getObjectType() == COLLECTION;
+
+          fileInfo.name = entry.getNodeLabelDisplayValue();
+          fileInfo.size = entry.getDataSize();
+          fileInfo.time = entry.getModifiedAt().getTime();
+          System.out.println(fileInfo.size);
+          List<UserFilePermission> permissionList = entry.getUserFilePermission();
+          fileInfo.perm = permissionList.toString();
+        }
+
+        Stat rootStat = new Stat(path.toString());
+        rootStat.setFiles(fileList);
+
+        rootStat.name = path.name();
+        rootStat.file = entries.isEmpty();
+        rootStat.dir  = !rootStat.file;
+        return rootStat;
+      }
+    }.startOn(initialize());        
+  }
+
+  public Bell mkdir() {
+    // Send mkdir.
+    return null;
+  }
+
+  public Bell delete() {
+    // Send delete.
+    return null;
+  }
+  
+  public IRODSTap tap() { return new IRODSTap(this); }
+
+  public IRODSSink sink() { return new IRODSSink(this); }  
 }
