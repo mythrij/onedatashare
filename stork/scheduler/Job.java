@@ -10,19 +10,13 @@ import stork.module.*;
 import stork.feather.*;
 import static stork.scheduler.JobStatus.*;
 
-// A representation of a transfer job submitted to Stork. The entire
-// state of the job should be stored in the ad representing this job.
-//
-// As transfers progress, update ads will be sent by the underlying
-// transfer code.
-//
-// The following fields can come from the transfer module in an update ad:
-//   bytes_total - the number of bytes to transfer
-//   files_total - the number of files to transfer
-//   bytes_done  - indication that some bytes have been transferred
-//   files_done  - indication that some files have been transferred
-//   complete    - true if success, false if failure
-
+/**
+ * A representation of a transfer job submitted to Stork. The entire state of
+ * the job should be stored in the ad representing this job.
+ *
+ * As transfers progress, update ads will be sent by the underlying transfer
+ * code.
+ */
 public class Job {
   private int job_id = 0;
   private JobStatus status;
@@ -38,12 +32,14 @@ public class Job {
   //private Watch run_timer;
 
   private transient User user;
-  private transient Thread thread;
+  private transient Transfer transfer;
 
-  // Create and enqueue a new job from a user input ad. Don't give this
-  // thing unsanitized user input, because it doesn't filter the user_id.
-  // That should be filtered by the caller.
-  // TODO: Strict filtering and checking.
+  /**
+   * Create and enqueue a new job from a user input ad. Don't give this thing
+   * unsanitized user input, because it doesn't filter the user_id. That
+   * should be filtered by the caller.
+   * TODO: Strict filtering and checking.
+   */
   public static Job create(User user, Ad ad) {
     ad.remove("status", "job_id", "attempts");
     ad.rename("src_url",  "src.url");
@@ -57,14 +53,18 @@ public class Job {
     return j;
   }
 
-  // Gets the job info as an ad, merged with progress ad.
-  // TODO: More proper filtering.
+  /**
+   * Gets the job info as an ad, merged with progress ad.
+   * TODO: More proper filtering.
+   */
   public synchronized Ad getAd() {
     return Ad.marshal(this);
   }
 
-  // Sets the status of the job, updates ad, and adjusts state according to the
-  // status. This can also be used to set a message.
+  /**
+   * Sets the status of the job, updates ad, and adjusts state according to the
+   * status. This can also be used to set a message.
+   */
   public synchronized JobStatus status() {
     return status;
   } public synchronized Job status(JobStatus s) {
@@ -79,12 +79,12 @@ public class Job {
     // Update state.
     switch (status = s) {
       case scheduled:
-        //queue_timer = new Watch(true); break;
+        /*queue_timer = new Watch(true);*/ break;
       case processing:
-        //run_timer = new Watch(true); break;
+        /*run_timer = new Watch(true);*/ break;
       case removed:
-        if (thread != null)
-          thread.interrupt();
+        if (transfer != null)
+          transfer.cancel();
       case failed:
       case complete:
         //queue_timer.stop();
@@ -93,14 +93,17 @@ public class Job {
     } return this;
   }
 
-  // Get/set the job id.
+  /** Get the job id. */
   public synchronized int jobId() {
     return job_id;
-  } public synchronized void jobId(int id) {
+  }
+
+  /** Set the job id. */
+  public synchronized void jobId(int id) {
     job_id = id;
   }
 
-  // Called when the job gets removed from the queue.
+  /** Called when the job gets removed from the queue. */
   public synchronized void remove(String reason) {
     if (isTerminated())
       throw new RuntimeException("The job has already terminated.");
@@ -108,15 +111,17 @@ public class Job {
     status(removed);
   }
 
-  // This will increment the attempts counter, and set the status
-  // back to scheduled. It does not actually put the job back into
-  // the scheduler queue.
+  /**
+   * This will increment the attempts counter, and set the status
+   * back to scheduled. It does not actually put the job back into
+   * the scheduler queue.
+   */
   public synchronized void reschedule() {
     attempts++;
     status(scheduled);
   }
 
-  // Check if the job should be rescheduled.
+  /** Check if the job should be rescheduled. */
   public synchronized boolean shouldReschedule() {
     // If we've failed, don't reschedule.
     if (isTerminated())
@@ -134,13 +139,9 @@ public class Job {
     return true;
   }
 
-  // Run the job and return the status.
-  public JobStatus process() {
-    run();
-    return status;
-  }
-
-  // Return whether or not the job has terminated.
+  /**
+   * Return whether or not the job has terminated.
+   */
   public synchronized boolean isTerminated() {
     switch (status) {
       case failed:
@@ -152,42 +153,34 @@ public class Job {
     }
   }
 
-  // Run the job and watch it to completion.
-  public void run() {
-    // Check that the job is scheduled to run.
-    synchronized (this) {
-      if (status != scheduled) {
-        status(failed, "Trying to run unscheduled job.");
-        return;
-      }
-      status(processing);
-      thread = Thread.currentThread();
-    }
-
-    Resource ss = src.select();
-    Resource ds = dest.select();
-
-    // Establish connections to end-points.
+  /**
+   * Synchronously wait for the job to complete, then return the status.
+   */
+  public JobStatus waitFor() {
     try {
-      // If options were given, marshal them into the sessions.
-      if (options != null) {
-        options.unmarshal(ss);
-        options.unmarshal(ds);
-      }
-
-      doTransfer(ss, ds);
-    } catch (CancellationException e) {
-      status(removed);
-    } finally {
-      thread = null;
-    }
+      transfer.onStop().sync();
+    } catch (Exception e) { }
+    return status();
   }
 
-  // Do the transfer using the given sessions.
-  private void doTransfer(final Resource ss, final Resource ds) {
-    URI su = src.uri;
-    URI du = dest.uri;
-
-    //ss.select(su).sendTo(ds.select(du));
+  /**
+   * Start the transfer between the specified resources.
+   */
+  public synchronized void start() {
+    if (status != scheduled) {
+      status(failed, "Trying to run unscheduled job.");
+    } else {
+      status(processing);
+      transfer = src.select().transferTo(dest.select());
+      transfer.start();
+      transfer.onStop().new Promise() {
+        public void done() {
+          status(complete);
+        } public void fail(Throwable t) {
+          status(failed, t.getMessage());
+          transfer = null;
+        }
+      };
+    }
   }
 }

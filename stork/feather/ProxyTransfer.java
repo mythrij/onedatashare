@@ -14,9 +14,6 @@ import stork.feather.util.*;
 public class ProxyTransfer<S extends Resource<?,S>, D extends Resource<?,D>>
 extends Transfer<S,D> {
   private LinkedList<Pending> queue = new LinkedList<Pending>();
-  private Time timer;
-  private Progress progress = new Progress();
-  private Throughput throughput = new Throughput();
   
   // A pending transfer and a bell to ring when it starts.
   private static class Pending {
@@ -43,25 +40,10 @@ extends Transfer<S,D> {
    */
   public ProxyTransfer(S source, D destination) {
     super(source, destination);
-    starter.ring();
-  }
 
-  protected Bell start() {
-    System.out.println("Transfer starting...");
-    timer = new Time();
-    return transfer(Path.ROOT);
-  }
-
-  protected void stop() {
-    timer.stop();
-    System.out.println("Transfer complete.");
-    System.out.println("Total:  "+progress);
-    System.out.println("Avg.Th: "+progress.rate(timer));
-  }
-
-  protected void fail(Path path, Throwable t) {
-    System.out.println("Transfer failed! "+path);
-    t.printStackTrace();
+    onStart().new Promise() {
+      public void done() { transfer(Path.ROOT); }
+    };
   }
 
   // Check if we're able to start a data transfer according to the configured
@@ -79,9 +61,7 @@ extends Transfer<S,D> {
   // Check if the transfer is complete. If there are no more pending tasks,
   // declare the transfer to be complete.
   private synchronized void checkIfComplete() {
-    if (pendingTasks() <= 0) {
-      stopper.ring();
-    }
+    if (pendingTasks() <= 0) stop();
   }
 
   // Transfer a resource given its path, and return a bell that rings when the
@@ -96,7 +76,6 @@ extends Transfer<S,D> {
       return transfer0(path).new Promise() {
         public void fail(Throwable t) {
           transferEnded(path);
-          ProxyTransfer.this.fail(path, t);
         }
       };
     } catch (Exception e) {
@@ -153,14 +132,13 @@ extends Transfer<S,D> {
       protected Bell start() throws Exception {
         return super.start();
       } protected Bell drain(Slice slice) throws Exception {
-        progress.add(slice.length());
-        throughput.update(slice.length());
+        addProgress(slice.length());
         return super.drain(slice);
       } protected void finish() {
         super.finish();
         transferEnded(path);
       } protected void finish(Exception e) {
-        fail(path, e);
+        stop(e);
       }
     }).attach(destination.select(path).sink()).tap().start();
   }
@@ -198,16 +176,5 @@ extends Transfer<S,D> {
     listings.remove(path);
     popTransfers();
     checkIfComplete();
-  }
-
-  { printDebug(); }
-
-  private void printDebug() {
-    Bell.timerBell(1).new Promise() {
-      public void done() {
-        System.out.println("Throughput: "+throughput);
-        printDebug();
-      }
-    };
   }
 }

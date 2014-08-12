@@ -40,13 +40,13 @@ public class LocalSession extends Session<LocalSession,LocalResource> {
   }
 
   public static void main(String[] args) {
-    String sp = args.length > 0 ? args[0] : "/home/bwross/test";
+    String sp = args.length > 0 ? args[0] : "/home/bwross";
     final Path path = Path.create(sp);
     final LocalResource s = new LocalSession(path).root();
     final HexDumpResource d = new HexDumpResource();
 
     Transfer t = s.transferTo(d);
-    t.starter.ring();
+    t.start();
     t.onStop().new Promise() {
       public void always() {
         s.session.close();

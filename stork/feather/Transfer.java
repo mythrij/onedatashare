@@ -1,5 +1,9 @@
 package stork.feather;
 
+import java.util.concurrent.*;
+
+import stork.feather.util.*;
+
 /**
  * A handle on the state of a data transfer. This class contains methods for
  * controlling data flow and monitoring data throughput. This is the base class
@@ -16,6 +20,35 @@ public abstract class Transfer<S extends Resource, D extends Resource> {
   public final S source;
   public final D destination;
 
+  private Time timer;
+  private Progress progress = new Progress();
+  private Throughput throughput = new Throughput();
+
+  private boolean startCalled = false;
+  private final Bell onStart = new Bell() {
+    public void done() {
+      System.out.println("Transfer starting...");
+      if (!Transfer.this.isDone())
+        timer = new Time(); 
+    } public void fail(Throwable t) {
+      onStop.ring(t);
+    }
+  };
+  private final Bell onStop = new Bell() {
+    public void done() {
+      if (timer != null) timer.stop();
+      System.out.println("Transfer complete.");
+      System.out.println("Total:  "+progress);
+      System.out.println("Avg.Th: "+progress.rate(timer));
+    } public void fail(Throwable t) {
+      if (timer != null) timer.stop();
+      System.out.println("Transfer failed!");
+      t.printStackTrace();
+    } public void always() {
+      onStart.cancel();
+    }
+  };
+
   /**
    * Create a {@code Transfer} from {@code source} to {@code destination}.
    *
@@ -27,26 +60,6 @@ public abstract class Transfer<S extends Resource, D extends Resource> {
     this.destination = destination;
   }
 
-  /** Ring this {@code Bell} to start the transfer. */
-  public final Bell starter = new Bell() {
-    public void done() {
-      try {
-        start();
-      } catch (Throwable t) {
-        stopper.ring(t);
-      }
-    } public void fail(Throwable t) {
-      stopper.ring(t);
-    }
-  };
-
-  /** Ring this {@code Bell} to stop the transfer. */
-  public final Bell stopper = new Bell() {
-    public void always() { stop(); }
-  };
-
-  // If we get paused, a bell will be placed here to resume the transfer.
-  private Bell<Transfer<S,D>> pauseBell;
 
   /** Get the source {@code Resource}. */
   public final S source() { return source; }
@@ -54,30 +67,49 @@ public abstract class Transfer<S extends Resource, D extends Resource> {
   /** Get the destination {@code Resource}. */
   public final D destination() { return destination; }
 
-  /**
-   * Called when this {@code Transfer} is started. This method may return a
-   * {@code Bell} which will ring when the {@code Transfer} is ready, or {@code
-   * null} to indicate that it is ready immediately.
-   * <p/>
-   * Exceptions thrown here or through the returned {@code Bell} will cause the
-   * {@code Transfer} to be stopped.
-   * <p/>
-   * No other transfer methods will be called until this method has completed
-   * and the returned {@code Bell}, if non-{@code null}, has rung. This method
-   * will be called at most once.
-   *
-   * @return A {@code Bell} which will ring when the {@code Transfer} has
-   * started, or {@code null} if it is ready immediately.
-   * @throws Exception if the {@code Transfer} cannot start.
-   */
-  protected Bell start() throws Exception { return null; }
+  /** Start the transfer. */
+  public final synchronized void start() { onStart.ring(); }
 
   /**
-   * This is called when the {@code Transfer} has been terminated. Once
-   * stopped, the transfer cannot be started again. This may be called before
-   * {@link #start()} if the transfer is canceled before it starts.
+   * Start this transfer when {@code bell} rings.
+   *
+   * @param bell a {@code Bell} whoses ringing indicates the transfer should
+   * start. If {@code Bell} fails, the transfer fails with the same {@code
+   * Throwable}.
    */
-  protected void stop() { }
+  public final void startOn(Bell bell) { bell.promise(onStart); }
+
+  /** Stop the transfer. */
+  public final void stop() { onStop.ring(); }
+
+  /**
+   * Fail the transfer with the given reason. Subclasses should call {@code
+   * super.stop()} when the transfer has completed.
+   *
+   * @param reason a {@code Throwable} indicating the reason the transfer
+   * failed.
+   */
+  public final void stop(Throwable reason) { onStop.ring(reason); }
+
+  /**
+   * Cancel the transfer. This is equivalent to failing the transfer with a
+   * {@code CancellationException}.
+   */
+  public final void cancel() { stop(new CancellationException()); }
+
+  /**
+   * Stop this transfer when {@code bell} rings.
+   *
+   * @param bell a {@code Bell} whoses ringing indicates the transfer should
+   * stop. If {@code Bell} fails, the transfer fails with the same {@code
+   * Throwable}.
+   */
+  public final void stopOn(Bell bell) {
+    bell.new Promise() {
+      public void done() { start(); }
+      public void fail(Throwable t) { stop(t); }
+    };
+  }
 
   /**
    * Pause the transfer temporarily. {@code resume()} should be called to
@@ -92,28 +124,15 @@ public abstract class Transfer<S extends Resource, D extends Resource> {
    */
   protected void resume() { }
 
-  /**
-   * Check if this {@code Transfer} has not been started nor stopped.
-   *
-   * @return {@code true} if the transfer is unstarted; {@code false}
-   * otherwise.
-   */
-  public final boolean unstarted() {
-    return !starter.isDone();
-  }
-
-  /**
-   * Check if this {@code Transfer} is in the process of starting.
-   *
-   * @return {@code true} if the transfer is starting; {@code false} otherwise.
-   */
-  public final boolean starting() {
-    return starter.isDone();
-  }
-
   /** Check if the transfer is complete. */
   public final boolean isDone() {
-    return stopper.isDone();
+    return onStop.isDone();
+  }
+
+  /** Used by subclasses to note progress. */
+  protected final void addProgress(long size) {
+    progress.add(size);
+    throughput.update(size);
   }
 
   /**
@@ -148,7 +167,7 @@ public abstract class Transfer<S extends Resource, D extends Resource> {
    * @return A {@code Bell} which rings when the {@code Transfer} starts.
    */
   public final Bell<Transfer<S,D>> onStart() {
-    return starter.as(this);
+    return onStart.as(this);
   }
 
   /**
@@ -157,6 +176,6 @@ public abstract class Transfer<S extends Resource, D extends Resource> {
    * @return A {@code Bell} which rings when the {@code Transfer} stops.
    */
   public final Bell<Transfer<S,D>> onStop() {
-    return stopper.as(this);
+    return onStop.as(this);
   }
 }

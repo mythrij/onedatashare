@@ -110,8 +110,9 @@ public class Scheduler {
     public void execute(Job job) {
       Log.info("Pulled job from queue: "+job);
 
-      // Run the job then check the return status.
-      switch (job.process()) {
+      job.start();
+
+      switch (job.waitFor()) {
         // If a job is still processing, something weird happened.
         case processing:
           throw new RuntimeException("job still processing after completion");
