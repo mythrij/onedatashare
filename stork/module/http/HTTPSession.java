@@ -28,7 +28,7 @@ public class HTTPSession extends Session<HTTPSession, HTTPResource> {
     workGroup = new NioEventLoopGroup();
   }
 
-  public HTTPResource select(Path path) {		
+  public HTTPResource select(Path path) {   
     HTTPResource resource = new HTTPResource(this, path);
 
     return resource;
@@ -57,12 +57,12 @@ public class HTTPSession extends Session<HTTPSession, HTTPResource> {
   }
 
   public static void main(String[] args) throws InterruptedException, ExecutionException {
-    //URI u = URI.create("http://www.indeed.com");	// Test 'keep-alive' connection
+    //URI u = URI.create("http://www.indeed.com");  // Test 'keep-alive' connection
     Path p1 = Path.create("l-Rochester,-NY-jobs.html");
     Path p2 = Path.create("l-Buffalo,-NY-jobs.html");
-    //URI u = URI.create("http://www.nytimes.com");	// Test 'close' connection
-    //URI u = URI.create("http://bing.co");	// Test host 'moved' fault
-    URI u = URI.create("http://www.microsoft.com");	// Test path 'moved' fault
+    //URI u = URI.create("http://www.nytimes.com"); // Test 'close' connection
+    //URI u = URI.create("http://bing.co"); // Test host 'moved' fault
+    URI u = URI.create("http://www.microsoft.com"); // Test path 'moved' fault
     Path p3 = Path.create("pages/national/index.html");
     Path p4 = Path.create("pages/nyregion/index.html");
     Path p5 = Path.create("");
@@ -81,7 +81,7 @@ public class HTTPSession extends Session<HTTPSession, HTTPResource> {
 
     // FTP demo
     //FTPResource dest = new FTPModule().select(
-    //	URI.create("ftp://didclab-ws8.cse.buffalo.edu/index.html")
+    //  URI.create("ftp://didclab-ws8.cse.buffalo.edu/index.html")
     //);
     //dest.initialize().sync();
     //s.select(p3).tap().attach(dest.sink()).tap().start().sync();
