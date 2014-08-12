@@ -182,6 +182,40 @@ public class Slice {
    * @return A string representation describing this slice.
    */
   public String toString() {
-    return ByteBufUtil.hexDump(buffer);
+    int w = 16;
+    StringBuilder main = new StringBuilder();
+    StringBuilder line = new StringBuilder();
+    StringBuilder ascii = new StringBuilder();
+    long off = (offset < 0) ? 0 : offset;
+    int count = 0;
+    for (byte b : asBytes()) {
+      char c = (char) (b&0xFF);
+      line.append(String.format("%02x", (int)c));
+      ascii.append(
+        (Character.isISOControl(c)) ? '.' :
+        (Character.isSpaceChar(c))  ? ' ' : (char) (b&0xFF)
+      );
+      if (count == 0) {
+        main.append(String.format("%07x: ", off));
+      } if (count++ % 2 == 1) {
+        line.append(" ");
+      } if (count == w) {
+        off += count;
+        count = 0;
+        main.append(line.toString()).append(" ");
+        main.append(ascii.toString()).append("\n");
+        line.setLength(0);
+        ascii.setLength(0);
+      }
+    }
+
+    // Fill the last line with padding.
+    if (count > 0) {
+      while (count < w)
+        line.append((count++%2==0) ? "  " : "   ");
+      main.append(line.toString()).append(" ").append(ascii.toString());
+    }
+
+    return main.toString();
   }
 }

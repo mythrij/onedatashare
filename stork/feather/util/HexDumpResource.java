@@ -53,13 +53,11 @@ class HexDumpSink extends Sink<HexDumpResource> {
   }
 
   public Bell drain(Slice slice) {
-    ByteBuf buf = slice.asByteBuf();
-    //destination().out.println(buf.toString(io.netty.util.CharsetUtil.UTF_8));
-    //destination().out.println(ByteBufUtil.hexDump(buf));
+    destination().out.println(slice);
     //destination().out.println(slice.length());
     total += slice.length();
     HexDumpResource.throughput.update(slice.length());
-    buf.release();
+    slice.asByteBuf().release();
     return null;
   }
 
