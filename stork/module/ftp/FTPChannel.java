@@ -139,7 +139,6 @@ public class FTPChannel {
       p.addLast("reply_handler", new ReplyHandler());
 
       p.addLast("command_encoder", new CommandEncoder());
-
     }
   }
 

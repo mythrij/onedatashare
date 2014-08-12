@@ -24,7 +24,7 @@ public abstract class StorkInterface {
   }
 
   /**
-   * Automatically determine and create an interface from a URI.
+   * Automatically create an interface from a URI.
    *
    * @return A {@code StorkInterface} listening for connection at endpoint
    * specified by {@code uri}.
@@ -36,8 +36,6 @@ public abstract class StorkInterface {
   public static StorkInterface create(Scheduler scheduler, URI uri) {
     String proto = uri.scheme();
 
-    if (proto == null)  // Hack for standalone scheme names.
-      proto = (uri = URI.create(uri+"://")).scheme();
     if (proto == null)
       throw new RuntimeException("Invalid interface descriptor: "+uri);
     if (proto.equals("tcp"))
