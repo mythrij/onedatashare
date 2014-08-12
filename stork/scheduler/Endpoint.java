@@ -28,7 +28,9 @@ class Endpoint {
       m = mt.byHandle(module);
     else
       m = mt.byProtocol(uri.protocol());
-    return (m == null) ? null : m.select(uri, credential);
+    if (m == null)
+      throw new RuntimeException("Unsupported URI scheme: "+uri.scheme());
+    return m.select(uri, credential);
   }
 
   public boolean equals(Object o) {

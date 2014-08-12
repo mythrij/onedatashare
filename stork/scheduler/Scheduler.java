@@ -5,7 +5,6 @@ import stork.ad.*;
 import stork.cred.*;
 import stork.util.*;
 import stork.feather.*;
-import stork.module.ftp.*;
 import stork.util.*;
 
 import java.io.*;
@@ -111,8 +110,9 @@ public class Scheduler {
     public void execute(Job job) {
       Log.info("Pulled job from queue: "+job);
 
-      // Run the job then check the return status.
-      switch (job.process()) {
+      job.start();
+
+      switch (job.waitFor()) {
         // If a job is still processing, something weird happened.
         case processing:
           throw new RuntimeException("job still processing after completion");
@@ -447,9 +447,10 @@ public class Scheduler {
   public void populateModules() {
     // Load built-in modules.
     // TODO: Automatic discovery for built-in modules.
-    //modules.register(new GridFTPModule());
-    //modules.register(new SFTPModule());
-    modules.register(new FTPModule());
+    modules.register(new stork.module.ftp.FTPModule());
+    modules.register(new stork.module.irods.IRODSModule());
+    modules.register(new stork.module.http.HTTPModule());
+
     if (env.has("libexec"))
       modules.registerDirectory(new File(env.get("libexec")));
 

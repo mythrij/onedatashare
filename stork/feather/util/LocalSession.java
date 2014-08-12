@@ -46,7 +46,7 @@ public class LocalSession extends Session<LocalSession,LocalResource> {
     final HexDumpResource d = new HexDumpResource();
 
     Transfer t = s.transferTo(d);
-    t.starter.ring();
+    t.start();
     t.onStop().new Promise() {
       public void always() {
         s.session.close();
