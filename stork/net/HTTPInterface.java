@@ -30,7 +30,7 @@ import stork.scheduler.*;
 /**
  * A basic HTTP interface to tie the scheduler into the HTTP server.
  */
-public class HTTPInterface extends StorkInterface {
+public class HTTPInterface extends BaseTCPInterface {
   private final String host;
   private final int port;
 
@@ -38,7 +38,7 @@ public class HTTPInterface extends StorkInterface {
     new HashMap<URI, HTTPInterface>();
 
   public HTTPInterface(Scheduler s, URI uri) {
-    super(s);
+    super(s, uri);
 
     host = (uri.host() != null) ? uri.host() : "localhost";
     port = uri.port();
@@ -177,9 +177,14 @@ public class HTTPInterface extends StorkInterface {
     }
   }
 
-  public void init(Channel ch, ChannelPipeline pl) {
+  public void init(SocketChannel ch) {
+    ChannelPipeline pl = ch.pipeline();
     pl.addLast(new HttpServerCodec());
     pl.addLast(new HttpContentCompressor());
     pl.addLast(new HTTPAdEncoder());
+  }
+
+  public int port(URI uri) {
+    return uri.port() > 0 ? uri.port() : 80;
   }
 }

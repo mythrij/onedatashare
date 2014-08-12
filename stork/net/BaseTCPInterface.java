@@ -40,9 +40,9 @@ public abstract class BaseTCPInterface extends StorkInterface {
   private SocketAddress initChannel() {
     ServerBootstrap sb = new ServerBootstrap();
     sb.channel(NioServerSocketChannel.class);
-    sb.group(acceptor, new NioEventLoopGroup());
-    sb.childHandler(new ChannelInitializer<ServerSocketChannel>() {
-      protected void initChannel(ServerSocketChannel ch) {
+    sb.group(acceptor);
+    sb.childHandler(new ChannelInitializer<SocketChannel>() {
+      protected void initChannel(SocketChannel ch) {
         BaseTCPInterface.this.init(ch);
       }
     });
@@ -86,12 +86,12 @@ public abstract class BaseTCPInterface extends StorkInterface {
   public abstract int port(URI uri);
 
   /**
-   * Initialize the {@code ServerChannel} created for this interface. This
+   * Initialize the {@code SocketChannel} created for this interface. This
    * initialization method should attach handlers which eventually call {@link
    * #issueRequest(Ad)} and attach callbacks to the request to write the
    * response back to the requestor.
    *
-   * @param channel the {@code ServerChannel} to initialize.
+   * @param channel the {@code SocketChannel} to initialize.
    */
-  protected abstract void init(ServerChannel channel);
+  protected abstract void init(SocketChannel channel);
 }
