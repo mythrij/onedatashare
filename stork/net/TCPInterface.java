@@ -25,7 +25,7 @@ public class TCPInterface extends BaseTCPInterface {
     this.uri = uri;
   }
 
-  public String address() { return uri.host(); }
+  public String address() { return uri.host()+":"+port(uri); }
 
   public String name() { return "TCP"; }
 

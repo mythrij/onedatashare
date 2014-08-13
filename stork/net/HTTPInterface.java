@@ -30,7 +30,7 @@ import stork.scheduler.*;
 /**
  * A basic HTTP interface to tie the scheduler into the HTTP server.
  */
-public class HTTPInterface extends BaseTCPInterface {
+public class HTTPInterface extends StorkInterface {
   private final String host;
   private final int port;
 
@@ -38,7 +38,7 @@ public class HTTPInterface extends BaseTCPInterface {
     new HashMap<URI, HTTPInterface>();
 
   public HTTPInterface(Scheduler s, URI uri) {
-    super(s, uri);
+    super(s);
 
     host = (uri.host() != null) ? uri.host() : "localhost";
     port = uri.port();
@@ -60,16 +60,22 @@ public class HTTPInterface extends BaseTCPInterface {
 
   // Issue the request and relay the response to the client.
   private void handleRequest(final HTTPRequest request) {
+    final HTTPBody body = request.root();
+    body.contentType = "application/json; charset=UTF-8";
+
     issueRequest(requestToAd(request)).new Promise() {
       public void done(Request sr) {
         sr.new As<Ad>() {
           public Ad convert(Object o) {
             return Ad.marshal(o);
           } public void done(Ad ad) {
-            // Write the request back to the requestor.
-            Pipes.tapFromString(ad).attach(request.root().sink());
+            Tap tap = Pipes.tapFromString(ad);
+            tap.attach(body.sink());
+            tap.start();
           } public void fail(Throwable t) {
-            //Taps.fromError(t).attach(request.root().sink());
+            Tap tap = Pipes.tapFromString(errorToAd(t));
+            tap.attach(body.sink());
+            tap.start();
           }
         };
       }
@@ -81,6 +87,7 @@ public class HTTPInterface extends BaseTCPInterface {
     Bell<Ad> bell = new Bell<Ad>();
 
     String command = req.uri.path().name();
+
     // Make sure the command exists and supports the method.
     Scheduler.Handler handler = handler(command);
     if (handler == null)
@@ -175,16 +182,5 @@ public class HTTPInterface extends BaseTCPInterface {
         r.headers().set(CONTENT_TYPE, "text/plain");
       } out.add(r);
     }
-  }
-
-  public void init(SocketChannel ch) {
-    ChannelPipeline pl = ch.pipeline();
-    pl.addLast(new HttpServerCodec());
-    pl.addLast(new HttpContentCompressor());
-    pl.addLast(new HTTPAdEncoder());
-  }
-
-  public int port(URI uri) {
-    return uri.port() > 0 ? uri.port() : 80;
   }
 }

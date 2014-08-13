@@ -72,6 +72,7 @@ public final class Resources {
   public static Resource fromSlice(final Slice slice) {
     final Stat stat = new Stat();
     stat.file = true;
+    stat.time = Time.now();
     stat.size = (slice != null) ? slice.length() : 0;
 
     if (slice.offset() > 0)
@@ -81,7 +82,7 @@ public final class Resources {
       public Resource select(Path path) {
         return new Resource(this, path) {
           public Bell<Stat> stat() {
-            return new Bell<Stat>().ring(stat);
+            return new Bell<Stat>(stat);
           } public Tap tap() {
             return Pipes.tapFromSlice(this, slice);
           }
