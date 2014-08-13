@@ -75,21 +75,20 @@ public class HTTPBody extends Resource<HTTPRequest,HTTPBody> {
 
     // If this is the root, send a header through Netty.
     public Bell start() {
-      if (!source().path.isRoot())  // Sigh browsers...
+      if (!destination().path.isRoot())  // Sigh browsers...
         throw new RuntimeException("Cannot send multiple files.");
       return generateHeader(source()).new As<HTTPBody>() {
         public HTTPBody convert(HttpResponse o) {
           session.toNetty(o);
           return HTTPBody.this;
-        } public HTTPBody convert(Throwable t) throws Throwable {
-          session.toNetty(errorToHttpMessage(t));
-          throw t;
         }
       };
     }
 
     public Bell drain(Slice slice) {
-      return session.toNetty(new DefaultHttpContent(slice.asByteBuf()));
+      ByteBuf buf = slice.asByteBuf();
+      buf.retain();
+      return session.toNetty(new DefaultHttpContent(buf));
     }
 
     public void finish() {
@@ -112,6 +111,8 @@ public class HTTPBody extends Resource<HTTPRequest,HTTPBody> {
         System.out.println(stat);
         r.headers().set(CONTENT_TYPE, contentType);
         return r;
+      } public HttpResponse convert(Throwable t) throws Throwable {
+        return errorToHttpMessage(t);
       }
     };
   }
@@ -119,7 +120,7 @@ public class HTTPBody extends Resource<HTTPRequest,HTTPBody> {
   /**
    * Create an HTTP response for a throwable.
    */
-  private HttpMessage errorToHttpMessage(Throwable t) {
+  private HttpResponse errorToHttpMessage(Throwable t) {
     String message = StorkInterface.errorToAd(t).get("message");
     ByteBuf b = Unpooled.copiedBuffer(message.getBytes());
     FullHttpResponse r = new DefaultFullHttpResponse(

@@ -109,7 +109,8 @@ public class HTTPInterface extends StorkInterface {
     if (!req.hasBody())
       bell.ring(ad);
     else
-      handleRequestBody(ad, req).promise(bell);
+      bell.ring(ad);
+      //FIXME handleRequestBody(ad, req).promise(bell);
     return bell;
   }
 

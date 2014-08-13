@@ -443,6 +443,16 @@ public class Scheduler {
     }
   }
 
+  // Handles retrieving resources.
+  class StorkGetHandler extends Handler {
+    public Bell handle(Request req) {
+      throw new RuntimeException("TODO");
+    }
+
+    public boolean affectsState() { return true; }
+    public boolean overrideResponse() { return true; }
+  }
+
   // Iterate over libexec directory and add transfer modules to list.
   public void populateModules() {
     // Load built-in modules.
@@ -711,6 +721,7 @@ public class Scheduler {
     cmd_handlers.put("info", new StorkInfoHandler());
     cmd_handlers.put("user", new StorkUserHandler());
     cmd_handlers.put("cred", new StorkCredHandler());
+    cmd_handlers.put("get", new StorkGetHandler());
 
     // Initialize transfer module set
     modules = ModuleTable.instance();

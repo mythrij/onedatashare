@@ -1,5 +1,7 @@
 package stork;
 
+import java.io.*;
+
 import stork.ad.*;
 import stork.feather.*;
 import stork.net.*;
@@ -50,11 +52,17 @@ public class StorkServer extends Command {
       Log.info("Listening for ", si.name(), " connections on: "+si.address());
     } catch (Exception e) {
       e.printStackTrace();
-      Log.warning("could not create interface: "+e.getMessage());
+      Log.warning("Could not create interface: "+e.getMessage());
     }
 
     // Initialize web server for web documents.
-    //if (web_url != null)
-      //HTTPInterface.register("web", web_url).start();
+    if (web_url != null) {
+      String dir = "web";
+      File root = new File(dir);
+      if (!root.exists() || !root.isDirectory())
+        Log.warning("Could not find "+dir+" directory.");
+      else
+        HTTPServer.createStaticServer(web_url, dir);
+    }
   }
 }

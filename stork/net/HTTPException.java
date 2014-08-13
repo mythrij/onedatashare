@@ -24,6 +24,7 @@ public class HTTPException extends RuntimeException {
     ByteBuf b = Unpooled.copiedBuffer(getMessage().getBytes());
     FullHttpResponse r = new DefaultFullHttpResponse(HTTP_1_1, status, b);
     r.headers().set(CONTENT_TYPE, "text/plain; charset=UTF-8");
+    r.headers().set(CONTENT_LENGTH, b.readableBytes());
     return r;
   }
 }

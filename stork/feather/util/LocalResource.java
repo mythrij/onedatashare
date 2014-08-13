@@ -82,13 +82,14 @@ public class LocalResource extends Resource<LocalSession,LocalResource> {
   }
 
   public Bell<Stat> stat() {
+    final Throwable throwable = new RuntimeException();
     return new ThreadBell<Stat>(session.executor) {
       { string = path().toString(); }
       public Stat run() {
         File file = file();
 
         if (!file.exists())
-          throw new RuntimeException("Resource does not exist: "+file);
+          throw new RuntimeException("Resource does not exist: "+file, throwable);
 
         Stat stat = new Stat(file.getName());
         stat.size = file.length();
@@ -147,18 +148,6 @@ class LocalTap extends Tap<LocalResource> {
   private long offset = 0, remaining = 0;
   private long chunkSize = 4096;
 
-  // Small hack to take advantage of NIO features.
-  private WritableByteChannel nioToFeather = new WritableByteChannel() {
-    public int write(ByteBuffer buffer) {
-      Slice slice = new Slice(buffer);
-      pause = drain(slice);
-      return slice.length();
-    }
-
-    public void close() { }
-    public boolean isOpen() { return true; }
-  };
-
   // State of the current transfer.
   public LocalTap(LocalResource root) { super(root); }
 
@@ -183,9 +172,18 @@ class LocalTap extends Tap<LocalResource> {
         return remaining > 0;
       } public void body() throws Exception {
         long len = remaining < chunkSize ? remaining : chunkSize;
-        len = channel.transferTo(offset, len, nioToFeather);
-        offset += len;
-        remaining -= len;
+        ByteBuffer buffer = ByteBuffer.allocate((int) len);
+        len = channel.read(buffer);
+
+        if (len >= 0) {
+          buffer.rewind();
+          Slice slice = new Slice(buffer);
+          pause = drain(slice);
+          offset += len;
+          remaining -= len;
+        } else {
+          remaining = 0;
+        }
       } public void always() {
         finish();
       }
