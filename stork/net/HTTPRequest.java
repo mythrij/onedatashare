@@ -44,6 +44,11 @@ public abstract class HTTPRequest extends Session<HTTPRequest,HTTPBody> {
   /** Send something back to Netty. */
   public abstract Bell toNetty(HttpObject obj);
 
+  /** Send an error to the requestor. */
+  public void sendError(int code) {
+    toNetty(new HTTPException(code).toHttpMessage());
+  }
+
   /** Total size of the request. */
   public long size() {
     try {

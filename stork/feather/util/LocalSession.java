@@ -27,7 +27,7 @@ public class LocalSession extends Session<LocalSession,LocalResource> {
 
   /** Create a {@code LocalSession} at {@code path}. */
   public LocalSession(Path path) {
-    super(URI.create("file:"+path));
+    super(URI.EMPTY.scheme("file").path(path));
     this.path = path;
   }
 

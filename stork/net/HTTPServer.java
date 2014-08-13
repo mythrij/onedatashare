@@ -24,10 +24,12 @@ import static io.netty.handler.codec.http.HttpVersion.*;
 import static io.netty.handler.codec.http.HttpMethod.*;
 
 import stork.ad.*;
-import stork.feather.Bell;
+import stork.feather.*;
+import stork.feather.util.*;
 import stork.feather.URI;
 import stork.feather.Path;
 import stork.scheduler.*;
+import stork.util.*;
 
 /**
  * A simple prefix routing HTTP server utility integrated with Feather. This
@@ -115,6 +117,46 @@ public class HTTPServer {
   }
 
   /**
+   * Create a web server that will serve static files from a local directory.
+   */
+  public static Route createStaticServer(URI uri, String root) {
+    Path path = Path.DOT.appendLiteral(root);
+    final LocalSession local = new LocalSession(path);
+
+    Log.info("Serving static web files from "+root+" directory at "+uri);
+
+    return new Route(uri, "GET") {
+      public void handle(HTTPRequest request) {
+        trySend(request, request.uri.path());
+      }
+
+      private void trySend(final HTTPRequest request, final Path path) {
+        final LocalResource file = local.select(path);
+
+        file.stat().new Promise() {
+          public void done(Stat s) {
+            if (s.dir && !path.name().equals("index.html")) {
+              trySend(request, path.append("index.html"));
+            } else if (s.file) {
+              HTTPBody body = request.root();
+              body.contentType = MimeTypeMap.forFile(path.name());
+              if (body.contentType == null)
+                body.contentType = "text/plain";
+              Tap tap = file.tap();
+              tap.attach(body.sink());
+              tap.start();
+            } else {
+              request.sendError(404);
+            }
+          } public void fail(Throwable t) {
+            request.sendError(404);
+          }
+        };
+      }
+    };
+  }
+
+  /**
    * Returns the first matched route. This first checks for a route for the
    * given method and path. If a route cannot be found, it checks for a route
    * for the wildcard (null) method and the path. If a route still cannot be
@@ -172,20 +214,17 @@ public class HTTPServer {
 
         // Run the requested path through the router.
         Route route = route(head.getMethod(), uri.path());
-        System.out.println("Got: "+uri);
         if (route == null)
           throw new HTTPException(NOT_FOUND);
-        System.out.println("Rt:  "+route);
-
-        request = new HTTPRequest(head) {
-          public Bell toNetty(HttpObject o) {
-            ctx.writeAndFlush(o);
-            return pauseBell;
-          }
-        };
 
         // Pass to route handler.
-        route.handle(request);
+        route.handle(request = new HTTPRequest(head) {
+          public synchronized Bell toNetty(HttpObject o) {
+            ctx.channel().writeAndFlush(o);
+            System.out.println(o);
+            return pauseBell;
+          }
+        });
 
         done = (request.size() <= 0);
       }
@@ -205,8 +244,10 @@ public class HTTPServer {
 
       // Finalize the request and prepare for next request.
       if (done) {
-        request.close();
+        if (request.version() == HTTP_1_0)
+          request.close();
         request = null;
+        ctx.writeAndFlush(new DefaultLastHttpContent());
       }
     }
 
