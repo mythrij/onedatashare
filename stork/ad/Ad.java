@@ -718,12 +718,11 @@ public class Ad implements Serializable {
     return this;
   }
 
-  // Represent this ad in some kind of nice format. I guess the ClassAd
-  // format is easier on the eyes, so let's use that.
+  // Represent this ad in as a JSON string.
   public synchronized String toString(boolean pretty) {
-    return toClassAd(pretty);
+    return toJSON(pretty);
   } public synchronized String toString() {
-    return toClassAd(true);
+    return toJSON(true);
   }
 
   // Represent this ad as a JSON string.
