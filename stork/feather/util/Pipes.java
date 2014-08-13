@@ -33,19 +33,18 @@ public final class Pipes {
    * Create a {@code Tap} which emits the given {@code Slice} for the given
    * {@code Resource} {@code root}.
    */
-  public static <R extends Resource<?,R>>
-  Tap<R> tapFromSlice(R root, Slice slice) {
-    final Slice s = slice;
-    return new Tap<R>(root) {
+  public static Tap tapFromSlice(Resource root, final Slice slice) {
+    return new Tap(root) {
       public Bell start(Bell bell) {
         return bell.new Promise() {
           public void done() {
-            if (s != null) drain(s);
+            if (slice != null)
+              drain(slice);
             finish();
+          } public void fail(Throwable t) {
+            finish(t);
           }
         };
-      } public void pause(Bell bell) {
-        // Just no-op for now...
       }
     };
   }
@@ -77,7 +76,7 @@ public final class Pipes {
     CharBuffer cb = CharBuffer.wrap(object.toString());
     ByteBufAllocator allo = UnpooledByteBufAllocator.DEFAULT;
     ByteBuf bb = ByteBufUtil.encodeString(allo, cb, charset);
-    return Resources.fromSlice(new Slice(bb)).tap();
+    return tapFromSlice(new Slice(bb));
   }
 
   /**

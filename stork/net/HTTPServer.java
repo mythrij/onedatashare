@@ -64,8 +64,8 @@ public class HTTPServer {
     ServerBootstrap sb = new ServerBootstrap();
     sb.channel(NioServerSocketChannel.class);
     sb.group(new NioEventLoopGroup());
-    sb.childHandler(new ChannelInitializer<ServerSocketChannel>() {
-      protected void initChannel(ServerSocketChannel ch) {
+    sb.childHandler(new ChannelInitializer<SocketChannel>() {
+      protected void initChannel(SocketChannel ch) {
         ChannelPipeline pl = ch.pipeline();
         pl.addLast(new HttpServerCodec());
         pl.addLast(new RequestHandler());
@@ -172,18 +172,28 @@ public class HTTPServer {
 
         // Run the requested path through the router.
         Route route = route(head.getMethod(), uri.path());
+        System.out.println("Got: "+uri);
         if (route == null)
           throw new HTTPException(NOT_FOUND);
+        System.out.println("Rt:  "+route);
 
         request = new HTTPRequest(head) {
           public Bell toNetty(HttpObject o) {
-            ctx.write(o);
+            ctx.writeAndFlush(o);
             return pauseBell;
           }
         };
 
+        // Pass to route handler.
+        route.handle(request);
+
         done = (request.size() <= 0);
       }
+
+      // If there was a problem, anything up to the next request should be
+      // ignored.
+      if (request == null)
+        return;
 
       // Handle request content.
       if (msg instanceof HttpContent) {
@@ -206,7 +216,6 @@ public class HTTPServer {
     }
 
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable t) {
-      t = t.getCause();
       t.printStackTrace();
       HTTPException he = (t instanceof HTTPException) ?
         (HTTPException) t : new HTTPException(INTERNAL_SERVER_ERROR);

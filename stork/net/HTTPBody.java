@@ -33,6 +33,7 @@ import stork.scheduler.*;
  */
 public class HTTPBody extends Resource<HTTPRequest,HTTPBody> {
   protected URI uri;
+  public String contentType = "application/octet-stream";
 
   /** Create an HTTPBody from the given HTTP request. */
   public HTTPBody(HTTPRequest req) {
@@ -76,7 +77,7 @@ public class HTTPBody extends Resource<HTTPRequest,HTTPBody> {
     public Bell start() {
       if (!source().path.isRoot())  // Sigh browsers...
         throw new RuntimeException("Cannot send multiple files.");
-      return generateHeader(destination()).new As<HTTPBody>() {
+      return generateHeader(source()).new As<HTTPBody>() {
         public HTTPBody convert(HttpResponse o) {
           session.toNetty(o);
           return HTTPBody.this;
@@ -108,7 +109,8 @@ public class HTTPBody extends Resource<HTTPRequest,HTTPBody> {
           return new DefaultFullHttpResponse(session.version(), NO_CONTENT);
         HttpResponse r = new DefaultHttpResponse(session.version(), OK);
         r.headers().set(CONTENT_LENGTH, stat.size);
-        r.headers().set(CONTENT_TYPE, "application/octet-stream");
+        System.out.println(stat);
+        r.headers().set(CONTENT_TYPE, contentType);
         return r;
       }
     };
