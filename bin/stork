@@ -16,7 +16,7 @@
 #   STORK_PID      The Stork server PID file location.
 #                  Default: $STORK_HOME/stork.pid
 
-CLASS=stork.Stork
+CLASS=stork.core.Main
 PROG=`basename $0`
 
 PROGDIR=$(readlink -f "$0")

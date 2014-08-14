@@ -1,6 +1,6 @@
-package stork.client;
+package stork.core.client;
 
-import stork.*;
+import stork.core.*;
 import stork.ad.*;
 import stork.util.*;
 import stork.feather.util.*;
@@ -19,12 +19,12 @@ public class StorkQ extends StorkClient {
     args = new String[] { "[option...] [status] [job_id...]" };
     desc = new String[] {
       "This command can be used to query a Stork server for information "+
-        "about jobs in queue.", "Specifying status allows filtering "+
-        "of results based on job status, and may be any one of the " +
-        "following values: pending (default), all, done, scheduled, "+
-        "processing, removed, failed, or complete.", "The job id, of "+
-        "which there may be more than one, may be either an integer or "+
-        "a range of the form: m[-n][,range] (e.g. 1-4,7,10-13)"
+      "about jobs in queue.", "Specifying status allows filtering "+
+      "of results based on job status, and may be any one of the " +
+      "following values: pending (default), all, done, scheduled, "+
+      "processing, removed, failed, or complete.", "The job id, of "+
+      "which there may be more than one, may be either an integer or "+
+      "a range of the form: m[-n][,range] (e.g. 1-4,7,10-13)"
     };
     add('c', "count", "print only the number of results");
     add('n', "limit", "retrieve up to N results")
@@ -150,17 +150,17 @@ public class StorkQ extends StorkClient {
 
     // Check if there was an error.
     if (ad.isMap()) {
-      if (ad.has("error"))
-        throw new RuntimeException(ad.get("error"));
-      throw new RuntimeException("unexpected reply format");
+      if (ad.has("message"))
+        throw new RuntimeException(ad.get("message"));
+      throw new RuntimeException("Unexpected reply: "+ad);
     }
 
     // Print all the job ads. TODO: Better formatting.
-    if (!raw) {
+    if (!raw && ad.size() > 0) {
       printTableHeader();
       for (Ad a : ad.getAds())
         formatJobAd(a);
-    } else {
+    } else if (raw) {
       System.out.println(ad);
     }
 

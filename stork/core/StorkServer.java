@@ -1,4 +1,4 @@
-package stork;
+package stork.core;
 
 import java.io.*;
 
@@ -33,15 +33,15 @@ public class StorkServer extends Command {
   }
 
   public void execute(Ad env) {
-    env.unmarshal(Stork.settings);
-    env.addAll(Ad.marshal(Stork.settings));
+    env.unmarshal(Config.global);
+    env.addAll(Ad.marshal(Config.global));
 
     Scheduler s = Scheduler.start(env);
-    URI[] listen = Stork.settings.listen;
-    URI web_url = Stork.settings.web_service_url;
+    URI[] listen = Config.global.listen;
+    URI web_url = Config.global.web_service_url;
 
     if (listen == null || listen.length < 1)
-      listen = new URI[] { Stork.settings.connect };
+      listen = new URI[] { Config.global.connect };
 
     // Initialize API endpoints.
     for (URI u : listen) try {

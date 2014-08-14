@@ -1,6 +1,6 @@
 package stork.scheduler;
 
-import stork.*;
+import stork.core.*;
 import stork.ad.*;
 import stork.cred.*;
 import stork.util.*;
@@ -8,7 +8,6 @@ import stork.feather.*;
 import stork.util.*;
 
 import java.io.*;
-//import java.net.*;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -389,7 +388,7 @@ public class Scheduler {
     // know what sort of information is good to send.
     Ad sendServerInfo(Request req) {
       Ad ad = new Ad();
-      ad.put("version", Stork.version());
+      ad.put("version", Main.version());
       ad.put("commands", new Ad(cmd_handlers.keySet()));
       return ad;
     }

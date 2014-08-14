@@ -3,4 +3,4 @@
  * with a Stork server to start transfer, list file metadata, among other
  * things.
  */
-package stork.client;
+package stork.core.client;

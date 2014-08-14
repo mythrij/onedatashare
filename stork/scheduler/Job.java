@@ -3,7 +3,7 @@ package stork.scheduler;
 import java.util.*;
 import java.util.concurrent.*;
 
-import stork.*;
+import stork.core.*;
 import stork.ad.*;
 import stork.util.*;
 import stork.module.*;
@@ -132,7 +132,7 @@ public class Job {
       return false;
 
     // Check for configured max attempts.
-    int max = Stork.settings.max_attempts;
+    int max = Config.global.max_attempts;
     if (max > 0 && attempts >= max)
       return false;
 

@@ -1,6 +1,6 @@
 package stork.scheduler;
 
-import stork.Stork;
+import stork.core.*;
 import stork.ad.*;
 import stork.feather.*;
 import stork.cred.*;
@@ -145,9 +145,9 @@ public class User {
   // Add a URL to a user's history. Keep the history limited to the
   // configured maximum.
   public synchronized void addHistory(URI u) {
-    if (!isAnonymous() && Stork.settings.max_history > 0) try {
+    if (!isAnonymous() && Config.global.max_history > 0) try {
       history.remove(u);
-      while (history.size() > Stork.settings.max_history)
+      while (history.size() > Config.global.max_history)
         history.removeLast();
       history.addFirst(u);
     } catch (Exception e) {

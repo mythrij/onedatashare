@@ -1,11 +1,11 @@
-package stork.client;
+package stork.core.client;
 
 import java.io.*;
 import java.net.*;
 import java.util.*;
 import java.text.*;
 
-import stork.*;
+import stork.core.*;
 import stork.ad.*;
 import stork.feather.URI;
 import stork.util.*;
@@ -24,12 +24,12 @@ public abstract class StorkClient extends Command {
   // Execute a command on the connected Stork server.
   public final void execute(Ad env) {
     this.env = env;
-    Socket sock = connect(Stork.settings.connect);
+    Socket sock = connect(Config.global.connect);
     raw = env.getBoolean("raw");
 
     // TODO: Ugh, this is really idiotic here too, deal with it later.
-    env.unmarshal(Stork.settings);
-    env.addAll(Ad.marshal(Stork.settings));
+    env.unmarshal(Config.global);
+    env.addAll(Ad.marshal(Config.global));
 
     try {
       InputStream  is = sock.getInputStream();

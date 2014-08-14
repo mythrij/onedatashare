@@ -1,6 +1,6 @@
-package stork.client;
+package stork.core.client;
 
-import stork.*;
+import stork.core.*;
 import stork.ad.*;
 
 import java.io.*;

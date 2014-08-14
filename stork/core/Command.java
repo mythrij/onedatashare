@@ -1,4 +1,4 @@
-package stork;
+package stork.core;
 
 import stork.util.*;
 import stork.ad.*;
@@ -7,9 +7,10 @@ import static stork.util.StorkUtil.joinWith;
 
 import java.util.*;
 
-// This is the base class for all command line commands, and includes code
-// to handle argument parsing and usage information generation.
-
+/**
+ * This is the base class for all command line commands, and includes code to
+ * handle argument parsing and usage information generation.
+ */
 public abstract class Command {
   protected Command parent;
 
@@ -336,8 +337,7 @@ public abstract class Command {
     return OPT_EXCEPT = new RuntimeException(m);
   }
 
-  // Parse command line arguments and execute the command. Sorry about
-  // the mess.
+  /** Parse command line arguments and execute the command. */
   public void parseAndExecute(String[] args) {
     try {
       parseAndExecuteInner(args);
