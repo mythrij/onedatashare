@@ -205,88 +205,60 @@ public class Ad implements Serializable {
   }
 
   // Look up an object by its key. Handles recursive ad lookups.
-  public synchronized AdObject getObject(Object okey) {
+  public synchronized AdObject getObject(Object key) {
     int i;
     Ad ad = this;
 
-    if (okey == null) {
+    if (key == null) {
       throw new RuntimeException("null key given");
     } if (isEmpty()) {
       // This is so we don't determine the ad type just because of a get.
       return null;
     } if (isList()) {
-      if (okey instanceof Integer) {
-        AdObject o = list().get((Integer)okey);
+      if (key instanceof Integer) {
+        AdObject o = list().get((Integer)key);
         return o;
       } else {
         // Don't choke on an access, just pretend it's not there.
         return null;
       }
     } else {
-      String key = okey.toString();
-      while ((i = key.indexOf('.')) > 0) synchronized (ad) {
-        String k1 = key.substring(0, i);
-        AdObject o = ad.map().get(k1);
-        if (o == null)
-          return null;
-        ad = o.asAd();
-        key = key.substring(i+1);
-      }
-
-      // No more ads to traverse, get value.
-      synchronized (ad) {
-        return ad.map().get(key);
-      }
+      return ad.map().get(key.toString());
     }
   }
 
   // Insertion methods
   // -----------------
-  // Methods for putting values into an ad. Certain primitive types can
-  // be stored as their wrapped equivalents to save space, since they are
-  // still printed in a way that is compatible with the language.
-  // All of these eventually synchronize on putObject.
-  public Ad put(Object k, Object... v) {
-    switch (v.length) {
-      case 0 : return putObject(k);
-      case 1 : return putObject(k, v[0]);
-      default: return putObject(k, new Ad(v));
+  // Methods for putting values into an ad. Certain primitive types can be
+  // stored as their wrapped equivalents to save space, since they are still
+  // printed in a way that is compatible with the language.  All of these
+  // eventually synchronize on putObject.
+  public Ad put(Object key, Object... value) {
+    switch (value.length) {
+      case 0 : return putObject(key);
+      case 1 : return putObject(key, value[0]);
+      default: return putObject(key, new Ad(value));
     }
   }
 
-  // Use this to insert objects in the above methods. This takes care
-  // of validating the key so accidental badness doesn't occur.
+  // Use this to insert objects in the above methods. This takes care of
+  // validating the key so accidental badness doesn't occur.
   synchronized Ad putObject(Object value) {
     if (value instanceof Map.Entry<?,?>) {
       Map.Entry<?,?> e = (Map.Entry<?,?>) value;
       return putObject(e.getKey(), e.getValue());
     } return putObject(null, value);
-  } synchronized Ad putObject(Object okey, Object value) {
+  } synchronized Ad putObject(Object key, Object value) {
     int i;
     Ad ad = this;
 
-    if (okey == null) {
+    if (key == null) {
       list().add(AdObject.wrap(value));
     } else {
-      String key = okey.toString();
-      // Keep traversing ads until we find the ad we need to insert into.
-      while ((i = key.indexOf('.')) > 0) synchronized (ad) {
-        String k1 = key.substring(0, i);
-        AdObject o = ad.map().get(k1);
-        if (o == null)
-          ad.map().put(intern(k1), AdObject.wrap(ad = new Ad()));
-        else 
-          ad = o.asAd();
-        key = key.substring(i+1);
-      }
-      
-      // No more ads to traverse, insert object.
-      synchronized (ad) {
-        if (value != null)
-          ad.map().put(intern(key), AdObject.wrap(value));
-        else
-          ad.map().remove(key);
-      }
+      if (value != null)
+        ad.map().put(intern(key.toString()), AdObject.wrap(value));
+      else
+        ad.map().remove(key.toString());
     } return this;
   }
 
@@ -709,6 +681,16 @@ public class Ad implements Serializable {
     for (AdMember m : new AdType(t).fields())
       set.add(m.name());
     return set.toArray(new String[0]);
+  }
+
+  /** Attempt to reify the type parameters of a class. */
+  public static AdType[] reifyGenerics(Class<?> clazz) {
+    return new AdType(clazz).generics();
+  }
+
+  /** Attempt to reify the type parameters of an object. */
+  public static AdType[] reifyGenerics(Object object) {
+    return reifyGenerics(object.getClass());
   }
 
   // Composition methods

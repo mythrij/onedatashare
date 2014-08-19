@@ -97,7 +97,7 @@ class AdMember extends AdType {
   }
 
   // If this is a constructor, construct a new instance with the arguments.
-  protected Object construct(Object... args) {
+  public Object construct(Object... args) {
     try {
       unlock(); return constructor().newInstance(args);
     } catch (Exception e) {

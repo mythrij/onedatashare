@@ -151,7 +151,7 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
           };
 
         // Otherwise we're doing a data channel listing.
-        else channel.new DataChannel() {
+        else channel.new DataChannel('A') {
           {
             onClose().new Promise() {
               public void always() {
@@ -230,26 +230,26 @@ class FTPTap extends Tap<FTPResource> {
   public FTPTap(FTPResource resource) { super(resource); }
 
   protected Bell start(final Bell bell) {
-    return null;
-    /**
-    return source().initialize().new AsBell<FTPChannel.DataChannel>() {
-      public void then(FTPResource r) {
-        dc = source().session.channel.new DataChannel() {
+    final Bell<Object> returnBell = new Bell<Object>();
+    bell.and(source().initialize()).new Promise() {
+      public void done() {
+        dc = source().session.channel.new DataChannel('I') {
           public Bell init() {
             String path = source().makePath();
             return new Command("RETR", path).expectComplete();
           } public void receive(Slice slice) {  
             pauseUntil(drain(slice));
           }
-        }.startWhen(bell);
+        };
+        dc.start();
+        dc.onConnect().promise(returnBell);
         dc.onClose().new Promise() {
           public void done()            { finish();  }
           public void fail(Throwable t) { finish(t); }
         };
-        return dc.onConnect();
       }
     };
-    */
+    return returnBell;
   }
 }
 
@@ -263,7 +263,7 @@ class FTPSink extends Sink<FTPResource> {
   protected Bell start() {
     return destination().initialize().new AsBell<FTPChannel.DataChannel>() {
       public Bell<FTPChannel.DataChannel> convert(FTPResource r) {
-        dc = destination().session.channel.new DataChannel() {
+        dc = destination().session.channel.new DataChannel('I') {
           public Bell init() {
             String path = destination().makePath();
             return new Command("STOR", path).expectComplete();

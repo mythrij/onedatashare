@@ -45,7 +45,7 @@ public enum JobStatus {
       return Enum.valueOf(JobStatus.class, name.toLowerCase());
     } catch (Exception e) {
       // I guess that's not a real status...
-      throw new RuntimeException("invalid status: "+name);
+      throw new RuntimeException("Invalid status: "+name);
     }
   }
 }

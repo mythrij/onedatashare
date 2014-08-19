@@ -1,6 +1,5 @@
 package stork.cred;
 
-import stork.ad.*;
 import stork.feather.*;
 import stork.scheduler.*;
 import stork.util.*;
@@ -8,35 +7,25 @@ import stork.util.*;
 // An extended Feather credential with additional metadata.
 
 public abstract class StorkCred<O> extends Credential<O> {
-  public final String type;
-  public String name;
+  public String type;
+  public String name = "(unnamed)";
 
-  public StorkCred(String type) {
-    this(null, type);
-  } public StorkCred(String name, String type) {
-    this.name = name;
-    this.type = type;
+  public StorkCred(String type) { this.type = type; }
+
+  public static StorkCred newFromType(String type) {
+    if (type.equals("userinfo"))
+      return new StorkUserinfo();
+    if (type.equals("gss"))
+      return new StorkGSSCred();
+    throw new RuntimeException("Unknown credential type.");
   }
 
-  // Retrieve a credential by UUID.
-  public static StorkCred unmarshal(String uuid) {
-    return Scheduler.instance().creds.getCred(uuid);
-  }
-
-  // Get or set the name.
-  public final String name() {
-    if (name == null)
-      return "(unnamed)";
-    return name;
-  } public StorkCred<O> name(String s) {
-    name = s;
-    return this;
-  }
-
-  // Get an ad suitable for showing to users. It should not include sensitive
-  // information.
-  public Ad getAd() {
-    return new Ad("name", name)
-             .put("type", type);
+  // Get an info object suitable for showing to users. It should not include
+  // sensitive information.
+  public Object getInfo() {
+    return new Object() {
+      String name = StorkCred.this.name;
+      String type = StorkCred.this.type;
+    };
   }
 }

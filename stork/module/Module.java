@@ -58,16 +58,6 @@ public abstract class Module<R extends Resource> {
     return new HashSet<String>(Arrays.asList(s)).toArray(new String[0]);
   }
 
-  /** Look up a transfer module by handle. */
-  public static Module byHandle(String s) {
-    return ModuleTable.instance().byHandle(s);
-  }
-
-  /** Look up a transfer module by protocol. */
-  public static Module byProtocol(String s) {
-    return ModuleTable.instance().byProtocol(s);
-  }
-
   /**
    * Return a handle on the resource identified by a URI.
    *
