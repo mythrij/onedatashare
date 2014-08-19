@@ -4,54 +4,26 @@ import java.util.*;
 import java.util.concurrent.*;
 
 import stork.core.*;
+import stork.core.server.*;
 import stork.ad.*;
 import stork.util.*;
 import stork.module.*;
 import stork.feather.*;
 import static stork.scheduler.JobStatus.*;
 
-/**
- * A representation of a transfer job submitted to Stork. The entire state of
- * the job should be stored in the ad representing this job.
- *
- * As transfers progress, update ads will be sent by the underlying transfer
- * code.
- */
+/** A transfer job. */
 public class Job {
   private int job_id = 0;
   private JobStatus status;
   private Endpoint src, dest;
-  //private TransferProgress progress = new TransferProgress();
 
   private int attempts = 0, max_attempts = 10;
   private String message;
 
   private Ad options;
 
-  //private Watch queue_timer;
-  //private Watch run_timer;
-
   private transient User user;
   private transient Transfer transfer;
-
-  /**
-   * Create and enqueue a new job from a user input ad. Don't give this thing
-   * unsanitized user input, because it doesn't filter the user_id. That
-   * should be filtered by the caller.
-   * TODO: Strict filtering and checking.
-   */
-  public static Job create(User user, Ad ad) {
-    ad.remove("status", "job_id", "attempts");
-    ad.rename("src_url",  "src.url");
-    ad.rename("dest_url", "dest.url");
-
-    Job j = ad.unmarshalAs(Job.class).status(scheduled);
-    j.user = user;
-
-    if (j.src == null || j.dest == null)
-      throw new RuntimeException("src or dest was null");
-    return j;
-  }
 
   /**
    * Gets the job info as an ad, merged with progress ad.

@@ -14,9 +14,11 @@ import stork.feather.util.*;
  * @param <T> the supertype of objects that can ring this {@code Bell}.
  */
 public class Bell<T> implements Future<T> {
-  private Object object;  // May contain T or Throwable.
-  private byte state = 0;  // 0 = unrung, 1 = thenned, 2 = done, 3 = failed
-  private List<Bell<? super T>> promises = Collections.emptyList();
+  private transient Object object;  // May contain T or Throwable.
+  private transient List<Bell<? super T>> promises = Collections.emptyList();
+
+  // State. 0 = unrung, 1 = thenned, 2 = done, 3 = failed
+  private transient byte state = 0;
 
   /** Create an unrung {@code Bell}. */
   public Bell() { }

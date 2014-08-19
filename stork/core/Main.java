@@ -3,9 +3,8 @@ package stork.core;
 import java.util.*;
 
 import stork.ad.*;
-import stork.core.client.*;
+import stork.core.commands.*;
 import stork.feather.*;
-import stork.scheduler.*;
 import stork.util.*;
 
 /**

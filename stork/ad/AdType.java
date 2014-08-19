@@ -6,14 +6,14 @@ import java.util.*;
 // A betterized wrapper around Java reflection types that makes it feel
 // just a bit more classlier.
 
-class AdType {
+public class AdType {
   final transient Type type;
   private transient Class clazz;
   private transient AdType parent;
 
-  protected AdType(Member m) {
+  public AdType(Member m) {
     this(getMemberType(m));
-  } protected AdType(Type t) {
+  } public AdType(Type t) {
     if (t == null)
       throw new NullPointerException();
     type = t;
@@ -109,7 +109,7 @@ class AdType {
 
   // Get the generic parameters of the type. Returns a zero-length array if the
   // type has no generic parameters.
-  protected AdType[] generics() {
+  public AdType[] generics() {
     return wrap(rawGenerics());
   } private Type[] rawGenerics() {
     if (type instanceof ParameterizedType)
@@ -179,7 +179,7 @@ class AdType {
 
   // Get the super class of this type, or null if it's an interface or array
   // type.
-  protected AdType superclass() {
+  public AdType superclass() {
     Type t = rawSuper();
     if (t == null)
       return null;
@@ -248,6 +248,14 @@ class AdType {
     } catch (Exception e) {
       return null;
     }
+  }
+
+  /** Attempt to construct an instance of the wrapped type. */
+  public Object construct(Object... args) {
+    Class[] params = new Class[args.length];
+    for (int i = 0; i < args.length; i++)
+      params[i] = (args[i] != null) ? args[i].getClass() : Object.class;
+    return constructor(params).construct(args);
   }
 
   // Get a method based on the parameter type.

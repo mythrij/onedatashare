@@ -57,8 +57,8 @@ public class FTPSession extends Session<FTPSession, FTPResource> {
         };
       } else if (credential instanceof StorkUserinfo) {
         StorkUserinfo cred = (StorkUserinfo) credential;
-        user = cred.getUser();
-        pass = cred.getPass();
+        user = cred.username;
+        pass = cred.password;
         channel.authorize(user, pass).promise(this);
       } else {
         // Unsupported credential...

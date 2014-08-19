@@ -9,13 +9,13 @@ import stork.util.*;
 /** A class for storing configuration settings. */
 public class Config {
   /** Global configuration. */
-  public static Config global = new Config();
+  public static final Config global = new Config();
 
   public int max_jobs = 10;
   public int max_attempts = 10;
   public int max_history = 10;
 
-  public String libexec = "libexec";
+  //public String libexec = "libexec";
 
   public String state_file = null;
   public int state_save_interval = 120;

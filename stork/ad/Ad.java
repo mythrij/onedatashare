@@ -229,20 +229,20 @@ public class Ad implements Serializable {
 
   // Insertion methods
   // -----------------
-  // Methods for putting values into an ad. Certain primitive types can
-  // be stored as their wrapped equivalents to save space, since they are
-  // still printed in a way that is compatible with the language.
-  // All of these eventually synchronize on putObject.
+  // Methods for putting values into an ad. Certain primitive types can be
+  // stored as their wrapped equivalents to save space, since they are still
+  // printed in a way that is compatible with the language.  All of these
+  // eventually synchronize on putObject.
   public Ad put(Object key, Object... value) {
-    switch (v.length) {
-      case 0 : return putObject(k);
-      case 1 : return putObject(k, v[0]);
-      default: return putObject(k, new Ad(v));
+    switch (value.length) {
+      case 0 : return putObject(key);
+      case 1 : return putObject(key, value[0]);
+      default: return putObject(key, new Ad(value));
     }
   }
 
-  // Use this to insert objects in the above methods. This takes care
-  // of validating the key so accidental badness doesn't occur.
+  // Use this to insert objects in the above methods. This takes care of
+  // validating the key so accidental badness doesn't occur.
   synchronized Ad putObject(Object value) {
     if (value instanceof Map.Entry<?,?>) {
       Map.Entry<?,?> e = (Map.Entry<?,?>) value;
@@ -681,6 +681,16 @@ public class Ad implements Serializable {
     for (AdMember m : new AdType(t).fields())
       set.add(m.name());
     return set.toArray(new String[0]);
+  }
+
+  /** Attempt to reify the type parameters of a class. */
+  public static AdType[] reifyGenerics(Class<?> clazz) {
+    return new AdType(clazz).generics();
+  }
+
+  /** Attempt to reify the type parameters of an object. */
+  public static AdType[] reifyGenerics(Object object) {
+    return reifyGenerics(object.getClass());
   }
 
   // Composition methods
