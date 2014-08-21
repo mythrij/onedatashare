@@ -8,8 +8,18 @@ import stork.util.*;
 
 /** A class for storing configuration settings. */
 public class Config {
+  // Default locations for stork.conf.
+  private static String[] defaultPaths = {
+    System.getenv("STORK_CONFIG"),
+    System.getProperty("stork.config"),
+    System.getProperty("stork.exedir", ".")+"/stork.conf",
+    "./stork.conf",
+    "../stork.conf",
+    "/usr/local/stork/stork.conf"
+  };
+
   /** Global configuration. */
-  public static final Config global = new Config();
+  public static final Config global = loadConfig();
 
   public int max_jobs = 10;
   public int max_attempts = 10;
@@ -28,52 +38,47 @@ public class Config {
 
   public double request_timeout = 5.0;
 
-  // Default locations for stork.conf.
-  private static String[] default_paths = {
-    System.getenv("STORK_CONFIG"),
-    System.getProperty("stork.config"),
-    System.getProperty("stork.exedir", ".")+"/stork.conf",
-    "./stork.conf",
-    "../stork.conf",
-    "/usr/local/stork/stork.conf"
-  };
-
   // Check default paths until we find a readable file. Null if none found.
-  private File defaultConfig() {
-    File f;
-    for (String s : default_paths) if (s != null) {
-      f = checkPath(s);
-      if (f != null) return f;
-    } return null;
+  private static String defaultConfig() {
+    for (String path : defaultPaths)
+      if (path != null && canAccessPath(path)) return path;
+    return null;
   }
 
   // Check that path is readable and return absolutized file, else null.
-  private File checkPath(String path) {
-    File file = new File(path).getAbsoluteFile();
-    return file.canRead() ? file : null;
+  private static boolean canAccessPath(String path) {
+    return new File(path).getAbsoluteFile().canRead();
   }
 
   // Parse config file, where each line is either a comment or an
   // Ad expression which gets merged into the returned ad.
-  private Ad parseConfig(String path) {
-    File file = (path != null) ? checkPath(path) : defaultConfig();
+  private static Config parseConfig(String path) {
+    path = (path != null) ? path : defaultConfig();
+
+    Log.info("Loading config from path: ", path);
 
     // Error checking
-    if (file == null) {
+    if (!canAccessPath(path)) {
       if (path != null)
         throw new RuntimeException("Couldn't open '"+path+"'");
       throw new RuntimeException("STORK_CONFIG not set and "+
               "couldn't find stork.conf in default locations");
-    } else if (!file.canRead()) {
-      Log.warning("Couldn't open config file '"+file+"'");
-      return new Ad();
     }
 
-    return Ad.parse(file, true);
+    return Ad.parse(new File(path), true).unmarshalAs(Config.class);
   }
 
   /** Find the config file, open and parse it, and unmarshal settings. */
-  public void loadConfig(String path) {
-    parseConfig(path).unmarshal(this);
+  public static Config loadConfig(String path) {
+    return parseConfig(path);
+  }
+
+  /** Load the default config file. */
+  public static Config loadConfig() {
+    return parseConfig(null);
+  }
+
+  public String toString() {
+    return Ad.marshal(this).toString();
   }
 }

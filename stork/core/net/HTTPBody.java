@@ -49,7 +49,7 @@ public class HTTPBody extends Resource<HTTPRequest,HTTPBody> {
   /**
    * This will emit the content body as the data for the root resource.
    */
-  private class HTTPTap extends Tap<HTTPBody> {
+  public class HTTPTap extends Tap<HTTPBody> {
     HTTPTap() {
       super(HTTPBody.this);
     }
@@ -58,11 +58,15 @@ public class HTTPBody extends Resource<HTTPRequest,HTTPBody> {
       return bell.new Promise() {
         public void done() {
           session.ready = true;
+          session.read();
         } public void fail() {
           // TODO
         }
       };
     }
+
+    public Bell drain(Slice s) { return super.drain(s); }
+    public void finish() { super.finish(); }
   };
 
   /**
@@ -71,7 +75,7 @@ public class HTTPBody extends Resource<HTTPRequest,HTTPBody> {
    * zipped or sent using some similar archival encoding. We can't use
    * multipart responses because not all browsers support it.
    */
-  private class HTTPSink extends Sink<HTTPBody> {
+  public class HTTPSink extends Sink<HTTPBody> {
     HTTPSink() { super(HTTPBody.this); }
 
     // If this is the root, send a header through Netty.
@@ -174,7 +178,8 @@ public class HTTPBody extends Resource<HTTPRequest,HTTPBody> {
 
   /** This will emit data coming from the client. */
   public Tap<HTTPBody> tap() {
-    return new HTTPTap();
+    session.tap = new HTTPTap();
+    return session.tap;
   }
 
   /** This will send data to the client. */

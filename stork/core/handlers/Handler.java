@@ -23,6 +23,7 @@ public abstract class Handler<R extends Request> {
     r.handler = this;
     r.server = server;
     r.command = command;
+    r.user = server.anonymous;
     return r;
   }
 

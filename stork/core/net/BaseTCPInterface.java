@@ -88,8 +88,8 @@ public abstract class BaseTCPInterface extends StorkInterface {
   /**
    * Initialize the {@code SocketChannel} created for this interface. This
    * initialization method should attach handlers which eventually call {@link
-   * #issueRequest(Ad)} and attach callbacks to the request to write the
-   * response back to the requestor.
+   * StorkInterface#issueRequest(Request)} and attach callbacks to the request
+   * to write the response back to the requestor.
    *
    * @param channel the {@code SocketChannel} to initialize.
    */

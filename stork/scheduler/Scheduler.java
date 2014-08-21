@@ -8,22 +8,19 @@ import stork.util.*;
 import java.util.*;
 import java.util.concurrent.*;
 
-public abstract class Scheduler extends HashMap<Integer,Job> {
-  /** Schedule a job to be run with the given ID. */
-  public Job put(Integer id, Job job) {
-    super.put(id, job);
-    job.jobId(id);
-    schedule(job);
-    return job;
-  }
-
+public abstract class Scheduler extends LinkedList<Job> {
   /** Schedule a job to run. */
-  public Job add(Job job) {
-    return put(size(), job);
+  public boolean add(Job job) {
+    try {
+      schedule(job);
+      return super.add(job);
+    } catch (Exception e) {
+      return false;
+    }
   }
 
   /** Jobs cannot be removed. */
-  public Job remove(Object key) {
+  public boolean remove(Object key) {
     throw new UnsupportedOperationException();
   }
 

@@ -32,7 +32,7 @@ public class StorkSubmit extends StorkClient {
       "ad for.",
 
       "After each job is submitted, submit outputs the job "+
-      "id, assuming it was submitted successfully.",
+      "ID, assuming it was submitted successfully.",
 
       "(Note about x509 proxies: submit will check if "+
       "\"x509_file\" is included in the submit ad, and, if so, "+
@@ -42,14 +42,9 @@ public class StorkSubmit extends StorkClient {
     add('b', "brief", "print only submitted job IDs");
   }
 
-  // Print the submission response ad in a nice way.
-  private void print_response(Ad ad) {
-  }
-
   private boolean parsedArgs = false;
   private boolean echo = true;
 
-  // XXX: Ugh, it feels really gross to read input here.
   public void parseArgs(String[] args) {
     assertArgsLength(args, 0, 2);
 
@@ -57,7 +52,9 @@ public class StorkSubmit extends StorkClient {
     // own ad.
     switch (args.length) {
       case 2:  // src_url and dest_url
-        jobs = new Ad[]{ new Ad("src", args[0]).put("dest", args[1]) };
+        jobs = new Ad[] { new Ad() };
+        jobs[0].put("src",  new Ad("uri", args[0]));
+        jobs[0].put("dest", new Ad("uri", args[1]));
         break;
       case 1:  // From file
         jobs = Ad.parse(new File(args[0]), true).getAds();
@@ -73,7 +70,7 @@ public class StorkSubmit extends StorkClient {
     }
 
     if (jobs.length < 1)
-      throw new RuntimeException("no job ads could be found");
+      throw new RuntimeException("No job ads could be found.");
   }
 
   public Ad fillCommand(Ad ad) {
@@ -91,7 +88,7 @@ public class StorkSubmit extends StorkClient {
       if (proxy.length() > 0)
         ad.put("x509_proxy", proxy);
     } catch (Exception e) {
-      throw new RuntimeException("couldn't open x509_file...", e);
+      throw new RuntimeException("Couldn't open x509_file...", e);
     }
 
     // Print the command sent if we're echoing.

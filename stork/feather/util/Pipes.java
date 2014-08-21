@@ -105,7 +105,7 @@ public final class Pipes {
   }
 
   /**
-   * A {@code Sink} which receives and parses an {@code Ad}.
+   * A {@code Sink} which receives and aggregates {@code Slice}s.
    */
   public static class AggregatorSink extends Sink {
     private Bell<Slice> bell = new Bell<Slice>();
@@ -113,9 +113,7 @@ public final class Pipes {
 
     public AggregatorSink(Resource r) { super(r); }
 
-    public Bell<Slice> bell() {
-      return bell;
-    }
+    public Bell<Slice> bell() { return bell; }
 
     public Bell drain(Slice slice) {
       list.add(slice.asByteBuf());

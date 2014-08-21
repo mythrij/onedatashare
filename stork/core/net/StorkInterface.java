@@ -77,10 +77,10 @@ public abstract class StorkInterface {
       return errorToAd(new NullPointerException());
     } return Ad.marshal(new Object() {
       String type = throwable.getClass().getSimpleName();
-      String message = message(throwable);
+      String error = message(throwable);
 
       String message(Throwable t) {
-        if (t == null) return null;
+        if (t == null) return "(no reason given)";
         String m = t.getLocalizedMessage();
         return m != null ? m : message(t.getCause());
       }

@@ -21,13 +21,20 @@ import stork.util.*;
  * migrations.
  */
 public class Server {
+  /** Configuration for the server. */
   public Config config = new Config();
 
-  public Map<String,User> users = new HashMap<String,User>();
+  /** Users registered with the system. */
+  public Map<String,ServerUser> users = new HashMap<String,ServerUser>();
+
+  // A user that belongs to this server.
+  private class ServerUser extends User {
+    public Server server() { return Server.this; }
+  }
 
   public transient Scheduler scheduler = new Scheduler() {
     protected void schedule(Job job) {
-      System.out.println(job);
+      System.out.println("Got job: "+Ad.marshal(job));
     }
   };
 
@@ -41,15 +48,10 @@ public class Server {
   private transient LinkedBlockingQueue<Request> requests =
     new LinkedBlockingQueue<Request>();
 
-  private transient User anonymous = User.anonymous();
+  public transient User anonymous = new ServerUser();
 
-  // Map of idle sessions, for session reuse.
+  /** Map of idle sessions, for session reuse. */
   public transient SessionCache sessions = new SessionCache();
-
-  /** Pull a request from the queue and schedule it to be handled. */
-  private void pullRequest() {
-    
-  }
 
   /** Get the handler for a command. */
   public Handler handlerFor(String command) {
@@ -68,7 +70,7 @@ public class Server {
   /**
    * Get a request "form" for the given command. A form in this case is just
    * any object with fields that must be filled out, then returned to the
-   * server via the {@link #issueRequest()} method.
+   * server via the {@link #issueRequest(Request)} method.
    */
   public Request getRequestForm(String command) {
     return handlerFor(command).requestForm(command);
@@ -88,8 +90,19 @@ public class Server {
       // This can happen if the queue is full. Which right now it never should
       // be, but who knows.
       Log.warning("Rejecting request: ", Ad.marshal(request));
-      request.ring(new Exception("Rejected request"));
+      request.ring(new Exception("Rejected request."));
     } return request;
+  }
+
+  /** Create a {@link User} and add it to the {@code users} map. */
+  public User createAndInsertUser(Request request) {
+    ServerUser user = createUser(request);
+    users.put(user.email, user);
+    return user;
+  }
+
+  private ServerUser createUser(Request request) {
+    return Ad.marshal(request).unmarshalAs(ServerUser.class);
   }
 
   /** Load server state from a file. */
@@ -130,7 +143,13 @@ public class Server {
     dumpStateThread.kill();
   }
 
+  /** Dump the state of the server to the default save file. */
+  public void dumpState() { dumpStateThread.dumpState(); }
+
   public Server(Config config) {
+    Log.info("Loading server...");
+    Log.info("Server config: ", config);
+
     handlers.put("q", QHandler.class);
     handlers.put("ls", ListHandler.class);
     handlers.put("mkdir", MkdirHandler.class);
@@ -146,7 +165,7 @@ public class Server {
     modules.populate();
 
     dumpStateThread = new DumpStateThread(config, this);
-    dumpStateThread.dumpState();
+    dumpState();
 
     Log.info("Server state: "+Ad.marshal(this));
   }

@@ -15,8 +15,9 @@ public class UserHandler extends Handler<UserRequest> {
       throw new RuntimeException("No action provided.");
     } if (req.action.equals("register")) {
       UserRegistration reg = req.marshalInto(new UserRegistration());
-      User user = reg.createAndInsert();
+      User user = server.createAndInsertUser(reg.validate());
       stork.util.Log.info("Registering user: ", user.email);
+      server.dumpState();
       req.ring(user.getLoginCookie());
     } else if (req.action.equals("login")) {
       UserLogin log = req.marshalInto(new UserLogin());
@@ -43,8 +44,7 @@ class UserRegistration extends Request {
   public String password;
 
   /** Validate and create a new user. */
-  public User create() {
-    // Sanity check (and trim email).
+  public UserRegistration validate() {
     if (email == null || (email = email.trim()).isEmpty())
       throw new RuntimeException("No email address provided.");
     if (password == null || password.isEmpty())
@@ -53,15 +53,7 @@ class UserRegistration extends Request {
       throw new RuntimeException("Password must be "+PASS_LEN+"+ characters.");
     if (server.users.containsKey(User.normalizeEmail(email)))
       throw new RuntimeException("This email is already in use.");
-    User user = new User(email, password);
-    return user;
-  }
-
-  /** Create a new user and insert it into the user map. */
-  public User createAndInsert() {
-    User user = create();
-    server.users.put(user.normalizedEmail(), user);
-    return user;
+    return this;
   }
 }
 

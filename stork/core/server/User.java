@@ -4,6 +4,7 @@ import java.net.IDN;
 import java.security.*;
 import java.util.*;
 
+import stork.ad.*;
 import stork.core.*;
 import stork.cred.*;
 import stork.feather.*;
@@ -14,7 +15,7 @@ import stork.util.*;
  * A registered Stork user. Each user has their own view of the job queue,
  * transfer credential manager, login credentials, and user info.
  */
-public class User {
+public abstract class User {
   public String email;
   public String hash;
   public String salt;
@@ -22,19 +23,28 @@ public class User {
 
   public LinkedList<URI> history;
   public Map<String,StorkCred> credentials;
-  public List<Job> jobs;
+  public List<UserJob> jobs = new LinkedList<UserJob>();
+
+  // A job owned by this user.
+  private class UserJob extends Job {
+    public User user() { return User.this; }
+    public Server server() { return User.this.server(); }
+  }
 
   /** The minimum allowed password length. */
   public static final int PASS_LEN = 6;
 
-  // Create an anonymous user. Only instantiate one of these, and do not
-  // register it in any UserMap.
-  private User() { email = "anonymous"; }
+  /** Create an anonymous user. */
+  public User() { }
 
+  /** Create a user with the given email and password. */
   public User(String email, String password) {
     this.email = email;
     setPassword(password);
   }
+
+  /** Get the server this user belongs to. */
+  public abstract Server server();
 
   /** Check if the given password is correct for this user. */
   public synchronized boolean checkPassword(String password) {
@@ -72,15 +82,8 @@ public class User {
     }
   }
 
-  /** Create an anonymous user. */
-  public static User anonymous() {
-    return new User() {
-      public boolean isAnonymous() { return true; }
-    };
-  }
-
   /** Check if a user is anonymous. */
-  public boolean isAnonymous() { return false; }
+  public boolean isAnonymous() { return email == null; }
 
   /** Normalize an email string for comparison. */
   public static String normalizeEmail(String email) {
@@ -126,5 +129,25 @@ public class User {
     } catch (Exception e) {
       throw new RuntimeException("Couldn't hash password.");
     }
+  }
+
+  /** Create a {@link Job} owned by this user. */
+  public Job createJob(Request job) {
+    return Ad.marshal(job).unmarshalAs(UserJob.class);
+  }
+
+  /** Save a {@link Job} to this {@code User}'s {@code jobs} list. */
+  public Job saveJob(Job job) {
+    if (job instanceof UserJob && job.user() == this)
+      jobs.add((UserJob) job);
+    else
+      jobs.add(Ad.marshal(job).unmarshalAs(UserJob.class));
+    job.jobId(jobs.size());
+    return job;
+  }
+
+  /** Create a {@link Job} and add it to {@code jobs}. */
+  public Job createAndSaveJob(Request job) {
+    return saveJob(createJob(job));
   }
 }

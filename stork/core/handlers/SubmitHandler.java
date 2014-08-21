@@ -10,14 +10,13 @@ public class SubmitHandler extends Handler<JobRequest> {
     req.assertLoggedIn();
     req.assertMayChangeState();
 
-    Job job = req.toJob();
+    req.validate();
 
-    // Schedule the job to execute and add the job to the user context.
-    req.server.scheduler.add(job);
+    Job job = req.user.createJob(req);
 
-    synchronized (req.user) {
-      req.user.jobs.add(job);
-      job.jobId(req.user.jobs.size());
+    if (req.server.scheduler.add(job)) {
+      req.user.saveJob(job);
+      server.dumpState();
     }
 
     req.ring(job);
@@ -27,11 +26,16 @@ public class SubmitHandler extends Handler<JobRequest> {
 class JobRequest extends Request {
   private SubEndpointRequest src, dest;
 
-  // Kind of a hack...
-  private class SubEndpointRequest extends EndpointRequest {{
-    server = JobRequest.this.server;
-    user = JobRequest.this.user;
-  }};
+  // Hack to get around marshalling limitations.
+  private class SubEndpointRequest extends EndpointRequest {
+    public Server server() { return user().server(); }
+    public User user() { return JobRequest.this.user; }
+  };
 
-  public Job toJob() { return null; }
+  // TODO: More validations.
+  public JobRequest validate() {
+    src.validateAs("source");
+    dest.validateAs("destination");
+    return this;
+  }
 }

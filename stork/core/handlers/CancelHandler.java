@@ -34,6 +34,9 @@ public class CancelHandler extends Handler<CancelRequest> {
     Ad ad = new Ad("removed", sdr.toString());
     if (!cdr.isEmpty())
       ad.put("not_removed", cdr.toString());
+
+    server.dumpState();
+
     req.ring(ad);
   }
 }

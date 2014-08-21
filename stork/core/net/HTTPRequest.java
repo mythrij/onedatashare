@@ -15,6 +15,8 @@ public abstract class HTTPRequest extends Session<HTTPRequest,HTTPBody> {
 
   public boolean ready = false;
 
+  public HTTPBody.HTTPTap tap;
+
   public HTTPRequest(HttpRequest netty) {
     super(URI.create(netty.getUri()));
     this.netty = netty;
@@ -29,6 +31,7 @@ public abstract class HTTPRequest extends Session<HTTPRequest,HTTPBody> {
 
   /** Take care of sending data through the right {@code HTTPBody}. */
   public void translate(ByteBuf buffer) {
+    tap.drain(new Slice(buffer));
   }
 
   public boolean isMultipart() {
@@ -43,6 +46,10 @@ public abstract class HTTPRequest extends Session<HTTPRequest,HTTPBody> {
 
   /** Send something back to Netty. */
   public abstract Bell toNetty(HttpObject obj);
+
+  /** Force a read on the underlying socket. */
+  public abstract void read();
+
 
   /** Send an error to the requestor. */
   public void sendError(int code) {
@@ -75,7 +82,7 @@ public abstract class HTTPRequest extends Session<HTTPRequest,HTTPBody> {
   public String type() { return header(CONTENT_TYPE); }
 
   /** Close the transfer. */
-  public void finalize() {
-
+  public void cleanup() {
+    if (tap != null) tap.finish();
   }
 }

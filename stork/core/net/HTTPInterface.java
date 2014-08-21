@@ -96,9 +96,9 @@ public class HTTPInterface extends StorkInterface {
     else
       request.mayChangeState = false;
     if (hr.cookie() != null)
-      cookiesToAd(hr.cookie()).unmarshal(request);
+      request.unmarshalFrom(cookiesToAd(hr.cookie()));
     if (hr.uri.query() != null)
-      queryToAd(hr.uri.query()).unmarshal(request);;
+      request.unmarshalFrom(queryToAd(hr.uri.query()));
     if (!hr.hasBody())
       return new Bell<Request>(request);
     else
@@ -129,10 +129,10 @@ public class HTTPInterface extends StorkInterface {
       return new Bell<Request>(req);
     }
 
-    req.resource.tap().attach(sink).tap().start();
+    hr.root().tap().attach(sink).tap().start();
 
     return bell.new As<Request>() {
-      public Request convert(Ad body) { return body.unmarshal(req); }
+      public Request convert(Ad body) { return req.unmarshalFrom(body); }
     };
   }
 
