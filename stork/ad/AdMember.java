@@ -99,7 +99,10 @@ class AdMember extends AdType {
   // If this is a constructor, construct a new instance with the arguments.
   public Object construct(Object... args) {
     try {
-      unlock(); return constructor().newInstance(args);
+      if (isInner())
+        args = prependOuterInstance(args);
+      unlock();
+      return constructor().newInstance(args);
     } catch (Exception e) {
       throw new RuntimeException(e);
     } finally { lock(); }
