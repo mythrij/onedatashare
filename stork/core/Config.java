@@ -55,7 +55,7 @@ public class Config {
   private static Config parseConfig(String path) {
     path = (path != null) ? path : defaultConfig();
 
-    Log.info("Loading config from path: ", path);
+    //Log.info("Loading config from path: ", path);
 
     // Error checking
     if (!canAccessPath(path)) {

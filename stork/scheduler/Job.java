@@ -3,6 +3,7 @@ package stork.scheduler;
 import java.util.*;
 import java.util.concurrent.*;
 
+import stork.ad.*;
 import stork.core.*;
 import stork.core.server.*;
 import stork.core.handlers.*;
@@ -15,6 +16,12 @@ public abstract class Job {
   private int job_id = 0;
   private JobStatus status;
   private JobEndpointRequest src, dest;
+  private int attempts = 0, max_attempts = 10;
+  private String message;
+
+  private Map<?,?> options;
+
+  private transient Transfer transfer;
 
   private class JobEndpointRequest extends EndpointRequest {
     public Server server() { return Job.this.user().server(); }
@@ -23,15 +30,6 @@ public abstract class Job {
 
   /** The {@code User} this {@code Job} belongs to. */
   public abstract User user();
-
-  private int attempts = 0, max_attempts = 10;
-  private String message;
-
-  private Object options;
-
-  private transient Server server;
-  private transient User user;
-  private transient Transfer transfer;
 
   /**
    * Sets the status of the job, updates ad, and adjusts state according to the
@@ -145,5 +143,9 @@ public abstract class Job {
         }
       };
     }
+  }
+
+  public String toString() {
+    return Ad.marshal(this).toString();
   }
 }

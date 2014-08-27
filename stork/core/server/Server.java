@@ -33,8 +33,13 @@ public class Server {
   }
 
   public transient Scheduler scheduler = new Scheduler() {
+    private transient List<Job> jobs = new LinkedList<Job>();
+
     protected void schedule(Job job) {
-      System.out.println("Got job: "+Ad.marshal(job));
+      jobs.add(job);
+      Log.info("Job scheduled: ", job);
+    } public Job get(int id) {
+      return jobs.get(id);
     }
   };
 
