@@ -8,14 +8,15 @@ import stork.feather.*;
 
 /**
  * A request made to the scheduler. Handlers should provide an instance of a
- * subclass of {@code Request} via the {@link Handler#requestForm()} method
- * containing additional fields the requestor may supply. When the request has
- * been handled, the handler should call {@code ring()} with an optional value
- * that will be marshalled and sent to the requestor to complete the request.
+ * subclass of {@code Request} via the {@link Handler#requestForm(String)}
+ * method containing additional fields the requestor may supply. When the
+ * request has been handled, the handler should call {@code ring()} with an
+ * optional value that will be marshalled and sent to the requestor to complete
+ * the request.
  */
 public abstract class Request extends Bell<Object> {
   /** The command given with the request. */
-  public transient String command;
+  public String command;
 
   /** The handler which will handle this request. */
   public transient Handler handler;
@@ -37,8 +38,7 @@ public abstract class Request extends Bell<Object> {
 
   /** Marshal this request into another request. */
   public <R extends Request> R marshalInto(R request) {
-    Ad ad = Ad.marshal(this);
-    ad.merge(this.ad);
+    Ad ad = Ad.marshal(this).merge(this.ad);
 
     request.command = command;
     request.user = user;
@@ -51,7 +51,9 @@ public abstract class Request extends Bell<Object> {
 
   /** Marshal an object into this request. */
   public Request unmarshalFrom(Object object) {
-    return ad.merge(Ad.marshal(object)).unmarshal(this);
+    ad = ad.merge(Ad.marshal(object));
+    System.out.println(ad);
+    return ad.unmarshal(this);
   }
 
   /** Handle the request. */

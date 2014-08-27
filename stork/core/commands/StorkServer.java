@@ -32,7 +32,7 @@ public class StorkServer extends Command {
   }
 
   public void execute(stork.ad.Ad config) {
-    execute(config.unmarshalAs(Config.class));
+    execute(config.unmarshal(Config.global));
   } public void execute(Config config) {
     Server s = new Server(config);
     URI[] listen = Config.global.listen;

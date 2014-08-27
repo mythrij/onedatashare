@@ -219,8 +219,9 @@ public class HTTPServer {
         route.handle(request = new HTTPRequest(head) {
           public synchronized Bell toNetty(HttpObject o) {
             ctx.channel().writeAndFlush(o);
-            System.out.println(o);
             return pauseBell;
+          } public void read() {
+            ctx.read();
           }
         });
 
@@ -243,7 +244,8 @@ public class HTTPServer {
       // Finalize the request and prepare for next request.
       if (done) {
         if (request.version() == HTTP_1_0)
-          request.close();
+          ctx.close();
+        request.close();
         request = null;
         ctx.writeAndFlush(new DefaultLastHttpContent());
       }

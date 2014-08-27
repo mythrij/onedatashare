@@ -10,6 +10,7 @@ public class AdType {
   final transient Type type;
   private transient Class clazz;
   private transient AdType parent;
+  private Object outer;
 
   public AdType(Member m) {
     this(getMemberType(m));
@@ -215,9 +216,8 @@ public class AdType {
     return fields(false);
   } protected AdMember[] fields(boolean publicOnly) {
     Map<String, AdMember> fm = new HashMap<String, AdMember>();
-    if (publicOnly)
-      fillFields(fm, clazz().getFields());
-    else for (AdType t : supers())
+    fillFields(fm, clazz().getFields());
+    if (!publicOnly) for (AdType t : supers())
       t.fillFields(fm, t.clazz().getDeclaredFields());
     return fm.values().toArray(new AdMember[fm.size()]);
   } private void fillFields(Map<String, AdMember> fm, Field[] fs) {
@@ -240,11 +240,29 @@ public class AdType {
     }
   }
 
+  protected Class[] prependOuterClass(Class... params) {
+    List<Class> list = new LinkedList<Class>();
+    list.add((outer != null) ? outer.getClass() : Object.class);
+    list.addAll(Arrays.asList(params));
+    return list.toArray(new Class[params.length]);
+  }
+
+  protected Object[] prependOuterInstance(Object... args) {
+    List<Object> list = new LinkedList<Object>();
+    list.add(outer);
+    list.addAll(Arrays.asList(args));
+    return list.toArray(new Object[args.length]);
+  }
+
   // Get a constructor for the class based on the parameter type, or null if
   // none exists.
   protected AdMember constructor(Class... params) {
     try {
-      return new AdMember(clazz().getDeclaredConstructor(params));
+      if (isInner())
+        params = prependOuterClass(params);
+      AdMember m = new AdMember(clazz().getDeclaredConstructor(params));
+      m.outer(outer);
+      return m;
     } catch (Exception e) {
       return null;
     }
@@ -252,6 +270,8 @@ public class AdType {
 
   /** Attempt to construct an instance of the wrapped type. */
   public Object construct(Object... args) {
+    if (isInner())
+      args = prependOuterInstance(args);
     Class[] params = new Class[args.length];
     for (int i = 0; i < args.length; i++)
       params[i] = (args[i] != null) ? args[i].getClass() : Object.class;
@@ -306,8 +326,8 @@ public class AdType {
     }
   }
 
-  // Returns whether the type is a non-static inner type and thus requires
-  // an enclosing instance of the parent class.
+  // Returns whether the type is a non-static inner type and thus requires an
+  // enclosing instance of the parent class.
   protected boolean isInner() {
     return clazz().isMemberClass();
   }
@@ -335,6 +355,9 @@ public class AdType {
       if (c == void.class)    return Void.class;
     } return c;
   }
+
+  // Set the reference to an instance of the outer class.
+  public void outer(Object outer) { this.outer = outer; }
 
   // Return a new array instance of this type.
   protected Object asArray(int... dims) {

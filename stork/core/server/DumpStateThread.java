@@ -18,9 +18,10 @@ public class DumpStateThread extends Thread {
   public DumpStateThread(Config config, Object object) {
     super("server dump thread");
     setDaemon(true);
-    this.object = true;
+    this.object = object;
     this.config = config;
     start();
+    Log.info("Starting server state dump thread.");
   }
 
   public void kill() {
@@ -31,14 +32,18 @@ public class DumpStateThread extends Thread {
   public void run() {
     while (!dead) {
       int delay = config.state_save_interval;
-      if (delay < 1) delay = 1;
+      if (delay < 1) {
+        delay = new Config().state_save_interval;
+        Log.warning("state_save_interval must be positive.");
+        Log.warning("Setting state_save_interval to: ", delay, "s");
+      }
 
       // Wait for the delay, then dump the state. Can be interrupted to dump
       // the state early.
       try {
         sleep(delay*1000);
       } catch (Exception e) {
-        // Ignore.
+        // Continue on.
       } if (!dead) {
         internalDumpState();
       }
@@ -78,7 +83,8 @@ public class DumpStateThread extends Thread {
       pw = null;
 
       if (!temp_file.renameTo(state_file))
-        throw new RuntimeException("Could not rename temp file.");
+        throw new RuntimeException("Could not rename temp dump file.");
+      Log.info("Finished dumping server state.");
     } catch (Exception e) {
       Log.warning("Couldn't save state: "+
           state_file+": "+e.getMessage());

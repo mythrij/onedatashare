@@ -6,12 +6,11 @@ import static stork.scheduler.JobStatus.*;
 
 import java.util.*;
 
-// A class for performing queries on collections of jobs.
-
+/** A class for performing queries on collections of jobs. */
 public class JobSearcher {
-  private Collection<Job> jobs;
+  private Collection<? extends Job> jobs;
 
-  public JobSearcher(Collection<Job> jobs) {
+  public JobSearcher(Collection<? extends Job> jobs) {
     this.jobs = jobs;
   }
 

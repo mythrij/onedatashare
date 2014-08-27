@@ -606,6 +606,7 @@ public class Ad implements Serializable {
       }
     } else for (AdMember f : t.fields()) try {
       AdObject ao = getObject(f.name());
+      if (f.isInner()) f.outer(o);
       if (ao != null && !f.ignore()) f.set(o, ao.as(f));
     } catch (Exception e) {
       // Either ad had no such member or it was final and we couldn't set it.
@@ -614,7 +615,7 @@ public class Ad implements Serializable {
     } return o;
   }
 
-  // Construct a new instance of a class and marshal into it.
+  /** Construct a new instance of a class and marshal into it. */
   public <O> O unmarshalAs(Class<O> clazz) {
     return AdObject.wrap(this).as(clazz);
   }

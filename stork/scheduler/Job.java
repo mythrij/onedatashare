@@ -3,35 +3,33 @@ package stork.scheduler;
 import java.util.*;
 import java.util.concurrent.*;
 
+import stork.ad.*;
 import stork.core.*;
 import stork.core.server.*;
-import stork.ad.*;
-import stork.util.*;
-import stork.module.*;
+import stork.core.handlers.*;
 import stork.feather.*;
+
 import static stork.scheduler.JobStatus.*;
 
 /** A transfer job. */
-public class Job {
+public abstract class Job {
   private int job_id = 0;
   private JobStatus status;
-  private Endpoint src, dest;
-
+  private JobEndpointRequest src, dest;
   private int attempts = 0, max_attempts = 10;
   private String message;
 
-  private Ad options;
+  private Map<?,?> options;
 
-  private transient User user;
   private transient Transfer transfer;
 
-  /**
-   * Gets the job info as an ad, merged with progress ad.
-   * TODO: More proper filtering.
-   */
-  public synchronized Ad getAd() {
-    return Ad.marshal(this);
+  private class JobEndpointRequest extends EndpointRequest {
+    public Server server() { return Job.this.user().server(); }
+    public User user() { return Job.this.user(); }
   }
+
+  /** The {@code User} this {@code Job} belongs to. */
+  public abstract User user();
 
   /**
    * Sets the status of the job, updates ad, and adjusts state according to the
@@ -126,16 +124,6 @@ public class Job {
   }
 
   /**
-   * Synchronously wait for the job to complete, then return the status.
-   */
-  public JobStatus waitFor() {
-    try {
-      transfer.onStop().sync();
-    } catch (Exception e) { }
-    return status();
-  }
-
-  /**
    * Start the transfer between the specified resources.
    */
   public synchronized void start() {
@@ -143,7 +131,8 @@ public class Job {
       status(failed, "Trying to run unscheduled job.");
     } else {
       status(processing);
-      transfer = src.select().transferTo(dest.select());
+      transfer =
+        src.resolveAs("source").transferTo(dest.resolveAs("destination"));
       transfer.start();
       transfer.onStop().new Promise() {
         public void done() {
@@ -154,5 +143,9 @@ public class Job {
         }
       };
     }
+  }
+
+  public String toString() {
+    return Ad.marshal(this).toString();
   }
 }
