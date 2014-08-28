@@ -29,6 +29,7 @@ public abstract class Scheduler implements Collection<Job> {
       size++;
       return true;
     } catch (Exception e) {
+      e.printStackTrace();
       return false;
     }
   }

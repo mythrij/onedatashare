@@ -14,6 +14,7 @@ public class SubmitHandler extends Handler<JobRequest> {
 
     Job job = req.user.createJob(req);
 
+    System.out.println(req.server.scheduler.add(job));
     if (req.server.scheduler.add(job)) {
       req.user.saveJob(job);
       server.dumpState();

@@ -46,9 +46,9 @@ public class EndpointRequest extends Request {
     if (credential != null && result.credential == null) throw new
       RuntimeException("Invalid credential for "+name+"endpoint.");
     if (module != null)
-      server().modules.byHandle(module);
+      result.module = server().modules.byHandle(module);
     else
-      server().modules.byProtocol(result.uri.scheme());
+      result.module = server().modules.byProtocol(result.uri.scheme());
     return result;
   }
 

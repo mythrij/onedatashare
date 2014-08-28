@@ -24,8 +24,15 @@ public abstract class Job {
   private transient Transfer transfer;
 
   private class JobEndpointRequest extends EndpointRequest {
+    public JobEndpointRequest() {
+      System.out.println("MADE");
+      new Error().printStackTrace();
+    }
     public Server server() { return Job.this.user().server(); }
-    public User user() { return Job.this.user(); }
+    public User user() {
+      System.out.println(getClass());
+      return Job.this.user();
+    }
   }
 
   /** The {@code User} this {@code Job} belongs to. */

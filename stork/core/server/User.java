@@ -133,15 +133,20 @@ public abstract class User {
 
   /** Create a {@link Job} owned by this user. */
   public Job createJob(Request job) {
-    return Ad.marshal(job).unmarshalAs(UserJob.class);
+    UserJob uj = new UserJob();
+    return Ad.marshal(job).unmarshal(uj);
   }
 
   /** Save a {@link Job} to this {@code User}'s {@code jobs} list. */
   public Job saveJob(Job job) {
-    if (job instanceof UserJob && job.user() == this)
+    if (job instanceof UserJob && job.user() == this) {
       jobs.add((UserJob) job);
-    else
-      jobs.add(Ad.marshal(job).unmarshalAs(UserJob.class));
+    } else {
+      UserJob uj = new UserJob();
+      Ad.marshal(job).unmarshal(uj);
+      job = uj;
+      jobs.add(uj);
+    }
     job.jobId(jobs.size());
     return job;
   }

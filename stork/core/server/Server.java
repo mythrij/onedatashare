@@ -32,16 +32,7 @@ public class Server {
     public Server server() { return Server.this; }
   }
 
-  public transient Scheduler scheduler = new Scheduler() {
-    private transient List<Job> jobs = new LinkedList<Job>();
-
-    protected void schedule(Job job) {
-      jobs.add(job);
-      Log.info("Job scheduled: ", job);
-    } public Job get(int id) {
-      return jobs.get(id);
-    }
-  };
+  public transient Scheduler scheduler = new TestScheduler();
 
   public transient ModuleTable modules = new ModuleTable();
 
