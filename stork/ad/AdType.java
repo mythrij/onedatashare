@@ -242,7 +242,7 @@ public class AdType {
 
   protected Class[] prependOuterClass(Class... params) {
     List<Class> list = new LinkedList<Class>();
-    list.add((outer != null) ? outer.getClass() : Object.class);
+    list.add(owner().clazz());
     list.addAll(Arrays.asList(params));
     return list.toArray(new Class[params.length]);
   }
@@ -258,8 +258,13 @@ public class AdType {
   // none exists.
   protected AdMember constructor(Class... params) {
     try {
-      if (isInner())
+      if (isInner()) {
         params = prependOuterClass(params);
+        if (outer == null) {
+          System.out.println("WARNING: Outer is null! "+this);
+          new Throwable().printStackTrace();
+        }
+      }
       AdMember m = new AdMember(clazz().getDeclaredConstructor(params));
       m.outer(outer);
       return m;
