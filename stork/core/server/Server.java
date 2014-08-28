@@ -15,10 +15,10 @@ import stork.util.*;
 
 /**
  * The internal state of a Stork server. It should be possible to serialize
- * this one object and, in restoring it, recover the entire state of the
- * system. In other words, this class is the root of the state file. This is
- * how the Stork server maintains persistence across restarts and system
- * migrations.
+ * this a {@code Server} object and, in restoring it, recover the entire state
+ * of the system. In other words, a {@code Server} object is the root of the
+ * state file. This is how the Stork server maintains persistence across
+ * restarts and system migrations.
  */
 public class Server {
   /** Configuration for the server. */
@@ -32,7 +32,16 @@ public class Server {
     public Server server() { return Server.this; }
   }
 
-  public transient Scheduler scheduler = new TestScheduler();
+  public transient Scheduler scheduler = new Scheduler() {
+    private transient List<Job> jobs = new ArrayList<Job>();
+
+    public void schedule(Job job) {
+      System.out.println("Got job: "+job);
+      jobs.add(job);
+    } public Job get(int i) {
+      return jobs.get(i);
+    }
+  };
 
   public transient ModuleTable modules = new ModuleTable();
 
@@ -44,7 +53,7 @@ public class Server {
   private transient LinkedBlockingQueue<Request> requests =
     new LinkedBlockingQueue<Request>();
 
-  public transient User anonymous = new ServerUser();
+  public User anonymous = new ServerUser();
 
   /** Map of idle sessions, for session reuse. */
   public transient SessionCache sessions = new SessionCache();
