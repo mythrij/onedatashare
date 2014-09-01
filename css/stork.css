@@ -1,0 +1,297 @@
+html {
+  overflow-y: scroll;
+}
+
+html, body {
+  height: 100%;
+}
+
+* {
+  border: 0 solid #888;
+}
+
+i {
+  font: inherit;
+}
+
+a {
+  cursor: pointer;
+}
+
+table {
+  border-collapse: collapse;
+  border-spacing: 0;
+  table-layout: fixed;
+}
+
+textarea, input, button, select {
+  background: #FFF;
+  color: #333;
+} textarea:focus, input:focus, select {
+  background: #EFF;
+  color: #000;
+}
+
+p {
+  margin: 1em 0;
+  text-align: justify;
+}
+
+.text-justify {
+  text-align: justify;
+}
+
+.collapsing {
+  overflow: hidden;
+}
+
+body {
+  font-family: "Open Sans", sans-serif;
+} h1, h2, h3, h4, h5, h6 {
+  font-family: "Open Sans", sans-serif;
+  font-weight: 300;
+}
+
+.bullet-list li {
+  list-style-type: disc;
+}
+
+.circle-button {
+  padding: 0.2em;
+}
+
+.clearfix {
+  display: block;
+} .clearfix:after {
+  height: 0;
+  display: block;
+  visibility: hidden;
+  clear: both;
+  content: "?";
+}
+
+/* General style classes */
+.center { margin: auto; }
+
+.aleft  { text-align: left; }
+.aright { text-align: right; }
+.acenter { text-align: center; }
+
+.fleft  { float: left; }
+.fright { float: right; }
+
+.fl  { float: left; }
+.fr { float: right; }
+
+.fixed {
+  position: fixed;
+  z-index: 2;
+}
+
+.small { font-size: 80%; }
+.large { font-size: 120%; }
+
+.hfill, .bb {
+  display: block;
+  box-sizing: border-box;
+  -moz-box-sizing: border-box;
+  -ms-box-sizing: border-box;
+  -webkit-box-sizing: border-box;
+  -khtml-box-sizing: border-box;
+} .hfill {
+  width: 100%;
+}
+
+.clipped {
+  overflow: hidden;
+}
+
+.progress {
+  position: relative;
+  background: #333;
+  height: 2em;
+  line-height: 2em;
+  margin: 0;
+}
+
+.progress-bar {
+  z-index: 1;
+  position: absolute;
+}
+
+.progress .progress-text {
+  position: absolute;
+  top: 0;
+  z-index: 2;
+  color: #FFF;
+  text-shadow: 0 1px 2px #000;
+  text-align: center;
+  width: 100%;
+}
+
+.resize-vertical {
+  text-align: center;
+  cursor: s-resize;
+} .resize-vertical:before {
+  content: "\f141";
+  font-family: FontAwesome;
+}
+  
+#noscript {
+  display: block;
+  font-size: 1.2em;
+  font-weight: bold;
+  background: #E30;
+  color: #FFF;
+  text-shadow: 0 1px 2px #000;
+  border-bottom: 1px solid #222;
+} #noscript > div {
+  padding: 0.5em;
+} #noscript b {
+  color: #BDF;
+}
+
+tr.min-cell {
+  height: 1px;
+}
+
+.view.ng-enter {
+  animation: fadeIn 0.2s;
+} .view.ng-leave {
+  animation: fadeOut 0.2s;
+}
+
+#wrapper {
+  height: auto !important;
+  min-height: 100%;
+  margin: 0 auto -4em;
+  padding: 70px 0 8em;
+}
+
+#footer {
+  color: #777;
+  background: #444;
+  height: 4em;
+} #footer > div {
+  font-size: 80%;
+  padding: 1em;
+}
+
+.login-panel {
+  margin: 70px auto;
+}
+
+.welcome {
+  text-align: left;
+} .welcome h1 {
+  font-size: 45px;
+}
+
+#stork-queue .endpoints {
+  padding-left: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+} #stork-queue .endpoints div {
+  white-space: nowrap;
+} #stork-queue .endpoints i {
+  padding: 0 0.5em;
+}
+
+.transfer-wrapper {
+  margin: auto;
+  width: 90%;
+} .transfer-wrapper #left {
+  width: 45%;
+  float: left;
+} .transfer-wrapper #right {
+  width: 45%;
+  float: right;
+}
+
+.uri > div {
+  position: relative;
+} .uri button, .uri input {
+  line-height: 1 !important;
+  height: 2.5em !important;
+} .uri button {
+  display: none;
+  background: transparent;
+  position: absolute;
+  right: 0;
+  top: 0;
+} .uri .changed button {
+  display: inline-block;
+} .uri .changed input {
+  padding-right: 2.5em;
+}
+
+.tree {
+  height: 100%;
+} .tree > div {
+  height: 20em;
+  margin: 0.4em;
+  text-align: left;
+  overflow-y: auto;
+  overflow-x: auto;
+}
+
+#stork-ls .transfer-controls {
+  padding: 10px;
+} #stork-ls .transfer-controls .btn {
+  height: 3em;
+  margin: 10px 0;
+} #stork-ls .transfer-toolbar {
+  padding: 5px;
+} #stork-ls .transfer-toolbar > div {
+  padding: 0;
+} #stork-ls .transfer-toolbar .btn,
+  #stork-ls .transfer-toolbar select {
+  height: 2.5em;
+}
+
+/* Collapsible blocks */
+.panel-collapse-header {
+  cursor: pointer;
+} .panel-collapse-header:before {
+  float: left;
+  padding-right: 0.5em;
+  font-family: FontAwesome;
+  -webkit-font-smoothing: antialiased;
+  font-size: 1.2em;
+  content: "\f13a";
+} .panel-collapsed .collapse {
+  display: none;
+} .panel-collapsed .panel-collapse-header:before {
+  content: "\f138";
+}
+
+/* Bootstrap hacks */
+.pagination {
+  margin: 0;
+}
+
+/* Special UI stuff for logged in users */
+body.logged-out .logged-in {
+  display: none;
+} body.logged-in .logged-out {
+  display: none;
+} 
+
+.modal.in {
+  display: block;
+}
+
+/* For hiding uncompiled AngularJS elements */
+[ng\:cloak], [ng-cloak], [data-ng-cloak], [x-ng-cloak],
+.ng-cloak, .x-ng-cloak {
+  display: none !important;
+}
+
+.wf-loading * {
+  opacity: 0;
+} .wf-active *, .wf-inactive * {
+  -webkit-transition: opacity 0.5s ease-out;
+  -moz-transition: opacity 0.5s ease-out;
+  -o-transition: opacity 0.5s ease-out;
+  transition: opacity 0.5s ease-out;
+}
