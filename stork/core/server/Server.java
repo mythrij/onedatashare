@@ -107,7 +107,7 @@ public class Server {
   }
 
   private ServerUser createUser(Request request) {
-    return Ad.marshal(request).unmarshalAs(ServerUser.class);
+    return Ad.marshal(request).unmarshal(new ServerUser());
   }
 
   /** Load server state from a file. */
