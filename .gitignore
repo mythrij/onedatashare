@@ -1,0 +1,12 @@
+*.class
+*.jar
+*.war
+*.ear
+*.swp
+*.dmp
+*.dap
+doc
+build
+bin/stork_*
+.project
+.classpath
