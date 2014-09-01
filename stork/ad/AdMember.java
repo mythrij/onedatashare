@@ -104,7 +104,7 @@ class AdMember extends AdType {
       unlock();
       return constructor().newInstance(args);
     } catch (Exception e) {
-      throw new RuntimeException(e);
+      throw new RuntimeException("Failed to construct: "+this, e);
     } finally { lock(); }
   }
 

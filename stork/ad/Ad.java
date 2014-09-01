@@ -581,6 +581,7 @@ public class Ad implements Serializable {
   } protected synchronized <O> O unmarshal(O o, AdType t) {
     t = (t != null) ? t : new AdType(o.getClass());
     Class c = t.clazz();
+    AdMember lastField = null;
 
     if (c == Ad.class) {
       ((Ad)o).addAll(this);
@@ -604,13 +605,15 @@ public class Ad implements Serializable {
       } catch (ArrayIndexOutOfBoundsException e) {
         break;
       }
-    } else for (AdMember f : t.fields()) try {
+    } else for (AdMember f : t.fields().values()) try {
+      lastField = f;
       AdObject ao = getObject(f.name());
       if (f.isInner()) f.outer(o);
       if (ao != null && !f.ignore()) f.set(o, ao.as(f));
     } catch (Exception e) {
       // Either ad had no such member or it was final and we couldn't set it.
       // Either way, we don't have to worry about it.
+      System.out.println("Failed to unmarshal: "+lastField);
       e.printStackTrace();
     } return o;
   }
@@ -665,8 +668,10 @@ public class Ad implements Serializable {
         return new Ad((Object[])o);
       } else {
         Ad ad = new Ad();
-        for (AdMember f : t.fields())
+        for (AdMember f : t.fields().values()) {
           if (!f.ignore()) ad.put(f.name(), f.get(o));
+          if (!f.ignore()) System.out.println("Marshalling: "+f);
+        }
         return ad;
       }
     } catch (RuntimeException e) {
@@ -679,7 +684,7 @@ public class Ad implements Serializable {
   // Get the field names of a type as a string array.
   public static String[] fieldsOf(Type t) {
     Set<String> set = new HashSet<String>();
-    for (AdMember m : new AdType(t).fields())
+    for (AdMember m : new AdType(t).fields().values())
       set.add(m.name());
     return set.toArray(new String[0]);
   }

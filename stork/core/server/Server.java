@@ -13,6 +13,8 @@ import stork.module.*;
 import stork.scheduler.*;
 import stork.util.*;
 
+import static stork.core.handlers.UserHandler.UserRegistration;
+
 /**
  * The internal state of a Stork server. It should be possible to serialize
  * this a {@code Server} object and, in restoring it, recover the entire state
@@ -22,13 +24,17 @@ import stork.util.*;
  */
 public class Server {
   /** Configuration for the server. */
-  public Config config = new Config();
+  public transient Config config = new Config();
 
   /** Users registered with the system. */
   public Map<String,ServerUser> users = new HashMap<String,ServerUser>();
 
   // A user that belongs to this server.
   private class ServerUser extends User {
+    public ServerUser() { super(); }
+    public ServerUser(String email, String password) {
+      super(email, password);
+    }
     public Server server() { return Server.this; }
   }
 
@@ -53,7 +59,7 @@ public class Server {
   private transient LinkedBlockingQueue<Request> requests =
     new LinkedBlockingQueue<Request>();
 
-  public User anonymous = new ServerUser();
+  public ServerUser anonymous = new ServerUser();
 
   /** Map of idle sessions, for session reuse. */
   public transient SessionCache sessions = new SessionCache();
@@ -100,14 +106,16 @@ public class Server {
   }
 
   /** Create a {@link User} and add it to the {@code users} map. */
-  public User createAndInsertUser(Request request) {
+  public User createAndInsertUser(UserRegistration request) {
     ServerUser user = createUser(request);
     users.put(user.email, user);
     return user;
   }
 
-  private ServerUser createUser(Request request) {
-    return Ad.marshal(request).unmarshal(new ServerUser());
+  private ServerUser createUser(UserRegistration request) {
+    ServerUser user = new ServerUser(request.email, request.password);
+    Ad.marshal(request).unmarshal(user);
+    return user;
   }
 
   /** Load server state from a file. */
@@ -154,6 +162,9 @@ public class Server {
   public Server(Config config) {
     Log.info("Loading server...");
     Log.info("Server config: ", config);
+
+    if (config.state_file != null)
+      loadServerState(config.state_file);
 
     handlers.put("q", QHandler.class);
     handlers.put("ls", ListHandler.class);
