@@ -1,6 +1,9 @@
-stork
 stork.ad
-stork.client
+stork.core
+stork.core.commands
+stork.core.handlers
+stork.core.net
+stork.core.server
 stork.cred
 stork.feather
 stork.feather.util
@@ -8,7 +11,6 @@ stork.module
 stork.module.ftp
 stork.module.http
 stork.module.irods
-stork.net
 stork.optimizers
 stork.scheduler
 stork.test
