@@ -254,13 +254,8 @@ public class AdType {
   // none exists.
   protected AdMember constructor(Class... params) {
     try {
-      if (isInner()) {
+      if (isInner())
         params = prependOuterClass(params);
-        if (outer == null) {
-          System.out.println("WARNING: Outer is null! "+this);
-          new Throwable().printStackTrace();
-        }
-      }
       AdMember m = new AdMember(clazz().getDeclaredConstructor(params));
       m.outer(outer);
       return m;
