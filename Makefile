@@ -19,7 +19,7 @@ JAVADOC=javadoc
 TAR=tar
 LN=ln
 
-.PHONY: all install clean init release classes pkglist $(PROJECT)_cmds
+.PHONY: all install clean init release classes pkglist $(PROJECT)_cmds doc
 .SUFFIXES: .java .class
 
 # Recursive wildcard function from jgc.org.
