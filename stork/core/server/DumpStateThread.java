@@ -78,6 +78,7 @@ public class DumpStateThread extends Thread {
           ".stork_state", "tmp", state_file.getParentFile());
       pw = new PrintWriter(temp_file, "UTF-8");
 
+      System.out.println(Ad.marshal(object).toJSON());
       pw.print(Ad.marshal(object).toJSON());
       pw.close();
       pw = null;

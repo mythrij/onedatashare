@@ -1,4 +1,4 @@
 [submodule "doc"]
 	path = doc
 	url = git@github.com:didclab/stork.git
-  branch = gh-pages
+	branch = gh-pages

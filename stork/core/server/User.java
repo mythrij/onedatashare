@@ -22,8 +22,8 @@ public abstract class User {
   public boolean validated = true;
 
   public LinkedList<URI> history;
-  public Map<String,StorkCred> credentials;
-  public List<UserJob> jobs = new LinkedList<UserJob>();
+  public HashMap<String,StorkCred> credentials;
+  public LinkedList<UserJob> jobs = new LinkedList<UserJob>();
 
   // A job owned by this user.
   private class UserJob extends Job {

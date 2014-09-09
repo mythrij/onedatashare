@@ -4,6 +4,7 @@
 *.ear
 *.swp
 *.dmp
+*.json
 *.dap
 doc
 build

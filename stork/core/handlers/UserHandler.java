@@ -32,29 +32,30 @@ public class UserHandler extends Handler<UserRequest> {
       throw new RuntimeException("Invalid action.");
     }
   }
+
+  /** A registration request. */
+  public static class UserRegistration extends Request {
+    public String email;
+    public String password;
+
+    /** Validate and create a new user. */
+    public UserRegistration validate() {
+      if (email == null || (email = email.trim()).isEmpty())
+        throw new RuntimeException("No email address provided.");
+      if (password == null || password.isEmpty())
+        throw new RuntimeException("No password provided.");
+      if (password.length() < PASS_LEN)
+        throw new RuntimeException("Password must be "+PASS_LEN+"+ characters.");
+      if (server.users.containsKey(User.normalizeEmail(email)))
+        throw new RuntimeException("This email is already in use.");
+      return this;
+    }
+  }
 }
 
 class UserRequest extends Request {
   String action;
   URI uri;  // Used for history command.
-}
-
-class UserRegistration extends Request {
-  public String email;
-  public String password;
-
-  /** Validate and create a new user. */
-  public UserRegistration validate() {
-    if (email == null || (email = email.trim()).isEmpty())
-      throw new RuntimeException("No email address provided.");
-    if (password == null || password.isEmpty())
-      throw new RuntimeException("No password provided.");
-    if (password.length() < PASS_LEN)
-      throw new RuntimeException("Password must be "+PASS_LEN+"+ characters.");
-    if (server.users.containsKey(User.normalizeEmail(email)))
-      throw new RuntimeException("This email is already in use.");
-    return this;
-  }
 }
 
 class UserLogin extends Request {

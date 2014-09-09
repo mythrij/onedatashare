@@ -210,19 +210,15 @@ public class AdType {
   // Member Reflection
   // -----------------
   // Get the fields from the class as a mapping from their names to their
-  // reflective field objects. XXX: Homonymous but otherwise distinct fields
-  // in superclasses will not be accessible through this.
-  protected AdMember[] fields() {
-    return fields(false);
-  } protected AdMember[] fields(boolean publicOnly) {
-    Map<String, AdMember> fm = new HashMap<String, AdMember>();
-    fillFields(fm, clazz().getFields());
-    if (!publicOnly) for (AdType t : supers())
-      t.fillFields(fm, t.clazz().getDeclaredFields());
-    return fm.values().toArray(new AdMember[fm.size()]);
-  } private void fillFields(Map<String, AdMember> fm, Field[] fs) {
-    for (Field f : fs)
-      fm.put(f.getName(), (AdMember) new AdMember(f).parent(this));
+  // reflective field objects.
+  protected Map<String, AdMember> fields() {
+    Class<?> clazz = clazz();
+    if (clazz.equals(Object.class) || clazz.isInterface())
+      return new HashMap<String, AdMember>();
+    Map<String, AdMember> fields = superclass().fields();
+    for (Field f : clazz.getDeclaredFields())
+      fields.put(f.getName(), (AdMember) new AdMember(f).parent(this));
+    return fields;
   }
 
   // Get a single field.
