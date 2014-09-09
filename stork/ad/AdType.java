@@ -10,7 +10,7 @@ public class AdType {
   final transient Type type;
   private transient Class clazz;
   private transient AdType parent;
-  private Object outer;
+  protected Object outer;
 
   public AdType(Member m) {
     this(getMemberType(m));
@@ -51,12 +51,23 @@ public class AdType {
     }
   }
 
+  // Really kind of an ugly hacky way to handle interfaces. This whole thing is
+  // pending a rewrite, so it's okay for now I guess.
+  private Map<Type,Class> canonicalizationMap = new HashMap<Type,Class>() {{
+    put(Map.class, HashMap.class);
+    put(List.class, LinkedList.class);
+    put(Collection.class, LinkedList.class);
+    put(Set.class, HashSet.class);
+  }};
+
   // Type Reification
   // ----------------
   // Resolve the raw class type, if possible. Otherwise null.
   protected Class clazz() {
     return (clazz != null) ? clazz : (clazz = clazz(type));
   } private Class clazz(Type type) {
+    if (canonicalizationMap.containsKey(type))
+      return canonicalizationMap.get(type);
     if (type instanceof Class)
       return (Class) type;
     if (type instanceof ParameterizedType)

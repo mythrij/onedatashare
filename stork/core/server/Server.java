@@ -13,7 +13,7 @@ import stork.module.*;
 import stork.scheduler.*;
 import stork.util.*;
 
-import static stork.core.handlers.UserHandler.UserRegistration;
+import static stork.core.handlers.UserHandler.*;
 
 /**
  * The internal state of a Stork server. It should be possible to serialize
@@ -106,7 +106,7 @@ public class Server {
   }
 
   /** Create a {@link User} and add it to the {@code users} map. */
-  public User createAndInsertUser(UserRegistration request) {
+  public ServerUser createAndInsertUser(UserRegistration request) {
     ServerUser user = createUser(request);
     users.put(user.email, user);
     return user;
@@ -139,21 +139,6 @@ public class Server {
       Log.warning("Couldn't load server state: "+e.getMessage());
       e.printStackTrace();
     } return this;
-  }
-
-  /** Restart a server from saved state. */
-  public synchronized void restart(String file) {
-    restart(new File(file));
-  }
-
-  /** Restart a server from saved state. */
-  public synchronized void restart(File file) {
-    kill();
-    loadServerState(file);
-  }
-
-  private void kill() {
-    dumpStateThread.kill();
   }
 
   /** Dump the state of the server to the default save file. */
