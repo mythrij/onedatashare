@@ -613,8 +613,6 @@ public class Ad implements Serializable {
     } catch (Exception e) {
       // Either ad had no such member or it was final and we couldn't set it.
       // Either way, we don't have to worry about it.
-      System.out.println("Failed to unmarshal: "+lastField);
-      e.printStackTrace();
     } return o;
   }
 
@@ -670,7 +668,6 @@ public class Ad implements Serializable {
         Ad ad = new Ad();
         for (AdMember f : t.fields().values()) {
           if (!f.ignore()) ad.put(f.name(), f.get(o));
-          if (!f.ignore()) System.out.println("Marshalling: "+f);
         }
         return ad;
       }
