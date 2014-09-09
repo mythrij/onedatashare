@@ -581,23 +581,26 @@ public class Ad implements Serializable {
   } protected synchronized <O> O unmarshal(O o, AdType t) {
     t = (t != null) ? t : new AdType(o.getClass());
     Class c = t.clazz();
-    AdMember lastField = null;
 
     if (c == Ad.class) {
       ((Ad)o).addAll(this);
     } else if (o instanceof Map) {
       AdType kt = t.generics()[0];
       AdType vt = t.generics()[1];
+      if (kt.isInner()) kt.outer(t.outer);
+      if (vt.isInner()) vt.outer(t.outer);
       Map<String,AdObject> map = map(false);
       if (map != null) for (Map.Entry<String, AdObject> e : map.entrySet())
         ((Map)o).put(e.getKey(), e.getValue().as(vt));
     } else if (o instanceof Collection) {
       AdType vt = t.generics()[0];
+      if (vt.isInner()) vt.outer(t.outer);
       List<AdObject> list = list(false);
       if (list != null) for (AdObject v : list)
         ((Collection)o).add(v.as(vt));
     } else if (t.isArray()) {
       AdType vt = t.component();
+      if (vt.isInner()) vt.outer(o);
       int i = 0;
       List<AdObject> list = list(false);
       if (list != null) for (AdObject v : list) try {
@@ -606,7 +609,6 @@ public class Ad implements Serializable {
         break;
       }
     } else for (AdMember f : t.fields().values()) try {
-      lastField = f;
       AdObject ao = getObject(f.name());
       if (f.isInner()) f.outer(o);
       if (ao != null && !f.ignore()) f.set(o, ao.as(f));
@@ -722,32 +724,5 @@ public class Ad implements Serializable {
     return (pretty ? AdPrinter.CLASSAD : AdPrinter.CLASSAD_MIN).toString(this);
   } public synchronized String toClassAd() {
     return toClassAd(true);
-  }
-
-  private static class TestClass {
-    LinkedList<String> sl;
-    LinkedList<Integer> il;
-    String[] sa;
-    int[] ia;
-  }
-
-  // Testing method.
-  public static void main(String args[]) {
-    class Blah { public int i = 100; }
-    new Marshaller<Blah>(Blah.class) {
-      public Blah unmarshal(Ad ad) {
-        Blah b = new Blah();
-        b.i = ad.getInt("a", b.i);
-        return b;
-      }
-      public Object marshal(final Blah b) {
-        return new Object() {
-          int j = b.i;
-        };
-      }
-    };
-    System.out.println(Ad.marshal(new Blah()));
-    Blah b = new Ad("a", 50).unmarshalAs(Blah.class);
-    System.out.println(Ad.marshal(b));
   }
 }
