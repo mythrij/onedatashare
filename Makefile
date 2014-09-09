@@ -19,7 +19,8 @@ JAVADOC=javadoc
 TAR=tar
 LN=ln
 
-.PHONY: all install clean init release classes pkglist $(PROJECT)_cmds doc
+.PHONY: all install clean release classes pkglist $(PROJECT)_cmds \
+	doc help
 .SUFFIXES: .java .class
 
 # Recursive wildcard function from jgc.org.
@@ -99,3 +100,13 @@ test: all
 
 clean:
 	$(RM) -rf build lib/$(PROJECT)-*.jar $(PROJECT).tar.gz bin/$(PROJECT)_*
+
+help:
+	@echo 'Possible targets:'
+	@echo
+	@echo '  all     - Build everything. This is the default target.'
+	@echo '  clean   - Clean up after a build.'
+	@echo '  doc     - Build documentation.'
+	@echo '  pkglist - List all Java packages in the project.'
+	@echo '  test    - Run test cases.'
+	@echo '  help    - Display this help information.'
