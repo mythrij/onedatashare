@@ -5,31 +5,30 @@ import java.util.concurrent.*;
 
 import stork.*;
 import stork.ad.*;
+import stork.core.*;
 import stork.util.*;
 import stork.module.*;
 import stork.feather.*;
 import static stork.scheduler.JobStatus.*;
 
-class Endpoint {
-  public URI uri;
-  public Credential credential;
-  public String module;
+public abstract class Endpoint {
+  private URI uri;
+  private String credential;
+  private String module;
 
-  public Endpoint(String uri) {
-    this.uri = URI.create(uri);
-  }
+  protected abstract Map<String,Credential> credentials();
+  protected abstract ModuleTable modules();
 
   public Resource select() {
     if (uri == null)
       throw new RuntimeException("No URI provided.");
-    ModuleTable mt = ModuleTable.instance();
-    Module m = null;
+    ModuleTable mt = modules();
+    Module m;
     if (module != null)
       m = mt.byHandle(module);
     else
-      m = mt.byProtocol(uri.protocol());
-    if (m == null)
-      throw new RuntimeException("Unsupported URI scheme: "+uri.scheme());
+      m = mt.byProtocol(uri.scheme());
+    Credential credential = credentials().get(this.credential);
     return m.select(uri, credential);
   }
 

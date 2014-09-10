@@ -6,25 +6,13 @@ import stork.feather.*;
 // A username and password credential.
 
 public class StorkUserinfo extends StorkCred<String[]> {
-  public String[] userpass;
+  public String username;
+  public String password;
 
-  public StorkUserinfo(Ad ad) {
-    this(ad.get("user"), ad.get("pass"));
-  } public StorkUserinfo(String user, String pass) {
-    this(new String[] { user, pass });
-  } public StorkUserinfo(String userinfo) {
-    this(split(userinfo));
-  } private StorkUserinfo(String[] ui) {
-    super("userinfo");
-    userpass = ui;
-  }
-
-  public String type() {
-    return "userinfo";
-  }
+  public StorkUserinfo() { super("userinfo"); }
 
   public String[] data() {
-    return userpass;
+    return new String[] { username, password };
   }
 
   // Return a user/pass pair from a colon-separated string.
@@ -37,13 +25,5 @@ public class StorkUserinfo extends StorkCred<String[]> {
       u = (i < 0) ? ui : ui.substring(0,i);
       p = (i < 0) ? "" : ui.substring(i+1);
     } return new String[] { u, p };
-  }
-
-  public String getUser() {
-    return userpass[0];
-  }
-
-  public String getPass() {
-    return userpass[1];
   }
 }

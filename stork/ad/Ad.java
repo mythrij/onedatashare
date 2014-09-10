@@ -205,88 +205,60 @@ public class Ad implements Serializable {
   }
 
   // Look up an object by its key. Handles recursive ad lookups.
-  public synchronized AdObject getObject(Object okey) {
+  public synchronized AdObject getObject(Object key) {
     int i;
     Ad ad = this;
 
-    if (okey == null) {
+    if (key == null) {
       throw new RuntimeException("null key given");
     } if (isEmpty()) {
       // This is so we don't determine the ad type just because of a get.
       return null;
     } if (isList()) {
-      if (okey instanceof Integer) {
-        AdObject o = list().get((Integer)okey);
+      if (key instanceof Integer) {
+        AdObject o = list().get((Integer)key);
         return o;
       } else {
         // Don't choke on an access, just pretend it's not there.
         return null;
       }
     } else {
-      String key = okey.toString();
-      while ((i = key.indexOf('.')) > 0) synchronized (ad) {
-        String k1 = key.substring(0, i);
-        AdObject o = ad.map().get(k1);
-        if (o == null)
-          return null;
-        ad = o.asAd();
-        key = key.substring(i+1);
-      }
-
-      // No more ads to traverse, get value.
-      synchronized (ad) {
-        return ad.map().get(key);
-      }
+      return ad.map().get(key.toString());
     }
   }
 
   // Insertion methods
   // -----------------
-  // Methods for putting values into an ad. Certain primitive types can
-  // be stored as their wrapped equivalents to save space, since they are
-  // still printed in a way that is compatible with the language.
-  // All of these eventually synchronize on putObject.
-  public Ad put(Object k, Object... v) {
-    switch (v.length) {
-      case 0 : return putObject(k);
-      case 1 : return putObject(k, v[0]);
-      default: return putObject(k, new Ad(v));
+  // Methods for putting values into an ad. Certain primitive types can be
+  // stored as their wrapped equivalents to save space, since they are still
+  // printed in a way that is compatible with the language.  All of these
+  // eventually synchronize on putObject.
+  public Ad put(Object key, Object... value) {
+    switch (value.length) {
+      case 0 : return putObject(key);
+      case 1 : return putObject(key, value[0]);
+      default: return putObject(key, new Ad(value));
     }
   }
 
-  // Use this to insert objects in the above methods. This takes care
-  // of validating the key so accidental badness doesn't occur.
+  // Use this to insert objects in the above methods. This takes care of
+  // validating the key so accidental badness doesn't occur.
   synchronized Ad putObject(Object value) {
     if (value instanceof Map.Entry<?,?>) {
       Map.Entry<?,?> e = (Map.Entry<?,?>) value;
       return putObject(e.getKey(), e.getValue());
     } return putObject(null, value);
-  } synchronized Ad putObject(Object okey, Object value) {
+  } synchronized Ad putObject(Object key, Object value) {
     int i;
     Ad ad = this;
 
-    if (okey == null) {
+    if (key == null) {
       list().add(AdObject.wrap(value));
     } else {
-      String key = okey.toString();
-      // Keep traversing ads until we find the ad we need to insert into.
-      while ((i = key.indexOf('.')) > 0) synchronized (ad) {
-        String k1 = key.substring(0, i);
-        AdObject o = ad.map().get(k1);
-        if (o == null)
-          ad.map().put(intern(k1), AdObject.wrap(ad = new Ad()));
-        else 
-          ad = o.asAd();
-        key = key.substring(i+1);
-      }
-      
-      // No more ads to traverse, insert object.
-      synchronized (ad) {
-        if (value != null)
-          ad.map().put(intern(key), AdObject.wrap(value));
-        else
-          ad.map().remove(key);
-      }
+      if (value != null)
+        ad.map().put(intern(key.toString()), AdObject.wrap(value));
+      else
+        ad.map().remove(key.toString());
     } return this;
   }
 
@@ -615,16 +587,20 @@ public class Ad implements Serializable {
     } else if (o instanceof Map) {
       AdType kt = t.generics()[0];
       AdType vt = t.generics()[1];
+      if (kt.isInner()) kt.outer(t.outer);
+      if (vt.isInner()) vt.outer(t.outer);
       Map<String,AdObject> map = map(false);
       if (map != null) for (Map.Entry<String, AdObject> e : map.entrySet())
         ((Map)o).put(e.getKey(), e.getValue().as(vt));
     } else if (o instanceof Collection) {
       AdType vt = t.generics()[0];
+      if (vt.isInner()) vt.outer(t.outer);
       List<AdObject> list = list(false);
       if (list != null) for (AdObject v : list)
         ((Collection)o).add(v.as(vt));
     } else if (t.isArray()) {
       AdType vt = t.component();
+      if (vt.isInner()) vt.outer(o);
       int i = 0;
       List<AdObject> list = list(false);
       if (list != null) for (AdObject v : list) try {
@@ -632,17 +608,17 @@ public class Ad implements Serializable {
       } catch (ArrayIndexOutOfBoundsException e) {
         break;
       }
-    } else for (AdMember f : t.fields()) try {
+    } else for (AdMember f : t.fields().values()) try {
       AdObject ao = getObject(f.name());
+      if (f.isInner()) f.outer(o);
       if (ao != null && !f.ignore()) f.set(o, ao.as(f));
     } catch (Exception e) {
       // Either ad had no such member or it was final and we couldn't set it.
       // Either way, we don't have to worry about it.
-      e.printStackTrace();
     } return o;
   }
 
-  // Construct a new instance of a class and marshal into it.
+  /** Construct a new instance of a class and marshal into it. */
   public <O> O unmarshalAs(Class<O> clazz) {
     return AdObject.wrap(this).as(clazz);
   }
@@ -692,8 +668,9 @@ public class Ad implements Serializable {
         return new Ad((Object[])o);
       } else {
         Ad ad = new Ad();
-        for (AdMember f : t.fields())
+        for (AdMember f : t.fields().values()) {
           if (!f.ignore()) ad.put(f.name(), f.get(o));
+        }
         return ad;
       }
     } catch (RuntimeException e) {
@@ -706,9 +683,19 @@ public class Ad implements Serializable {
   // Get the field names of a type as a string array.
   public static String[] fieldsOf(Type t) {
     Set<String> set = new HashSet<String>();
-    for (AdMember m : new AdType(t).fields())
+    for (AdMember m : new AdType(t).fields().values())
       set.add(m.name());
     return set.toArray(new String[0]);
+  }
+
+  /** Attempt to reify the type parameters of a class. */
+  public static AdType[] reifyGenerics(Class<?> clazz) {
+    return new AdType(clazz).generics();
+  }
+
+  /** Attempt to reify the type parameters of an object. */
+  public static AdType[] reifyGenerics(Object object) {
+    return reifyGenerics(object.getClass());
   }
 
   // Composition methods
@@ -737,32 +724,5 @@ public class Ad implements Serializable {
     return (pretty ? AdPrinter.CLASSAD : AdPrinter.CLASSAD_MIN).toString(this);
   } public synchronized String toClassAd() {
     return toClassAd(true);
-  }
-
-  private static class TestClass {
-    LinkedList<String> sl;
-    LinkedList<Integer> il;
-    String[] sa;
-    int[] ia;
-  }
-
-  // Testing method.
-  public static void main(String args[]) {
-    class Blah { public int i = 100; }
-    new Marshaller<Blah>(Blah.class) {
-      public Blah unmarshal(Ad ad) {
-        Blah b = new Blah();
-        b.i = ad.getInt("a", b.i);
-        return b;
-      }
-      public Object marshal(final Blah b) {
-        return new Object() {
-          int j = b.i;
-        };
-      }
-    };
-    System.out.println(Ad.marshal(new Blah()));
-    Blah b = new Ad("a", 50).unmarshalAs(Blah.class);
-    System.out.println(Ad.marshal(b));
   }
 }

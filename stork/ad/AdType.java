@@ -6,14 +6,15 @@ import java.util.*;
 // A betterized wrapper around Java reflection types that makes it feel
 // just a bit more classlier.
 
-class AdType {
+public class AdType {
   final transient Type type;
   private transient Class clazz;
   private transient AdType parent;
+  protected Object outer;
 
-  protected AdType(Member m) {
+  public AdType(Member m) {
     this(getMemberType(m));
-  } protected AdType(Type t) {
+  } public AdType(Type t) {
     if (t == null)
       throw new NullPointerException();
     type = t;
@@ -50,12 +51,23 @@ class AdType {
     }
   }
 
+  // Really kind of an ugly hacky way to handle interfaces. This whole thing is
+  // pending a rewrite, so it's okay for now I guess.
+  private Map<Type,Class> canonicalizationMap = new HashMap<Type,Class>() {{
+    put(Map.class, HashMap.class);
+    put(List.class, LinkedList.class);
+    put(Collection.class, LinkedList.class);
+    put(Set.class, HashSet.class);
+  }};
+
   // Type Reification
   // ----------------
   // Resolve the raw class type, if possible. Otherwise null.
   protected Class clazz() {
     return (clazz != null) ? clazz : (clazz = clazz(type));
   } private Class clazz(Type type) {
+    if (canonicalizationMap.containsKey(type))
+      return canonicalizationMap.get(type);
     if (type instanceof Class)
       return (Class) type;
     if (type instanceof ParameterizedType)
@@ -109,7 +121,7 @@ class AdType {
 
   // Get the generic parameters of the type. Returns a zero-length array if the
   // type has no generic parameters.
-  protected AdType[] generics() {
+  public AdType[] generics() {
     return wrap(rawGenerics());
   } private Type[] rawGenerics() {
     if (type instanceof ParameterizedType)
@@ -179,7 +191,7 @@ class AdType {
 
   // Get the super class of this type, or null if it's an interface or array
   // type.
-  protected AdType superclass() {
+  public AdType superclass() {
     Type t = rawSuper();
     if (t == null)
       return null;
@@ -209,20 +221,15 @@ class AdType {
   // Member Reflection
   // -----------------
   // Get the fields from the class as a mapping from their names to their
-  // reflective field objects. XXX: Homonymous but otherwise distinct fields
-  // in superclasses will not be accessible through this.
-  protected AdMember[] fields() {
-    return fields(false);
-  } protected AdMember[] fields(boolean publicOnly) {
-    Map<String, AdMember> fm = new HashMap<String, AdMember>();
-    if (publicOnly)
-      fillFields(fm, clazz().getFields());
-    else for (AdType t : supers())
-      t.fillFields(fm, t.clazz().getDeclaredFields());
-    return fm.values().toArray(new AdMember[fm.size()]);
-  } private void fillFields(Map<String, AdMember> fm, Field[] fs) {
-    for (Field f : fs)
-      fm.put(f.getName(), (AdMember) new AdMember(f).parent(this));
+  // reflective field objects.
+  protected Map<String, AdMember> fields() {
+    Class<?> clazz = clazz();
+    if (clazz.equals(Object.class) || clazz.isInterface())
+      return new HashMap<String, AdMember>();
+    Map<String, AdMember> fields = superclass().fields();
+    for (Field f : clazz.getDeclaredFields())
+      fields.put(f.getName(), (AdMember) new AdMember(f).parent(this));
+    return fields;
   }
 
   // Get a single field.
@@ -240,14 +247,42 @@ class AdType {
     }
   }
 
+  protected Class[] prependOuterClass(Class... params) {
+    List<Class> list = new LinkedList<Class>();
+    list.add(owner().clazz());
+    list.addAll(Arrays.asList(params));
+    return list.toArray(new Class[params.length]);
+  }
+
+  protected Object[] prependOuterInstance(Object... args) {
+    List<Object> list = new LinkedList<Object>();
+    list.add(outer);
+    list.addAll(Arrays.asList(args));
+    return list.toArray(new Object[args.length]);
+  }
+
   // Get a constructor for the class based on the parameter type, or null if
   // none exists.
   protected AdMember constructor(Class... params) {
     try {
-      return new AdMember(clazz().getDeclaredConstructor(params));
+      if (isInner())
+        params = prependOuterClass(params);
+      AdMember m = new AdMember(clazz().getDeclaredConstructor(params));
+      m.outer(outer);
+      return m;
     } catch (Exception e) {
       return null;
     }
+  }
+
+  /** Attempt to construct an instance of the wrapped type. */
+  public Object construct(Object... args) {
+    if (isInner())
+      args = prependOuterInstance(args);
+    Class[] params = new Class[args.length];
+    for (int i = 0; i < args.length; i++)
+      params[i] = (args[i] != null) ? args[i].getClass() : Object.class;
+    return constructor(params).construct(args);
   }
 
   // Get a method based on the parameter type.
@@ -298,8 +333,8 @@ class AdType {
     }
   }
 
-  // Returns whether the type is a non-static inner type and thus requires
-  // an enclosing instance of the parent class.
+  // Returns whether the type is a non-static inner type and thus requires an
+  // enclosing instance of the parent class.
   protected boolean isInner() {
     return clazz().isMemberClass();
   }
@@ -327,6 +362,9 @@ class AdType {
       if (c == void.class)    return Void.class;
     } return c;
   }
+
+  // Set the reference to an instance of the outer class.
+  public void outer(Object outer) { this.outer = outer; }
 
   // Return a new array instance of this type.
   protected Object asArray(int... dims) {

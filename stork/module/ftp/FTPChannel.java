@@ -901,12 +901,13 @@ public class FTPChannel {
       }
     };
 
-    public DataChannel() {
-      this(FTPChannel.this.data.preferPassive);
+    public DataChannel(char type) {
+      this(type, FTPChannel.this.data.preferPassive);
     }
 
-    public DataChannel(boolean preferPassive) {
+    public DataChannel(char type, boolean preferPassive) {
       FTPChannel.this.super();
+      type(type);
       dc = preferPassive ? tryPassiveThenActive() : tryActiveThenPassive();
       dc.new AsBell<SocketChannel>() {
         public Bell<SocketChannel> convert(SocketChannel c) {

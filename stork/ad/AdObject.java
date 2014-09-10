@@ -11,13 +11,13 @@ public class AdObject implements Comparable<AdObject> {
   Object object;
 
   // A map of types to methods for converting to that type.
-  private static Map<Class<?>, Method> conv_map = 
+  private static Map<Class<?>, Method> conversionMap = 
     new HashMap<Class<?>, Method>();
 
   // Add a method to the conversion map.
   private static void map(Class<?> c, String m) {
     try {
-      conv_map.put(c, AdObject.class.getMethod(m));
+      conversionMap.put(c, AdObject.class.getMethod(m));
     } catch (Exception e) {
       // Ignore it.
     }
@@ -174,7 +174,7 @@ public class AdObject implements Comparable<AdObject> {
   public Ad asAd() {
     if (object instanceof Ad)
       return (Ad)object;
-    throw new RuntimeException("cannot convert "+object.getClass()+" to ad");
+    throw new RuntimeException("Cannot marshal "+object.getClass()+" as ad.");
   }
 
   public Collection<?> asList() {
@@ -204,7 +204,8 @@ public class AdObject implements Comparable<AdObject> {
       // Check if it's an enum.
       if (t.isEnum())
         return t.resolveEnum(asString());
-      Method cm = conv_map.get(c);
+      // Check if it's in the conversion map.
+      Method cm = conversionMap.get(c);
       if (cm != null)
         return c.cast(cm.invoke(this));
       // Try looking for a likely constructor.

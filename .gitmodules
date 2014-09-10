@@ -1,3 +1,4 @@
-[submodule "web"]
-	path = web
-	url = https://github.com/didclab/stork-web-client.git
+[submodule "doc"]
+	path = doc
+	url = git@github.com:didclab/stork.git
+	branch = gh-pages

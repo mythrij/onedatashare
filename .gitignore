@@ -4,7 +4,10 @@
 *.ear
 *.swp
 *.dmp
+*.json
 *.dap
 doc
 build
 bin/stork_*
+.project
+.classpath
