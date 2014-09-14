@@ -1,5 +1,8 @@
 package stork.module.http;
 
+import java.security.KeyManagementException;
+import java.security.NoSuchAlgorithmException;
+
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 
@@ -41,8 +44,9 @@ public class HTTPInitializer extends ChannelInitializer<SocketChannel> {
     
     if (ssl) {
       // HTTPs connection
-      //SSLEngine sslEng = getSsl(null);
-      //pipe.addLast("SSL", new SslHandler(sslEng));
+      SSLEngine sslEng = getSsl(null);
+      sslEng.setUseClientMode(true);
+      pipe.addLast("SSL", new SslHandler(sslEng, false));
     }
 
     pipe.addFirst("Timer", new ReadTimeoutHandler(30));
@@ -51,11 +55,16 @@ public class HTTPInitializer extends ChannelInitializer<SocketChannel> {
     pipe.addLast("Handler", new HTTPMessageHandler(builder));
   }
 
-  /* HTTPS transmission
+  // HTTPS transmission
   private SSLEngine getSsl(String proto) throws NoSuchAlgorithmException {
     String protocol = (proto == null) ? "TLS" : proto;
     SSLContext context = SSLContext.getInstance(protocol);
-    //TODO https layer
-    return null;
-  }*/
+    try {
+		context.init(null, null, null);
+	} catch (KeyManagementException e) {
+		System.err.println(e.getMessage());
+	}
+
+    return context.createSSLEngine();
+  }
 }
