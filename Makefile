@@ -4,9 +4,9 @@ VERSION=3.0a
 PROJECT=stork
 
 CMDS=info ls q raw rm server status submit user cred
-JARFILE=lib/$(PROJECT)-$(VERSION).jar
+JARFILE=$(LIB)/$(PROJECT)-$(VERSION).jar
 
-CLASSPATH=$(call classpathify,$(LIBJARS)):build
+CLASSPATH=$(call classpathify,$(LIBJARS)):$(BUILD)
 DBGFLAG=-g
 JMEM=-J-Xmx512m
 JFLAGS=$(DBGFLAG) $(JMEM) -classpath $(CLASSPATH)
@@ -19,13 +19,16 @@ JAR=jar
 JAVADOC=javadoc
 TAR=tar
 LN=ln
+WGET=curl -O
 
 # Directories
+BIN=bin
 BUILD=build
 DOC=doc
+LIB=lib
 
-.PHONY: all install classes clean discover pkglist $(PROJECT)_cmds release \
-	doc help
+.PHONY: all install classes clean discover fetchdeps pkglist \
+	$(PROJECT)_cmds release doc help
 .SUFFIXES: .java .class
 
 # Recursive wildcard function from jgc.org.
@@ -67,7 +70,7 @@ $(BUILD)/%.class: %.java | $(BUILD)
 	$(eval JC_CMD=$(JC) $(JFLAGS) -d $(BUILD))
 
 # Build everything in BUILDLIST.
-classes: discover $(BUILDLIST)
+classes: fetchdeps discover $(BUILDLIST)
 	@echo Building $(words $(BUILDLIST)) files...
 	@$(JC_CMD) $(BUILDLIST)
 
@@ -87,6 +90,9 @@ $(PROJECT).tar.gz: $(JARFILE)
 
 $(PROJECT)-src.tar.gz: dist-clean
 	$(TAR) czf $(PROJECT)-src.tar.gz *
+
+fetchdeps: | $(LIB)
+	@$(MAKE) --no-print-directory -C lib
 
 $(BUILD)/build_tag: | $(BUILD)
 	@echo Generating build tag...
@@ -108,17 +114,23 @@ test: all
 	@echo Testing complete.
 
 clean:
-	$(RM) -r $(BUILD) lib/$(PROJECT)-*.jar $(PROJECT).tar.gz bin/$(PROJECT)_*
+	@echo Cleaning project build files...
+	@$(RM) -r $(BUILD) $(LIB)/$(PROJECT)-*.jar $(PROJECT).tar.gz $(BIN)/$(PROJECT)_*
+
+distclean: clean
+	@$(MAKE) --no-print-directory -C lib distclean
 
 help:
 	@echo 'Possible targets:'
 	@echo
-	@echo '  all      - Build everything. This is the default target.'
-	@echo '  clean    - Clean up after a build.'
-	@echo '  discover - Find changed sources.'
-	@echo '  doc      - Build documentation.'
-	@echo '  help     - Display this help information.'
-	@echo '  install  - Install $(APPNAME) to this system.'
-	@echo '  pkglist  - List all Java packages in the project.'
-	@echo '  test     - Run test cases.'
+	@echo '  all         Build everything. This is the default target.'
+	@echo '  clean       Clean up after a build.'
+	@echo '  discover    Find changed sources.'
+	@echo '  distclean   Clean after build and also clean dependencies.'
+	@echo '  doc         Build documentation.'
+	@echo '  fetchdeps   Fetch external libraries.'
+	@echo '  help        Display this help information.'
+	@echo '  install     Install $(APPNAME) to this system.'
+	@echo '  pkglist     List all Java packages in the project.'
+	@echo '  test        Run test cases.'
 	@echo
