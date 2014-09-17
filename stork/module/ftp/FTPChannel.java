@@ -18,7 +18,6 @@ import io.netty.util.*;
 import io.netty.util.concurrent.*;
 
 import org.ietf.jgss.*;
-import org.gridforum.jgss.*;
 
 import stork.feather.*;
 import stork.feather.URI;
@@ -400,7 +399,7 @@ public class FTPChannel {
     GSSContext context;
 
     public GSSSecurityContext(GSSCredential cred) throws GSSException {
-      GSSManager manager = ExtendedGSSManager.getInstance();
+      GSSManager manager = GSSManager.getInstance();
       Oid oid = new Oid("1.3.6.1.4.1.3536.1.1");
       GSSName peer = manager.createName(
         "host@"+host, GSSName.NT_HOSTBASED_SERVICE);
