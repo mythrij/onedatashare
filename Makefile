@@ -92,7 +92,7 @@ $(PROJECT)-src.tar.gz: dist-clean
 	$(TAR) czf $(PROJECT)-src.tar.gz *
 
 fetchdeps: | $(LIB)
-	@$(MAKE) --no-print-directory -C lib
+	@$(MAKE) -j4 --no-print-directory -C lib
 
 $(BUILD)/build_tag: | $(BUILD)
 	@echo Generating build tag...
