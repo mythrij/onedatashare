@@ -62,9 +62,10 @@ public class HTTPSession extends Session<HTTPSession, HTTPResource> {
     Path p2 = Path.create("l-Buffalo,-NY-jobs.html");
     //URI u = URI.create("http://www.nytimes.com"); // Test 'close' connection
     //URI u = URI.create("http://bing.co"); // Test host 'moved' fault
-    URI u = URI.create("http://www.microsoft.com"); // Test path 'moved' fault
+    //URI u = URI.create("http://www.microsoft.com"); // Test path 'moved' fault
     Path p3 = Path.create("pages/national/index.html");
     Path p4 = Path.create("pages/nyregion/index.html");
+    URI u = URI.create("https://www.dropbox.com/");
     Path p5 = Path.create("");
     HTTPSession s = new HTTPSession(u).initialize().get();
     /*
@@ -85,7 +86,7 @@ public class HTTPSession extends Session<HTTPSession, HTTPResource> {
     //);
     //dest.initialize().sync();
     //s.select(p3).tap().attach(dest.sink()).tap().start().sync();
-
+/*
     HTTPResource r1 = s.select(p3);
     HTTPResource r2 = s.select(p4);
     Bell<Stat> b1 = r1.stat();
@@ -108,6 +109,8 @@ public class HTTPSession extends Session<HTTPSession, HTTPResource> {
         s.builder.channel.isOutputShutdown() + " " +
         s.builder.channel.isOpen() + " " +
         s.builder.channel.toString());
-    s.workGroup.shutdownGracefully();
+    s.workGroup.shutdownGracefully();*/
+    
+    s.select(p5).tap().attach(new HexDumpResource().sink()).tap().start();
   }
 }
