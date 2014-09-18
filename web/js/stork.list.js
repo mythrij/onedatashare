@@ -1,9 +1,6 @@
 // stork.list.js
 // -------------
-// Create a nested file listing by querying a
-
-if (!$stork)
-  var $stork = {}
+var $stork = $stork || {};
 
 // Cast on anything to replace its contents with a file tree.
 $stork.list = function (e, o) {

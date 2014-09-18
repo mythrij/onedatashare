@@ -38,6 +38,11 @@
   color: #888;
 }
 
+.selected {
+  border: 1px solid blue;
+  background: lightblue;
+}
+
 .stork-list div:before,
 .stork-list i:before {
   font-family: FontAwesome;

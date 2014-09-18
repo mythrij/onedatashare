@@ -69,7 +69,7 @@ JAVA="$JAVA_HOME/bin/java"
 # Run it. TODO: Don't simply nohup or redirect to /dev/null.
 [ "$DAEMONIZE" = true ] && {
   nohup $JAVA -Xmx512m -cp "$STORK_HOME/lib/*" $JFLAGS $CLASS $@ &> /dev/null &
-  echo Starting Stork server in background...
+  echo "Starting Stork server in background... (PID: $!)"
 } || {
   exec $JAVA -Xmx512m -cp "$STORK_HOME/lib/*" $JFLAGS $CLASS $@
 }
