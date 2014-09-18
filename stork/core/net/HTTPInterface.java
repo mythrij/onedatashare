@@ -70,12 +70,12 @@ public class HTTPInterface extends StorkInterface {
 
   // This handles whatever happens when a request has completed.
   private Bell<Object> requestDoneHandler(final HTTPBody body) {
-
     return new Bell<Object>() {
       public void done(Object o) {
         if (o != null)
           sendJSON(Pipes.tapFromString(Ad.marshal(o)));
       } public void fail(Throwable t) {
+        body.status = INTERNAL_SERVER_ERROR;
         sendJSON(Pipes.tapFromString(errorToAd(t)));
       } private void sendJSON(Tap tap) {
         body.contentType = "application/json; charset=UTF-8";

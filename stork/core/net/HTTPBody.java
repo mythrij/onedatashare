@@ -34,6 +34,7 @@ import stork.scheduler.*;
  */
 public class HTTPBody extends Resource<HTTPRequest,HTTPBody> {
   protected URI uri;
+  protected HttpResponseStatus status;  // The status we're going to report.
   public String contentType;
 
   /** Create an HTTPBody from the given HTTP request. */
@@ -109,8 +110,11 @@ public class HTTPBody extends Resource<HTTPRequest,HTTPBody> {
       public HttpResponse convert(Stat stat) {
         if (stat.dir)
           throw new RuntimeException("Cannot send directories.");
-        if (stat.size == 0)
+
+        if (stat.size == 0) {
+          HttpResponseStatus s = status == null ? NO_CONTENT : status;
           return new DefaultFullHttpResponse(session.version(), NO_CONTENT);
+        }
 
         if (contentType == null) {
           contentType = MimeTypeMap.forFile(stat.name);
@@ -118,7 +122,8 @@ public class HTTPBody extends Resource<HTTPRequest,HTTPBody> {
             contentType = "text/plain";
         }
 
-        HttpResponse r = new DefaultHttpResponse(session.version(), OK);
+        HttpResponseStatus st = status == null ? OK : status;
+        HttpResponse r = new DefaultHttpResponse(session.version(), st);
 
         r.headers().set(CONTENT_LENGTH, stat.size);
         r.headers().set(CONTENT_TYPE, contentType);
