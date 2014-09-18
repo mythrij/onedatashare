@@ -65,7 +65,7 @@ discover: $(CLASSES)
 
 # If the source has changed, add the class to BUILDLIST.
 $(BUILD)/%.class: %.java | $(BUILD)
-	@echo Including $< for build.
+	@echo Including for build: $<
 	$(eval BUILDLIST += $<)
 	$(eval JC_CMD=$(JC) $(JFLAGS) -d $(BUILD))
 
