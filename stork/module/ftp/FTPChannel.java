@@ -516,6 +516,18 @@ public class FTPChannel {
   }
 
   // Try to authenticate with a GSS credential.
+  public Bell<Reply> authenticate(final Bell<GSSCredential> cred) {
+    final Bell<Reply> rb = new Bell<Reply>();
+    cred.new Promise() {
+      public void done(GSSCredential cred) {
+        authenticate(cred).promise(rb);
+      } public void fail(Throwable t) {
+        rb.ring(t);
+      }
+    };
+    return rb;
+  }
+
   public Bell<Reply> authenticate(GSSCredential cred) {
     final GSSSecurityContext sec;
 

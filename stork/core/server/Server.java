@@ -42,7 +42,6 @@ public class Server {
     private transient List<Job> jobs = new ArrayList<Job>();
 
     public void schedule(Job job) {
-      System.out.println("Got job: "+job);
       jobs.add(job);
     } public Job get(int i) {
       return jobs.get(i);
@@ -88,15 +87,12 @@ public class Server {
   }
 
   /** Put a request in the queue. */
-  public Request issueRequest(final Request request) {
+  public synchronized Request issueRequest(final Request request) {
     if (request.handler == null) {
       request.ring(new Exception("Invalid command."));
     } else try {
       Log.fine("Enqueuing request: "+Ad.marshal(request));
-      //requests.add(request);
-      Bell.timerBell(0).new Promise() {
-        public void done() { request.handle(); }
-      };
+      Bell.dispatch(request);
     } catch (Exception e) {
       // This can happen if the queue is full. Which right now it never should
       // be, but who knows.

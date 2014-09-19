@@ -14,7 +14,7 @@ import stork.feather.*;
  * optional value that will be marshalled and sent to the requestor to complete
  * the request.
  */
-public abstract class Request extends Bell<Object> {
+public abstract class Request extends Bell<Object> implements Runnable {
   /** The command given with the request. */
   public String command;
 
@@ -64,6 +64,9 @@ public abstract class Request extends Bell<Object> {
       ring(e);
     }
   }
+
+  /** This just calls handle(). */
+  public void run() { handle(); }
 
   public Ad asAd() {
     return Ad.marshal(this).merge(ad);

@@ -1,3 +1,4 @@
+'use strict';
 angular.module('stork', ['ngRoute', 'ui.bootstrap', 'ui'],
   function ($provide, $routeProvider) {
     $routeProvider.when('/', {
@@ -6,7 +7,7 @@ angular.module('stork', ['ngRoute', 'ui.bootstrap', 'ui'],
     }).when('/transfer', {
       title: 'Transfer',
       templateUrl: 'transfer.html',
-      controller: TransferCtrl,
+      controller: 'TransferCtrl',
       requireLogin: true
     }).when('/user', {
       title: 'User Settings',
@@ -20,7 +21,7 @@ angular.module('stork', ['ngRoute', 'ui.bootstrap', 'ui'],
       templateUrl: 'privacy.html'
     }).otherwise({
       redirectTo: '/'
-    })
+    });
   }
 ).filter('size', function () {
   return function (bytes, precision) {
@@ -32,7 +33,7 @@ angular.module('stork', ['ngRoute', 'ui.bootstrap', 'ui'],
       var c = s.charAt(i)
     }
     return c ? b.toFixed(p)+c : b.toFixed(0)
-  }
+  };
 }).filter('percent', function () {
   return function (p, precision, symbol) {
     if (!p || p.done < 0 || p.total <= 0) return
@@ -42,219 +43,210 @@ angular.module('stork', ['ngRoute', 'ui.bootstrap', 'ui'],
     var n = 100*d/t
     n = (n < 0) ? 0 : (n > 100) ? 100 : n
     return n.toFixed(p)+(symbol||'%')
-  }
+  };
 }).filter('progress', function (sizeFilter) {
   return function (p, precision, symbol) {
-    if (!p) return
-    var t = sizeFilter(p.total)
-    var d = sizeFilter(p.done)
-    return d+'/'+t
-  }
+    if (!p) return;
+    var t = sizeFilter(p.total);
+    var d = sizeFilter(p.done);
+    return d+'/'+t;
+  };
 }).filter('values', function () {
-  return _.values
+  return _.values;
 }).filter('keys', function () {
-  return _.keys
+  return _.keys;
 }).filter('pairs', function () {
-  return _.pairs
+  return _.pairs;
 }).filter('moment', function () {
   return function (input, format) {
-    return moment(input, format).fromNow()
-  }
+    return moment(input, format).fromNow();
+  };
 }).filter('URI', function () {
   return function (input) {
-    return new URI(input)
-  }
+    return new URI(input);
+  };
 }).filter('paginate', function () {
   return function (input, page, per) {
-    page = (!page || page < 1) ? 1  : page
-    per  = (!per  || per  < 1) ? 10 : per
-    return input.slice(per*(page-1), per*page)
-  }
+    page = (!page || page < 1) ? 1  : page;
+    per  = (!per  || per  < 1) ? 10 : per;
+    return input.slice(per*(page-1), per*page);
+  };
 }).directive('bsRoute', function ($location) {
   return {
     link: function (scope, elm, attrs) {
       var check = function () {
         if ($location.path() == attrs.bsRoute)
-          elm.addClass('active')
+          elm.addClass('active');
         else
-          elm.removeClass('active')
-      }
+          elm.removeClass('active');
+      };
       scope.$on('$routeChangeSuccess',
         function (event, current, previous) {
-          check()
+          check();
         }
-      )
+      );
     }
-  }
+  };
 }).directive('focusMe', function ($timeout) {    
   return {    
     link: function (scope, element, attrs, model) {                
       $timeout(function () {
-        $(element[0]).focus()
-      }, 20)
+        $(element[0]).focus();
+      }, 20);
     }
-  }
-}).config(function ($provide) {
-  $provide.factory('Stork', function ($http, $q) {
-    var api = function (r) {
-      return '/api/stork/'+r
+  };
+}).factory('Stork', function ($http, $q) {
+  var api = function (r) {
+    return '/api/stork/'+r
+  };
+  var gr = function (r) { return r.data };
+  var ge = function (r) { return $q.reject(r.data.error) };
+  return {
+    $post: function (name, data) {
+      return $http.post(api(name), data).then(gr, ge);
+    },
+    login: function (info) {
+      return this.$post('user', angular.extend({
+        action: 'login'
+      }, info));
+    },
+    register: function (info) {
+      return this.$post('user', angular.extend({
+        action: 'register'
+      }, info));
+    },
+    history: function (uri) {
+      return this.$post('user', {
+        action: 'history',
+        uri: uri
+      });
+    },
+    ls: function (ep, d) {
+      if (typeof ep === 'string')
+        ep = { uri: ep };
+      return this.$post('ls', angular.extend(angular.copy(ep), {
+        depth: d||0
+      }));
+    },
+    rm: function (id) {
+      return this.$post('rm', {
+        range: id
+      });
+    },
+    q: function (filter, range) {
+      return this.$post('q', {
+        'status': filter || 'all',
+        'range': range
+      });
+    },
+    mkdir: function (ep) {
+      if (typeof ep === 'string')
+        ep = { uri: ep };
+      return this.$post('mkdir', ep);
+    },
+    delete: function (ep) {
+      if (typeof ep === 'string')
+        ep = { uri: ep };
+      return this.$post('delete', ep);
+    },
+    submit: function (job) {
+      return this.$post('submit', job);
     }
-    var gr = function (r) { return r.data }
-    var ge = function (r) { return $q.reject(r.data) }
-    return {
-      $post: function (name, data) {
-        return $http.post(api(name), data).then(gr, ge)
-      },
-      login: function (info) {
-        return this.$post('user', angular.extend({
-          action: 'login'
-        }, info))
-      },
-      register: function (info) {
-        return this.$post('user', angular.extend({
-          action: 'register'
-        }, info))
-      },
-      history: function (uri) {
-        return this.$post('user', {
-          action: 'history',
-          uri: uri
-        })
-      },
-      ls: function (ep, d) {
-        if (typeof ep === 'string')
-          ep = { uri: ep }
-        return this.$post('ls', angular.extend(angular.copy(ep), {
-          depth: d||0
-        }))
-      },
-      rm: function (id) {
-        return this.$post('rm', {
-          range: id
-        })
-      },
-      q: function (filter, range) {
-        return this.$post('q', {
-          'status': filter || 'all',
-          'range': range
-        })
-      },
-      mkdir: function (ep) {
-        if (typeof ep === 'string')
-          ep = { uri: ep }
-        return this.$post('mkdir', ep)
-      },
-      rmf: function (ep) {
-        if (typeof ep === 'string')
-          ep = { uri: ep }
-        return this.$post('rmf', ep)
-      },
-      submit: function (job) {
-        return this.$post('submit', job)
+  };
+}).factory('User', function (Stork, $location, $rootScope) {
+  return {
+    user: function () {
+      return $rootScope.$user;
+    },
+    saveLogin: function (u) {
+      console.log(u);
+      $rootScope.$user = u;
+      var exp = { expires: 31536000 };
+      Cookies.set('user.email', u.email, exp);
+      Cookies.set('user.hash', u.hash, exp);
+    },
+    forgetLogin: function (error) {
+      delete $rootScope.$user;
+      Cookies.expire('user.email');
+    },
+    login: function (info) {
+      if (info) {
+        var f = Stork.login(info);
+        f.then(this.saveLogin, this.forgetLogin);
+        return f;
       }
+    },
+    checkAccess: function (redirectTo) {
+      if (!$rootScope.$user)
+        $location.path(redirectTo||'/');
+    },
+    history: function (uri) {
+      return uri ? Stork.history(uri).then(function (h) {
+        return $rootScope.$user.history = h;
+      }) : $rootScope.user.history();
+    },
+    $init: function () {
+      var u = {
+        email: Cookies.get('user.email'),
+        hash:  Cookies.get('user.hash')
+      };
+
+      if (u.email && u.hash)
+        this.login(u);
+      else
+        this.forgetLogin(u);
+
+      delete this.$init;
+      return this;
     }
-  })
-}).config(function ($provide) {
-  $provide.factory('$user', function (Stork, $location, $rootScope) {
-    return {
-      user: function () {
-        return $rootScope.$user
-      },
-      saveLogin: function (u) {
-        $rootScope.$user = u
-        var exp = { expires: 31536000 }
-        Cookies.set('user.email', u.email, exp)
-        Cookies.set('user.hash', u.hash, exp)
-      },
-      forgetLogin: function () {
-        delete $rootScope.$user
-        Cookies.expire('user.email')
-        Cookies.expire('user.hash')
-      },
-      logIn: function (info) {
-        if (info)
-          return Stork.login(info).then(this.saveLogin, this.forgetLogin)
-      },
-      checkAccess: function (redirectTo) {
-        if (!$rootScope.$user)
-          $location.path(redirectTo||'/')
-      },
-      history: function (uri) {
-        if (uri) return Stork.history(uri).then(
-          function (h) {
-            return $rootScope.$user.history = h
-          }
-        )
-        return $rootScope.user.history()
-      },
-      $init: function () {
-        var u = {
-          email: Cookies.get('user.email'),
-          hash:  Cookies.get('user.hash')
-        }
-
-        if (u.email && u.hash)
-          this.logIn(u)
-        else
-          this.forgetLogin(u)
-
-        delete this.$init
-        return this
-      }
-    }.$init()
-  })
+  }.$init()
 }).config(function ($tooltipProvider) {
   $tooltipProvider.options({
     appendToBody: true,
     animation: false
-  })
-}).run(function ($location, $rootScope, $user) {
+  });
+}).run(function ($location, $rootScope, User) {
   $rootScope.$on('$routeChangeSuccess',
     function (event, current, previous) {
       if (!current.$$route)
-        return
+        return;
       if (current.$$route.requireLogin)
-        $user.checkAccess()
-      $rootScope.$template = current.templateUrl
-      $rootScope.$title = 'StorkCloud - '+current.$$route.title
+        User.checkAccess();
+      $rootScope.$template = current.templateUrl;
+      $rootScope.$title = 'StorkCloud - '+current.$$route.title;
     }
-  )
-})
-
-function LoginCtrl($scope, Stork, $location, $user, $modal) {
-  $scope.logOut = function () {
-    $user.forgetLogin()
-    $location.path('/login')
-  }
-  $scope.logIn = function (u) {
-    console.log($scope.user)
-    return $user.logIn(u).then(function () {
-      $scope.$close()
+  );
+}).controller('LoginCtrl', function ($scope, Stork, $location, User, $modal) {
+  $scope.logout = function () {
+    User.forgetLogin();
+    $location.path('/login');
+  };
+  $scope.login = function (u) {
+    return User.login(u).then(function (o) {
+      console.log($scope.$close);
+      $scope.$close();
     }, function (e) {
-      alert(e)
-    })
-  }
+      alert(e);
+    });
+  };
   $scope.loginModal = function () {
     $modal.open({
       templateUrl: '/parts/login.html',
-      controller: LoginCtrl
-    })
-  }
-}
-
-function RegisterCtrl($scope, Stork, $location, $user, $modal) {
+      controller: 'LoginCtrl',
+      size: 'sm'
+    });
+  };
+}).controller('RegisterCtrl', function ($scope, Stork, $location, User, $modal) {
   $scope.register = function (u) {
     return Stork.register(u).then(function (d) {
-      $user.saveLogin(d)
-      $location.path('/')
-      delete $scope.user
+      User.saveLogin(d);
+      $location.path('/');
+      delete $scope.user;
     }, function (e) {
-      alert(e)
+      alert(e);
     })
   }
-}
-
-function TransferCtrl($scope, $user, Stork, $modal) {
+}).controller('TransferCtrl', function ($scope, User, Stork, $modal) {
   // Hardcoded options.
   $scope.optSet = [{
       'title': 'Use transfer optimization',
@@ -290,7 +282,7 @@ function TransferCtrl($scope, $user, Stork, $modal) {
         'speed if the data is text-based or structured.',
       'choices': [ ['Yes', true], ['No', false] ]
     }
-  ]
+  ];
 
   $scope.job = {
     src:  $scope.left  = { },
@@ -302,20 +294,20 @@ function TransferCtrl($scope, $user, Stork, $modal) {
       'encrypt'  : false,
       'compress' : false
     }
-  }
+  };
 
   $scope.canTransfer = function (src, dest, contents) {
     if (!src || !dest || !src.uri || !dest.uri)
-      return false
+      return false;
     if (_.size(src.$selected) < 1 || _.size(dest.$selected) != 1)
-      return false
-    return true
-  }
+      return false;
+    return true;
+  };
 
   $scope.transfer = function (src, dest, contents) {
-    var job = angular.copy($scope.job)
-    job.src.uri  = _.keys(src.$selected)
-    job.dest.uri = _.keys(dest.$selected)
+    var job = angular.copy($scope.job);
+    job.src.uri  = _.keys(src.$selected);
+    job.dest.uri = _.keys(dest.$selected);
 
     $modal.open({
       templateUrl: 'xfer-modal.html',
@@ -325,38 +317,38 @@ function TransferCtrl($scope, $user, Stork, $modal) {
     }).result.then(function (job) {
       return Stork.submit(job).then(
         function (d) {
-          alert('Job submitted successfully!')
-          return d
+          alert('Job submitted successfully!');
+          return d;
         }, function (e) {
-          alert(e)
+          alert(e);
         }
       )
-    })
-  }
-}
-
-function BrowseCtrl($scope, Stork, $q, $modal, $user) {
-  $scope.uri_state = { }
-  $scope.showHidden = false
+    });
+  };
+}).controller('BrowseCtrl', function ($scope, Stork, $q, $modal, User) {
+  $scope.uri_state = { };
+  $scope.showHidden = false;
 
   // Fetch and cache the listing for the given URI.
   $scope.fetch = function (u) {
-    var scope = this
-    scope.loading = true
+    var scope = this;
+    scope.loading = true;
 
-    var ep = angular.copy($scope.end)
-    ep.uri = u.href()
+    var ep = angular.copy($scope.end);
+    ep.uri = u.href();
 
     return Stork.ls(ep, 1).then(
       function (d) {
-        return scope.root = d
+        if (scope.root)
+          d.name = scope.root.name || d.name;
+        return scope.root = d;
       }, function (e) {
-        return $q.reject(scope.error = e)
+        return $q.reject(scope.error = e);
       }
     ).finally(function () {
-      scope.loading = false
+      scope.loading = false;
     })
-  }
+  };
 
   // Open the mkdir dialog.
   $scope.mkdir = function () {
@@ -364,103 +356,103 @@ function BrowseCtrl($scope, Stork, $q, $modal, $user) {
       templateUrl: 'new-folder.html',
       scope: $scope
     }).result.then(function (pn) {
-      var u = new URI(pn[0]).segment(pn[1])
+      var u = new URI(pn[0]).segment(pn[1]);
       return Stork.mkdir(u.href()).then(
         function (m) {
-          $scope.refresh()
+          $scope.refresh();
         }, function (e) {
-          alert('Could not create folder.')
+          alert('Could not create folder.');
         }
-      )
+      );
     })
-  }
+  };
 
   // Delete the selected files.
   $scope.rm = function (uris) {
     _.each(uris, function (u) {
       if (confirm("Delete "+u+"?")) {
-        return Stork.rmf(u).then(
+        return Stork.delete(u).then(
           function () {
-            $scope.refresh()
+            $scope.refresh();
           }, function (e) {
-            alert('Could not delete file: '+e)
+            alert('Could not delete file: '+e);
           }
-        )
+        );
       }
-    })
-  }
+    });
+  };
 
   // Return the scope corresponding to the parent directory.
   $scope.parentNode = function () {
     if (this !== $scope) {
       if (this.$parent.root !== this.root)
-        return this.$parent
-      return this.$parent.parentNode()
+        return this.$parent;
+      return this.$parent.parentNode();
     }
-  }
+  };
 
   // Get or set the endpoint URI.
   $scope.uri = function (u) {
     if (u === undefined) {
       if (this.root !== $scope.root) {
-        u = this.parentNode().uri()
-        return u.segment(URI.encode(this.root.name))
+        u = this.parentNode().uri();
+        return u.segment(URI.encode(this.root.name));
       } else {
-        return new URI($scope.end.uri)
+        return new URI($scope.end.uri);
       }
     } else if (!u) {
       if (this.root === $scope.root)
-        delete $scope.end.uri
+        delete $scope.end.uri;
     } else {
       if (typeof u === 'string') {
-        var u = new URI(u).normalize()
+        var u = new URI(u).normalize();
       } else {
-        u = u.clone().normalize()
+        u = u.clone().normalize();
       }
 
-      $scope.temp_uri = u.readable()
-      $scope.uri_state.changed = false
-      return new URI($scope.end.uri = u.href())
+      $scope.temp_uri = u.readable();
+      $scope.uri_state.changed = false;
+      return new URI($scope.end.uri = u.href());
     }
-  }
+  };
 
   $scope.refresh = function (u) {
     if (u === undefined)
-      u = $scope.temp_uri
-    u = $scope.uri(u)
+      u = $scope.temp_uri;
+    u = $scope.uri(u);
 
     // Clean up from last refresh.
-    $scope.unselectAll()
-    delete $scope.error
-    delete $scope.root
+    $scope.unselectAll();
+    delete $scope.error;
+    delete $scope.root;
 
     // Add the URL to the local history.
-    $user.history(u.toString())
+    User.history(u.toString());
 
     if (!u) {
-      delete $scope.root
-      $scope.uri_state.changed = false
+      delete $scope.root;
+      $scope.uri_state.changed = false;
     } else {
-      $scope.open = true
+      $scope.open = true;
       $scope.fetch(u).then(
         function (f) {
           if (f.dir)
-            $scope.uri(u = u.filename(u.filename()+'/'))
-          f.name = u.toString()
+            $scope.uri(u = u.filename(u.filename()+'/'));
+          f.name = u.toString();
           return f
         }, function (e) {
-          $scope.error = e
+          $scope.error = e;
         }
       )
     }
-  }
+  };
 
   $scope.up_dir = function () {
-    var u = $scope.uri()
-    if (!u) return
-    u = u.clone().filename('../').normalize()
-    $scope.refresh(u)
-  }
+    var u = $scope.uri();
+    if (!u) return;
+    u = u.clone().filename('../').normalize();
+    $scope.refresh(u);
+  };
 
   $scope.toggle = function () {
     var scope = this
@@ -468,13 +460,13 @@ function BrowseCtrl($scope, Stork, $q, $modal, $user) {
     if (scope.open = !scope.open)
     if (!scope.root.files) {
       // We're opening, fetch subdirs if we haven't.
-      scope.fetch(scope.uri(), scope.root)
+      scope.fetch(scope.uri());
     }
-  }
+  };
 
   $scope.select = function (e) {
-    var scope = this
-    var u = this.uri().toString()
+    var scope = this;
+    var u = this.uri().toString();
 
     // Unselect text.
     if (document.selection && document.selection.empty)
@@ -484,49 +476,45 @@ function BrowseCtrl($scope, Stork, $q, $modal, $user) {
 
     if (!this.selected) {
       if (!e.ctrlKey)
-        $scope.unselectAll()
+        $scope.unselectAll();
       $scope.end.$selected[u] = new function () {
         this.unselect = function () {
-          delete scope.selected
-        }
-      }
-      this.selected = true
+          delete scope.selected;
+        };
+      };
+      this.selected = true;
     } else {
       if (!e.ctrlKey)
-        $scope.unselectAll()
-      delete $scope.end.$selected[u]
-      delete this.selected
+        $scope.unselectAll();
+      delete $scope.end.$selected[u];
+      delete this.selected;
     }
-  }
+  };
 
   $scope.unselectAll = function () {
-    var s = $scope.end.$selected
+    var s = $scope.end.$selected;
     if (s) _.each(s, function (f) {
-      f.unselect()
+      f.unselect();
     })
-    $scope.end.$selected = { }
-  }
+    $scope.end.$selected = { };
+  };
 
   $scope.selectedUris = function () {
-    return _.keys($scope.end.$selected)
-  }
-}
-
-function CredCtrl($scope, $modal) {
-  $scope.creds = [ ]
+    return _.keys($scope.end.$selected);
+  };
+}).controller('CredCtrl', function ($scope, $modal) {
+  $scope.creds = [ ];
   $scope.credChanged = function () {
     if ($scope.end.cred == 'new-myproxy') $modal.open({
       templateUrl: 'add-cred-modal.html',
       scope: $scope
     }).result.then(function (c) {
-      //$scope.end.cred = c
+      //$scope.end.cred = c;
     }, function () {
-      delete $scope.end.cred
+      delete $scope.end.cred;
     })
-  }
-}
-
-function QueueCtrl($scope, $rootScope, Stork, $timeout) {
+  };
+}).controller('QueueCtrl', function ($scope, $rootScope, Stork, $timeout) {
   $scope.filters = {
     all: function (j) {
       return true
@@ -547,125 +535,125 @@ function QueueCtrl($scope, $rootScope, Stork, $timeout) {
     removed:    function (j) { return j.status == 'removed' },
     failed:     function (j) { return j.status == 'failed' },
     complete:   function (j) { return j.status == 'complete' },
-  }
+  };
   $scope.filterList = [
     'scheduled', 'processing', 'paused',
     'removed', 'failed', 'complete', null,
     'pending', 'done', 'all'
-  ]
-  $scope.filter = 'all'
+  ];
+  $scope.filter = 'all';
 
-  $scope.jobs = { }
-  $scope.auto = true
+  $scope.jobs = { };
+  $scope.auto = true;
 
   // Pagination
-  $scope.perPage = 5
-  $scope.page = 1
+  $scope.perPage = 5;
+  $scope.page = 1;
 
   $scope.pager = function (len) {
-    var s = $scope.page-2
+    var s = $scope.page-2;
     if (s <= 0)
-      s = 1
-    var e = s+5
+      s = 1;
+    var e = s+5;
     if (e > len/$scope.perPage)
-      e = len/$scope.perPage+1
-    return _.range(s, e+1)
-  }
+      e = len/$scope.perPage+1;
+    return _.range(s, e+1);
+  };
   $scope.setPage = function (p) {
-    $scope.page = p
-  }
+    $scope.page = p;
+  };
 
   $scope.$on('$destroy', function (event) {
     // Clean up the auto-refresh timer.
     if ($rootScope.autoTimer) {
-      $timeout.cancel($rootScope.autoTimer)
-      delete $rootScope.autoTimer
+      $timeout.cancel($rootScope.autoTimer);
+      delete $rootScope.autoTimer;
     }
-  })
+  });
 
   $scope.toggleAuto = function () {
     if ($scope.auto = !$scope.auto)
-      $scope.autoRefresh()
-  }
+      $scope.autoRefresh();
+  };
 
   $scope.autoRefresh = function () {
     if ($rootScope.autoTimer) {
-      $timeout.cancel($rootScope.autoTimer)
-      delete $rootScope.autoTimer
+      $timeout.cancel($rootScope.autoTimer);
+      delete $rootScope.autoTimer;
     } if ($scope.auto) {
       $scope.refresh().then(function () {
         $rootScope.autoTimer = $timeout($scope.autoRefresh, 1000)
       }, function () {
         $scope.auto = false
-      })
+      });
     }
-  }
+  };
 
   $scope.cancel = function (j) {
     if (j.job_id &&
         confirm("Are you sure you want to remove job "+j.job_id+"?"))
       return Stork.rm(j.job_id).then(
         function (m) {
-          j.status = 'removed'
+          j.status = 'removed';
         }, function (e) {
-          alert("failure!")
+          alert("failure!");
         }
-      )
-  }
+      );
+  };
 
   $scope.set_filter = function (f) {
-    $scope.filter = f
-  }
+    $scope.filter = f;
+  };
 
   $scope.job_filter = function (j) {
-    return j && $scope.filter_set[$scope.filter][j.status]
+    return j && $scope.filter_set[$scope.filter][j.status];
   }
 
   $scope.refresh = function () {
     return Stork.q().then(
       function (jobs) {
         for (var i in jobs) {
-          var j = jobs[i]
-          var i = j.job_id+''
+          var j = jobs[i];
+          var i = j.job_id+'';
           if (!i)
-            continue
+            continue;
           if (!$scope.jobs)
-            $scope.jobs = { }
+            $scope.jobs = { };
           if ($scope.jobs[i])
-            angular.extend($scope.jobs[i], j)
+            angular.extend($scope.jobs[i], j);
           else
-            $scope.jobs[i] = j
+            $scope.jobs[i] = j;
         }
       }
-    )
-  }
+    );
+  };
   $scope.color = {
     processing: 'progress-bar-success progress-striped active',
     scheduled:  'progress-bar-warning',
     complete:   '',
     removed:    'progress-bar-danger',
     failed:     'progress-bar-danger'
-  }
+  };
 
-  $scope.autoRefresh()
-}
+  $scope.autoRefresh();
+});
 
 // Collapsible panels
 $(document).on('click', '.panel-collapse-header', function (e) {
-  var h = $(this).closest('.panel')
-  var b = h.find('.collapse')
+  var h = $(this).closest('.panel');
+  var b = h.find('.collapse');
   b.slideToggle(function () {
-    h.toggleClass('panel-collapsed')
-  })
-})
+    h.toggleClass('panel-collapsed');
+  });
+});
 
 // Tooltips
 $(document).on('mouseover', '[title]', function () {
-  $('.tooltip').remove()
+  $('.tooltip').remove();
   $(this).tooltip({
     animation: 'none',
     container: 'body',
     placement: 'auto top'
-  })
-  $(this).tooltip('show')
-})
+  });
+  $(this).tooltip('show');
+});

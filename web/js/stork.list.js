@@ -29,7 +29,7 @@ $stork.list = function (e, o) {
         convertAjaxResults(data)
         cachedList(path, data)
       }).fail(function (data) {
-        //console.log('failed: '+JSON.stringify(data))
+        console.log('failed: '+JSON.stringify(data))
       })
     }
 

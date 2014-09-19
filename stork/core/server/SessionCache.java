@@ -3,6 +3,7 @@ package stork.core.server;
 import java.util.*;
 
 import stork.feather.*;
+import stork.util.*;
 
 public class SessionCache {
   Map<Session,Session> map = new HashMap<Session, Session>();
@@ -16,9 +17,12 @@ public class SessionCache {
 
   public synchronized Session take(Session session) {
     Session cached = map.get(session);
-    if (cached == null)
+    if (cached == null || cached.isClosed()) {
+      Log.info("Using new session: "+session);
       return session;
+    }
     map.remove(cached);
+    Log.info("Reusing existing session: "+session);
     return cached;
   }
 
@@ -29,8 +33,8 @@ public class SessionCache {
     if (cached != null)
       return cached;
     session.onClose(new Bell() {
-        public void always() { remove(session); }
-        });
+      public void always() { remove(session); }
+    });
     map.put(session, session);
     return session;
   }

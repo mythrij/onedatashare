@@ -164,17 +164,18 @@ tr.min-cell {
 #wrapper {
   height: auto !important;
   min-height: 100%;
-  margin: 0 auto -4em;
+  margin: 0 auto -3em;
   padding: 70px 0 8em;
 }
 
-#footer {
+.footer {
   color: #777;
   background: #444;
-  height: 4em;
-} #footer > div {
+  height: 3.1em;
+  bottom: 0;
+} .footer > div {
   font-size: 80%;
-  padding: 1em;
+  padding: 0.5em;
 }
 
 .login-panel {

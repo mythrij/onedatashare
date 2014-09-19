@@ -17,6 +17,7 @@ public class ListHandler extends Handler<ListRequest> {
     final Resource resource;
     Bell<Stat> listing = null;
 
+    Log.info("Taking session out...");
     if (!req.forceRefresh)
       resource = req.server.sessions.take(req.resolve());
     else
@@ -44,6 +45,7 @@ public class ListHandler extends Handler<ListRequest> {
     // Put the session back when we're done.
     listing.new Promise() {
       public void always() {
+        Log.info("Putting session back...");
         req.server.sessions.put(resource.session);
         aggregator.remove(resource);
       }

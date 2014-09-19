@@ -90,7 +90,7 @@ $(PROJECT).tar.gz: $(JARFILE)
 $(PROJECT)-src.tar.gz: dist-clean
 	$(TAR) czf $(PROJECT)-src.tar.gz *
 
-fetchdeps: | $(LIB)
+fetchdeps:
 	@$(MAKE) -j4 --no-print-directory -C lib
 
 $(BUILD)/build_tag: | $(BUILD)

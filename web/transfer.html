@@ -101,71 +101,63 @@
 
 <!-- Create new credential modal -->
 <script type="text/ng-template" id="add-cred-modal.html">
-  <div class="modal-dialog" ng-init="nc = {type: 'gss-cert'}" role="dialog">
-    <form class="modal-content" ng-submit="$close(end.cred = nc)">
-      <div class="modal-header">
-        <button type="button" class="close" ng-click="$dismiss()" aria-hidden="true">
-          &times;
-        </button>
-        <h4 class="modal-title">
-          Add a New Credential
-        </h4>
-        <div class="small text-muted">
-          Currently only MyProxy credentials are supported.
-        </div>
-      </div>
-      <div class="modal-body container">
-        <div class="form-group col-md-12">
-          <label>MyProxy server</label>
-          <input type="text" class="form-control" ng-model="nc.myproxy_host" placeholder="e.g., myproxy.teragrid.org" required>
-        </div>
+  <div ng-init="nc class="modal-header">
+    <button type="button" class="close" ng-click="$dismiss()" aria-hidden="true">
+      &times;
+    </button>
+    <h4 class="modal-title">
+      Add a New Credential
+    </h4>
+    <div class="small text-muted">
+      Currently only MyProxy credentials are supported.
+    </div>
+  </div>
+  <div class="modal-body container">
+    <div class="form-group col-md-12">
+      <label>MyProxy server</label>
+      <input type="text" class="form-control" ng-model="nc.myproxy_host" placeholder="e.g., myproxy.teragrid.org" required>
+    </div>
 
-        <div class="form-group col-md-6">
-          <label>MyProxy username</label>
-          <input type="text" class="form-control" ng-model="nc.myproxy_user" required>
-        </div>
+    <div class="form-group col-md-6">
+      <label>MyProxy username</label>
+      <input type="text" class="form-control" ng-model="nc.myproxy_user" required>
+    </div>
 
-        <div class="form-group col-md-6">
-          <label>MyProxy password</label>
-          <input type="password" class="form-control" ng-model="nc.myproxy_pass" required>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-default" ng-click="$dismiss()">
-          Cancel
-        </button>
-        <button type="submit" class="pull-right btn btn-primary">
-          Add credential
-        </button>
-      </div>
-    </form>
+    <div class="form-group col-md-6">
+      <label>MyProxy password</label>
+      <input type="password" class="form-control" ng-model="nc.myproxy_pass" required>
+    </div>
+  </div>
+  <div class="modal-footer">
+    <button type="button" class="btn btn-default" ng-click="$dismiss()">
+      Cancel
+    </button>
+    <button type="submit" class="pull-right btn btn-primary">
+      Add credential
+    </button>
   </div>
 </script>
 
 <!-- Transfer/sync confirmation modal -->
 <script type="text/ng-template" id="xfer-modal.html">
-  <div class="modal-dialog" role="dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <button type="button" class="close" ng-click="$dismiss()" aria-hidden="true">
-          &times;
-        </button>
-        <h3>Confirm Transfer</h3>
-      </div>
-      <div class="modal-body text-center">
-        This will perform a transfer from
-        <div class="large">{{job.src.uri}}</div>
-        to
-        <div class="large">{{job.dest.uri}}</div>
-        <div class="text-left col-xs-12" ng-if="debugMode">
-          <h4>Raw Job Info</h4>
-          <pre>{{job|json}}</pre>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-warning" ng-click="$dismiss()">Cancel</button>
-        <button class="btn btn-primary" ng-click="$close(job)">Submit</button>
-      </div>
+  <div class="modal-header">
+    <button type="button" class="close" ng-click="$dismiss()" aria-hidden="true">
+      &times;
+    </button>
+    <h3>Confirm Transfer</h3>
+  </div>
+  <div class="modal-body text-center">
+    This will perform a transfer from
+    <div class="large">{{job.src.uri}}</div>
+    to
+    <div class="large">{{job.dest.uri}}</div>
+    <div class="text-left col-xs-12" ng-if="debugMode">
+      <h4>Raw Job Info</h4>
+      <pre>{{job|json}}</pre>
     </div>
+  </div>
+  <div class="modal-footer">
+    <button class="btn btn-warning" ng-click="$dismiss()">Cancel</button>
+    <button class="btn btn-primary" ng-click="$close(job)">Submit</button>
   </div>
 </script>

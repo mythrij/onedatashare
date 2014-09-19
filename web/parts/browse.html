@@ -1,32 +1,28 @@
 <script type="text/ng-template" id="new-folder.html">
-  <div ng-init="parent = selectedUris()[0]||uri().href()" class="modal-dialog" role="dialog">
-    <form class="modal-content" ng-submit="$close([parent, name])">
-      <div class="modal-header">
-        <button type="button" class="close" ng-click="$dismiss()" aria-hidden="true">
-          &times;
-        </button>
-        <h4 class="modal-title">
-          <i class="icon-folder-open"></i>
-          <i class="icon-plus"></i>
-          Create a New Folder
-        </h4>
-      </div>
-      <div class="modal-body container ">
-        <div class="form-group col-sm-push-3 col-sm-6">
-          <label>Name</label>
-          <input type="text" class="form-control" ng-model="name" focus-me required>
-        </div>
-      </div>
-      <div class="clearfix"></div>
-      <div class="text-center modal-footer">
-        <button type="submit" class="btn btn-primary">
-          OK
-        </button>
-        <button ng-click="$dismiss()" type="button" class="btn btn-default">
-          Cancel
-        </button>
-      </div>
-    </form>
+  <div class="modal-header" ng-init="parent = selectedUris()[0]||uri().href()">
+    <button type="button" class="close" ng-click="$dismiss()" aria-hidden="true">
+      &times;
+    </button>
+    <h4 class="modal-title">
+      <i class="icon-folder-open"></i>
+      <i class="icon-plus"></i>
+      Create a New Folder
+    </h4>
+  </div>
+  <div class="modal-body">
+    <div class="form-group col-sm-push-3 col-sm-6">
+      <label>Name</label>
+      <input type="text" class="form-control" ng-model="name" focus-me required>
+    </div>
+  </div>
+  <div class="clearfix"></div>
+  <div class="text-center modal-footer">
+    <button type="submit" class="btn btn-primary">
+      OK
+    </button>
+    <button ng-click="$dismiss()" type="button" class="btn btn-default">
+      Cancel
+    </button>
   </div>
 </script>
 
@@ -41,7 +37,7 @@
       </button>
     </div>
   </form>
-  <div class="panel-heading container form-inline transfer-toolbar">
+  <div class="panel-heading form-inline transfer-toolbar">
     <div class="input-group col-md-8" style="white-space:nowrap">
       <div class="btn-group">
         <button class="icon-repeat btn btn-default" title="Refresh" ng-click="refresh(temp_uri)">
