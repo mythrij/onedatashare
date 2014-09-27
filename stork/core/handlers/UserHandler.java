@@ -25,9 +25,12 @@ public class UserHandler extends Handler<UserRequest> {
       req.ring(user.getLoginCookie());
     } else if (req.action.equals("history")) {
       req.assertLoggedIn();
-      if (req.uri != null)
-        req.user.addHistory(req.uri);
-      req.ring(req.user.history);
+      if (req.uri != null) {
+        req.assertMayChangeState();
+        req.user().addHistory(req.uri);
+      }
+      System.out.println(req.user().history);
+      req.ring(req.user().history);
     } else {
       throw new RuntimeException("Invalid action.");
     }
@@ -65,19 +68,10 @@ class UserLogin extends Request {
 
   /** Attempt to log in with the given information. */
   public User login() {
-    if (email == null || (email = email.trim()).isEmpty())
-      throw new RuntimeException("No email address provided.");
-    if (hash == null && (password == null || password.isEmpty()))
-      throw new RuntimeException("No password provided.");
-    User user = server.users.get(User.normalizeEmail(email));
-    if (user == null)
-      throw new RuntimeException("Invalid username or password.");
-    if (hash == null)
-      hash = user.hash(password);
-    if (!hash.equals(user.hash))
-      throw new RuntimeException("Invalid username or password.");
-    if (!user.validated)
-      throw new RuntimeException("This account has not been validated.");
-    return user;
+    User.Cookie cookie = new User.Cookie(server);
+    cookie.email = email;
+    cookie.password = password;
+    cookie.hash = hash;
+    return cookie.login();
   }
 }

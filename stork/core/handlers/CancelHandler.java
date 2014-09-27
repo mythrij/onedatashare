@@ -19,7 +19,7 @@ public class CancelHandler extends Handler<CancelRequest> {
       throw new RuntimeException("No jobs specified.");
 
     // Find ad in job list, set it as removed.
-    List<Job> list = new JobSearcher(req.user.jobs).query(Ad.marshal(req));
+    List<Job> list = new JobSearcher(req.user().jobs).query(Ad.marshal(req));
     for (Job job : list) try {
       job.remove("Removed by user.");
       sdr.swallow(job.jobId());

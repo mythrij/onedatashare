@@ -26,11 +26,11 @@ public class InfoHandler extends Handler<InfoRequest> {
   void sendCredInfo(InfoRequest req) {
     req.assertLoggedIn();
     if (req.uuid != null) try {
-      req.ring(req.user.credentials.get(req.uuid));
+      req.ring(req.user().credentials.get(req.uuid));
     } catch (Exception e) {
       throw new RuntimeException("No credential with that ID.");
     } else {
-      req.ring(req.user.credentials);
+      req.ring(req.user().credentials);
     }
   }
 

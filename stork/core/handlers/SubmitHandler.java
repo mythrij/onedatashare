@@ -12,11 +12,11 @@ public class SubmitHandler extends Handler<JobRequest> {
 
     req.validate();
 
-    Job job = req.user.createJob(req);
+    Job job = req.user().createJob(req);
 
     System.out.println(req.server.scheduler.add(job));
     if (req.server.scheduler.add(job)) {
-      req.user.saveJob(job);
+      req.user().saveJob(job);
       server.dumpState();
     }
 
@@ -30,7 +30,7 @@ class JobRequest extends Request {
   // Hack to get around marshalling limitations.
   private class SubEndpointRequest extends EndpointRequest {
     public Server server() { return user().server(); }
-    public User user() { return JobRequest.this.user; }
+    public User user() { return JobRequest.this.user(); }
   };
 
   // TODO: More validations.

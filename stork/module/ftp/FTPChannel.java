@@ -47,7 +47,7 @@ public class FTPChannel {
 
   // Internal representation of the remote server type.
   private static enum Protocol {
-    ftp(21), gridftp(2811);
+    ftp(21), gridftp(2811), gsiftp(2811);
 
     int port;
 

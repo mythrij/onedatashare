@@ -21,9 +21,42 @@ public abstract class User {
   public String salt;
   public boolean validated = true;
 
-  public LinkedList<URI> history;
-  public HashMap<String,StorkCred> credentials;
-  public LinkedList<UserJob> jobs = new LinkedList<UserJob>();
+  public LinkedList<URI> history = new LinkedList<URI>();
+  public Map<String,StorkCred> credentials;
+  public List<UserJob> jobs = new LinkedList<UserJob>();
+
+  /** Basic user login cookie. */
+  public static class Cookie {
+    public String email;
+    public String hash;
+    public String password;
+    private transient Server server;
+    
+    protected Cookie() { }
+
+    public Cookie(Server server) { this.server = server; }
+
+    /** Can be overridden by subclasses. */
+    public Server server() { return server; }
+
+    /** Attempt to log in with the given information. */
+    public User login() {
+      if (email == null || (email = email.trim()).isEmpty())
+        throw new RuntimeException("No email address provided.");
+      if (hash == null && (password == null || password.isEmpty()))
+        throw new RuntimeException("No password provided.");
+      User user = server().users.get(User.normalizeEmail(email));
+      if (user == null)
+        throw new RuntimeException("Invalid username or password.");
+      if (hash == null)
+        hash = user.hash(password);
+      if (!hash.equals(user.hash))
+        throw new RuntimeException("Invalid username or password.");
+      if (!user.validated)
+        throw new RuntimeException("This account has not been validated.");
+      return user;
+    }
+  }
 
   // A job owned by this user.
   private class UserJob extends Job {
@@ -62,12 +95,11 @@ public abstract class User {
   }
 
   /** Get an object containing information to return on login. */
-  public Object getLoginCookie() {
-    return new Object() {
-      String email = User.this.email;
-      String hash = User.this.hash;
-      List history = User.this.history;
-    };
+  public Cookie getLoginCookie() {
+    Cookie cookie = new Cookie(server());
+    cookie.email = email;
+    cookie.hash = hash;
+    return cookie;
   }
 
   /** Add a URL to a user's history. */
