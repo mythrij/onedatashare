@@ -52,6 +52,11 @@ body {
   font-weight: 300;
 }
 
+/* Certain things feel nicer without a text selection cursor. */
+h1, h2, h3, h4, h5, h6, .help-block {
+  cursor: default;
+}
+
 .bullet-list li {
   list-style-type: disc;
 }
@@ -136,8 +141,11 @@ body {
   content: "\f141";
   font-family: FontAwesome;
 }
-  
-#noscript {
+
+/* Displayed to a user who has scripting disabled. */
+noscript.modal-backdrop {
+  background: #444;
+} #noscript {
   display: block;
   font-size: 1.2em;
   font-weight: bold;
@@ -145,9 +153,11 @@ body {
   color: #FFF;
   text-shadow: 0 1px 2px #000;
   border-bottom: 1px solid #222;
-} #noscript > div {
-  padding: 0.5em;
-} #noscript b {
+  margin: 3em;
+  padding: 1em;
+  text-align: center;
+  cursor: default;
+} #noscript u {
   color: #BDF;
 }
 
@@ -198,6 +208,13 @@ tr.min-cell {
   padding: 0 0.5em;
 }
 
+div.file-list {
+  border: 1px solid gray;
+} div.tree {
+  border: 1px solid gray;
+
+}
+
 .transfer-wrapper {
   margin: auto;
   width: 90%;
@@ -212,18 +229,34 @@ tr.min-cell {
 .uri > div {
   position: relative;
 } .uri button, .uri input {
-  line-height: 1 !important;
-  height: 2.5em !important;
-} .uri button {
-  display: none;
-  background: transparent;
+  line-height: 1;
+  height: 2.5em;
+} .uri .buttons {
   position: absolute;
   right: 0;
   top: 0;
-} .uri .changed button {
+  bottom: 0;
+} .uri button {
+  color: gray;
+  background: transparent;
+  width: 1.5em;
+  float: right;
+  padding: 0 !important;
+} .uri button:active, .uri button:focus, .uri button:hover {
+  outline: 0;
+  color: black;
+  border-width: 0;
+} .uri button.history {
+  right: 1.5em;
+  cursor: default;
+} .uri button.go {
+  display: none;
+} .uri .changed button.go {
   display: inline-block;
-} .uri .changed input {
-  padding-right: 2.5em;
+} .uri .changed button.reload {
+  display: none;
+} input.uri-input {
+  padding-right: 3.7em !important;
 }
 
 .tree {

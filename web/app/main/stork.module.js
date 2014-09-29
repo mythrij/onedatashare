@@ -1,101 +1,31 @@
 'use strict';
-angular.module('stork', ['ngRoute', 'ui.bootstrap', 'ui'],
+
+angular.module('stork', ['ngRoute', 'ui.bootstrap', 'ui', 'stork.util'],
   function ($provide, $routeProvider) {
+    /* This is where you can add routes and change page titles. */
     $routeProvider.when('/', {
       title: 'Home',
-      templateUrl: 'home.html'
+      templateUrl: 'app/home/home.html'
     }).when('/transfer', {
       title: 'Transfer',
-      templateUrl: 'transfer.html',
+      templateUrl: 'app/transfer/transfer.html',
       controller: 'TransferCtrl',
       requireLogin: true
     }).when('/user', {
       title: 'User Settings',
-      templateUrl: 'user.html',
+      templateUrl: 'app/user/user.html',
       requireLogin: true
     }).when('/terms', {
       title: 'Terms of Service',
-      templateUrl: 'terms.html'
+      templateUrl: 'app/legal/terms.html'
     }).when('/privacy', {
       title: 'Privacy Policy',
-      templateUrl: 'privacy.html'
+      templateUrl: 'app/legal/privacy.html'
     }).otherwise({
       redirectTo: '/'
     });
   }
-).filter('size', function () {
-  return function (bytes, precision) {
-    var b = bytes     || 0
-    var p = precision || 0
-    var s = 'kMGTPEZY'
-    for (var i = 0; i < s.length && b >= 1000; i++) {
-      b /= 1000
-      var c = s.charAt(i)
-    }
-    return c ? b.toFixed(p)+c : b.toFixed(0)
-  };
-}).filter('percent', function () {
-  return function (p, precision, symbol) {
-    if (!p || p.done < 0 || p.total <= 0) return
-    var d = p.done
-    var t = p.total
-    var p = precision || 0
-    var n = 100*d/t
-    n = (n < 0) ? 0 : (n > 100) ? 100 : n
-    return n.toFixed(p)+(symbol||'%')
-  };
-}).filter('progress', function (sizeFilter) {
-  return function (p, precision, symbol) {
-    if (!p) return;
-    var t = sizeFilter(p.total);
-    var d = sizeFilter(p.done);
-    return d+'/'+t;
-  };
-}).filter('values', function () {
-  return _.values;
-}).filter('keys', function () {
-  return _.keys;
-}).filter('pairs', function () {
-  return _.pairs;
-}).filter('moment', function () {
-  return function (input, format) {
-    return moment(input, format).fromNow();
-  };
-}).filter('URI', function () {
-  return function (input) {
-    return new URI(input);
-  };
-}).filter('paginate', function () {
-  return function (input, page, per) {
-    page = (!page || page < 1) ? 1  : page;
-    per  = (!per  || per  < 1) ? 10 : per;
-    return input.slice(per*(page-1), per*page);
-  };
-}).directive('bsRoute', function ($location) {
-  return {
-    link: function (scope, elm, attrs) {
-      var check = function () {
-        if ($location.path() == attrs.bsRoute)
-          elm.addClass('active');
-        else
-          elm.removeClass('active');
-      };
-      scope.$on('$routeChangeSuccess',
-        function (event, current, previous) {
-          check();
-        }
-      );
-    }
-  };
-}).directive('focusMe', function ($timeout) {    
-  return {    
-    link: function (scope, element, attrs, model) {                
-      $timeout(function () {
-        $(element[0]).focus();
-      }, 20);
-    }
-  };
-}).factory('Stork', function ($http, $q) {
+).factory('Stork', function ($http, $q) {
   var api = function (r) {
     return '/api/stork/'+r
   };
@@ -104,6 +34,21 @@ angular.module('stork', ['ngRoute', 'ui.bootstrap', 'ui'],
   return {
     $post: function (name, data) {
       return $http.post(api(name), data).then(gr, ge);
+    },
+    $get: function (name, data) {
+      return $http.get(api(name), data).then(gr, ge);
+    },
+    $download: function (uri) {
+      uri = api('get')+'?uri='+uri;
+      var id = 'hiddenDownloadFrame';
+      var iframe = document.getElementById(id);
+      if (!iframe) {
+        iframe = document.createElement('iframe');
+        iframe.id = id;
+        iframe.style.display = 'none';
+        document.body.appendChild(iframe);
+      }
+      iframe.src = uri;
     },
     login: function (info) {
       return this.$post('user', angular.extend({
@@ -151,6 +96,9 @@ angular.module('stork', ['ngRoute', 'ui.bootstrap', 'ui'],
     },
     submit: function (job) {
       return this.$post('submit', job);
+    },
+    get: function (uri) {
+      this.$download(uri);
     }
   };
 }).factory('User', function (Stork, $location, $rootScope) {
@@ -159,15 +107,14 @@ angular.module('stork', ['ngRoute', 'ui.bootstrap', 'ui'],
       return $rootScope.$user;
     },
     saveLogin: function (u) {
-      console.log(u);
       $rootScope.$user = u;
       var exp = { expires: 31536000 };
-      Cookies.set('user.email', u.email, exp);
-      Cookies.set('user.hash', u.hash, exp);
+      Cookies.set('email', u.email, exp);
+      Cookies.set('hash', u.hash, exp);
     },
     forgetLogin: function (error) {
       delete $rootScope.$user;
-      Cookies.expire('user.email');
+      Cookies.expire('email');
     },
     login: function (info) {
       if (info) {
@@ -183,12 +130,12 @@ angular.module('stork', ['ngRoute', 'ui.bootstrap', 'ui'],
     history: function (uri) {
       return uri ? Stork.history(uri).then(function (h) {
         return $rootScope.$user.history = h;
-      }) : $rootScope.user.history();
+      }) : $rootScope.$user.history();
     },
     $init: function () {
       var u = {
-        email: Cookies.get('user.email'),
-        hash:  Cookies.get('user.hash')
+        email: Cookies.get('email'),
+        hash:  Cookies.get('hash')
       };
 
       if (u.email && u.hash)
@@ -205,15 +152,14 @@ angular.module('stork', ['ngRoute', 'ui.bootstrap', 'ui'],
     appendToBody: true,
     animation: false
   });
-}).run(function ($location, $rootScope, User) {
+}).run(function ($location, $document, $rootScope, User) {
   $rootScope.$on('$routeChangeSuccess',
     function (event, current, previous) {
       if (!current.$$route)
         return;
       if (current.$$route.requireLogin)
         User.checkAccess();
-      $rootScope.$template = current.templateUrl;
-      $rootScope.$title = 'StorkCloud - '+current.$$route.title;
+      $document[0].title = 'StorkCloud - '+current.$$route.title;
     }
   );
 }).controller('LoginCtrl', function ($scope, Stork, $location, User, $modal) {
@@ -223,7 +169,6 @@ angular.module('stork', ['ngRoute', 'ui.bootstrap', 'ui'],
   };
   $scope.login = function (u) {
     return User.login(u).then(function (o) {
-      console.log($scope.$close);
       $scope.$close();
     }, function (e) {
       alert(e);
@@ -231,7 +176,7 @@ angular.module('stork', ['ngRoute', 'ui.bootstrap', 'ui'],
   };
   $scope.loginModal = function () {
     $modal.open({
-      templateUrl: '/parts/login.html',
+      templateUrl: '/app/user/login.html',
       controller: 'LoginCtrl',
       size: 'sm'
     });
@@ -347,7 +292,7 @@ angular.module('stork', ['ngRoute', 'ui.bootstrap', 'ui'],
       }
     ).finally(function () {
       scope.loading = false;
-    })
+    });
   };
 
   // Open the mkdir dialog.
@@ -364,7 +309,7 @@ angular.module('stork', ['ngRoute', 'ui.bootstrap', 'ui'],
           alert('Could not create folder.');
         }
       );
-    })
+    });
   };
 
   // Delete the selected files.
@@ -380,6 +325,16 @@ angular.module('stork', ['ngRoute', 'ui.bootstrap', 'ui'],
         );
       }
     });
+  };
+
+  // Download the selected file.
+  $scope.download = function (uris) {
+    if (uris == undefined || uris.length == 0)
+      alert('You must select a file.')
+    else if (uris.length > 1)
+      alert('You can only download one file at a time.');
+    else
+      Stork.get(uris[0]);
   };
 
   // Return the scope corresponding to the parent directory.
@@ -504,15 +459,12 @@ angular.module('stork', ['ngRoute', 'ui.bootstrap', 'ui'],
   };
 }).controller('CredCtrl', function ($scope, $modal) {
   $scope.creds = [ ];
-  $scope.credChanged = function () {
-    if ($scope.end.cred == 'new-myproxy') $modal.open({
+  /* Open a modal, return a future credential. */
+  $scope.newCredential = function (type) {
+    return $modal.open({
       templateUrl: 'add-cred-modal.html',
       scope: $scope
-    }).result.then(function (c) {
-      //$scope.end.cred = c;
-    }, function () {
-      delete $scope.end.cred;
-    })
+    }).result;
   };
 }).controller('QueueCtrl', function ($scope, $rootScope, Stork, $timeout) {
   $scope.filters = {

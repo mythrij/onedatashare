@@ -5,42 +5,14 @@
     </h4>
   </div>
   <div id="stork-ls" class="panel-body container collapse in text-center">
-    <div class="col-sm-5-5" ng-controller="BrowseCtrl" ng-init="end = left" ng-include="'/parts/browse.html'">
+    <div class="col-xs-6" ng-controller="BrowseCtrl" ng-init="end = left" ng-include="'/app/transfer/browse/browse.html'">
       <div class="progress progress-striped active fade in">
         <div style="width: 100%" role="progressbar" class="progress-bar">
           <big>Loading...</big>
         </div>
       </div>
     </div>
-    <div class="col-sm-1 input-group-lg container text-center panel panel-heading transfer-controls">
-      <div class="col-xs-1 visible-xs"></div>
-      <button class="btn btn-lg btn-default col-sm-12 col-xs-2" title="Transfer contents"
-              ng-disabled="!canTransfer(left, right, true)" ng-click="transfer(left, right, true)">
-        <i class="icon-share hidden-xs"></i>
-        <i class="icon-share visible-xs icon-rotate-90"></i>
-      </button>
-      <button class="btn btn-lg btn-default col-sm-12 col-xs-2" title="Transfer"
-              ng-disabled="!canTransfer(left, right, false)" ng-click="transfer(left, right, false)">
-        <i class="icon-share-alt hidden-xs"></i>
-        <i class="icon-share-alt visible-xs icon-rotate-90"></i>
-      </button>
-      <button class="btn btn-lg btn-default col-sm-12 col-xs-2 ph" title="Synchronize"
-              ng-disabled="!canSync(left, right)" ng-click="sync(left, right)">
-        <i class="icon-refresh hidden-xs"></i>
-        <i class="icon-refresh visible-xs icon-rotate-90"></i>
-      </button>
-      <button class="btn btn-lg btn-default col-sm-12 col-xs-2" title="Transfer"
-              ng-disabled="!canTransfer(right, left, false)" ng-click="transfer(right, left, false)">
-        <i class="icon-share-alt hidden-xs icon-rotate-180"></i>
-        <i class="icon-share-alt visible-xs icon-rotate-270"></i>
-      </button>
-      <button class="btn btn-lg btn-default col-sm-12 col-xs-2" title="Transfer contents"
-              ng-disabled="!canTransfer(right, left, true)" ng-click="transfer(right, left, true)">
-        <i class="icon-share hidden-xs icon-rotate-180"></i>
-        <i class="icon-share visible-xs icon-rotate-270"></i>
-      </button>
-    </div>
-    <div class="col-sm-5-5" ng-controller="BrowseCtrl" ng-init="end = right" ng-include="'/parts/browse.html'">
+    <div class="col-xs-6" ng-controller="BrowseCtrl" ng-init="end = right" ng-include="'/app/transfer/browse/browse.html'">
       <div class="progress progress-striped active fade in">
         <div style="width: 100%" role="progressbar" class="progress-bar">
           <big>Loading...</big>
@@ -48,7 +20,34 @@
       </div>
     </div>
 
+    <div class="clearfix"></div>
+
+    <div class="input-group-lg container text-center panel panel-heading transfer-controls">
+      <div class="visible-xs"></div>
+      <button class="btn btn-lg btn-default" title="Transfer contents"
+              ng-disabled="!canTransfer(left, right, true)" ng-click="transfer(left, right, true)">
+        <i class="icon-share"></i>
+      </button>
+      <button class="btn btn-lg btn-default" title="Transfer"
+              ng-disabled="!canTransfer(left, right, false)" ng-click="transfer(left, right, false)">
+        <i class="icon-share-alt"></i>
+      </button>
+      <button class="btn btn-lg btn-default ph" title="Synchronize"
+              ng-disabled="!canSync(left, right)" ng-click="sync(left, right)">
+        <i class="icon-refresh"></i>
+      </button>
+      <button class="btn btn-lg btn-default" title="Transfer"
+              ng-disabled="!canTransfer(right, left, false)" ng-click="transfer(right, left, false)">
+        <i class="icon-share-alt icon-rotate-180"></i>
+      </button>
+      <button class="btn btn-lg btn-default" title="Transfer contents"
+              ng-disabled="!canTransfer(right, left, true)" ng-click="transfer(right, left, true)">
+        <i class="icon-share icon-rotate-180"></i>
+      </button>
+    </div>
+
     <div class="clearfix" ng-if="debugMode"></div>
+
     <div class="text-left col-xs-12" ng-if="debugMode">
       <h4>Raw Job Info</h4>
       <pre>{{job|json}}</pre>
@@ -90,7 +89,7 @@
       Transfer Progress and Queue
     </h4>
   </div>
-  <div class="collapse in" ng-include="'/parts/queue.html'">
+  <div class="collapse in" ng-include="'/app/transfer/queue/queue.html'">
     <div class="progress progress-striped active fade in">
       <div style="width: 100%" role="progressbar" class="progress-bar">
         <big>Loading...</big>
@@ -101,7 +100,7 @@
 
 <!-- Create new credential modal -->
 <script type="text/ng-template" id="add-cred-modal.html">
-  <div ng-init="nc class="modal-header">
+  <div class="modal-header">
     <button type="button" class="close" ng-click="$dismiss()" aria-hidden="true">
       &times;
     </button>
@@ -112,30 +111,32 @@
       Currently only MyProxy credentials are supported.
     </div>
   </div>
-  <div class="modal-body container">
-    <div class="form-group col-md-12">
-      <label>MyProxy server</label>
-      <input type="text" class="form-control" ng-model="nc.myproxy_host" placeholder="e.g., myproxy.teragrid.org" required>
-    </div>
+  <form ng-init="nc = {type: 'gss-cert'}" ng-submit="$close(end.cred = nc)">
+    <div class="modal-body">
+      <div class="form-group col-md-12">
+        <label>MyProxy server</label>
+        <input type="text" class="form-control" ng-model="nc.myproxy_host" placeholder="e.g., myproxy.teragrid.org" required>
+      </div>
 
-    <div class="form-group col-md-6">
-      <label>MyProxy username</label>
-      <input type="text" class="form-control" ng-model="nc.myproxy_user" required>
-    </div>
+      <div class="form-group col-md-6">
+        <label>MyProxy username</label>
+        <input type="text" class="form-control" ng-model="nc.myproxy_user" required>
+      </div>
 
-    <div class="form-group col-md-6">
-      <label>MyProxy password</label>
-      <input type="password" class="form-control" ng-model="nc.myproxy_pass" required>
+      <div class="form-group col-md-6">
+        <label>MyProxy password</label>
+        <input type="password" class="form-control" ng-model="nc.myproxy_pass" required>
+      </div>
     </div>
-  </div>
-  <div class="modal-footer">
-    <button type="button" class="btn btn-default" ng-click="$dismiss()">
-      Cancel
-    </button>
-    <button type="submit" class="pull-right btn btn-primary">
-      Add credential
-    </button>
-  </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-default" ng-click="$dismiss()">
+        Cancel
+      </button>
+      <button type="submit" class="pull-right btn btn-primary">
+        Add credential
+      </button>
+    </div>
+  </form>
 </script>
 
 <!-- Transfer/sync confirmation modal -->
