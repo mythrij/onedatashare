@@ -52,7 +52,7 @@ body {
   font-weight: 300;
 }
 
-/* Certain things feel nicer without a text selection cursor. */
+/* Certain things look nicer without a text selection cursor. */
 h1, h2, h3, h4, h5, h6, .help-block {
   cursor: default;
 }
@@ -206,13 +206,6 @@ tr.min-cell {
   white-space: nowrap;
 } #stork-queue .endpoints i {
   padding: 0 0.5em;
-}
-
-div.file-list {
-  border: 1px solid gray;
-} div.tree {
-  border: 1px solid gray;
-
 }
 
 .transfer-wrapper {

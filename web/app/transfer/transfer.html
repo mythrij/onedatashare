@@ -1,8 +1,6 @@
-<div class="container panel">
-  <div class="panel-heading panel-collapse-header">
-    <h4 class="panel-title">
-      Browse and Transfer Files
-    </h4>
+<div class="panel panel-default container">
+  <div class="panel-collapse-header">
+    <h4>Browse and Transfer Files</h4>
   </div>
   <div id="stork-ls" class="panel-body container collapse in text-center">
     <div class="col-xs-6" ng-controller="BrowseCtrl" ng-init="end = left" ng-include="'/app/transfer/browse/browse.html'">
@@ -22,27 +20,27 @@
 
     <div class="clearfix"></div>
 
-    <div class="input-group-lg container text-center panel panel-heading transfer-controls">
+    <div class="input-group-lg text-center panel panel-heading transfer-controls">
       <div class="visible-xs"></div>
       <button class="btn btn-lg btn-default" title="Transfer contents"
               ng-disabled="!canTransfer(left, right, true)" ng-click="transfer(left, right, true)">
-        <i class="icon-share"></i>
+        <i class="fa fa-share"></i>
       </button>
       <button class="btn btn-lg btn-default" title="Transfer"
               ng-disabled="!canTransfer(left, right, false)" ng-click="transfer(left, right, false)">
-        <i class="icon-share-alt"></i>
+        <i class="fa fa-share-alt"></i>
       </button>
       <button class="btn btn-lg btn-default ph" title="Synchronize"
               ng-disabled="!canSync(left, right)" ng-click="sync(left, right)">
-        <i class="icon-refresh"></i>
+        <i class="fa fa-refresh"></i>
       </button>
       <button class="btn btn-lg btn-default" title="Transfer"
               ng-disabled="!canTransfer(right, left, false)" ng-click="transfer(right, left, false)">
-        <i class="icon-share-alt icon-rotate-180"></i>
+        <i class="fa fa-share-alt fa fa-rotate-180"></i>
       </button>
       <button class="btn btn-lg btn-default" title="Transfer contents"
               ng-disabled="!canTransfer(right, left, true)" ng-click="transfer(right, left, true)">
-        <i class="icon-share icon-rotate-180"></i>
+        <i class="fa fa-share fa fa-rotate-180"></i>
       </button>
     </div>
 
@@ -55,11 +53,9 @@
   </div>
 </div>
 
-<div class="container panel panel-collapsed">
-  <div class="panel-heading panel-collapse-header">
-    <h4 class="panel-title">
-      Transfer Options
-    </h4>
+<div class="container panel panel-default panel-collapsed">
+  <div class="panel-collapse-header">
+    <h4>Transfer Options</h4>
   </div>
 
   <div id="transfer-options" class="panel-body collapse">
@@ -83,11 +79,9 @@
   </div>
 </div>
 
-<div class="container panel">
-  <div class="panel-heading panel-collapse-header">
-    <h4 class="panel-title">
-      Transfer Progress and Queue
-    </h4>
+<div class="container panel panel-default">
+  <div class="panel-collapse-header">
+    <h4>Transfer Progress and Queue</h4>
   </div>
   <div class="collapse in" ng-include="'/app/transfer/queue/queue.html'">
     <div class="progress progress-striped active fade in">
