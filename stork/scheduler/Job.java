@@ -10,53 +10,97 @@ import stork.core.handlers.*;
 import stork.feather.*;
 
 import static stork.scheduler.JobStatus.*;
+import static stork.feather.util.Time.now;
 
-/** A transfer job. */
-public abstract class Job {
-  private int job_id = 0;
-  private JobStatus status;
+/**
+ * A job that should be scheduled to run. Currently this only means transfer
+ * jobs. In the future we will likely have different types of jobs, such as
+ * deletion jobs.
+ */
+public class Job {
+  private JobStatus status = scheduled;
   private JobEndpointRequest src, dest;
   private int attempts = 0, max_attempts = 10;
   private String message;
 
-  private Map<?,?> options;
+  /** An ID meaningful to the user who owns the job. */
+  public int job_id;
+
+  /** The owner of the job. */
+  public String owner;  // FIXME: What if the email changes?
+  private transient User user;
+
+  /** Should be set by scheduler. */
+  public Scheduler scheduler;
+
+  /** The {@code User} this {@code Job} belongs to. */
+  public User user() {
+    if (user == null)
+      user = scheduler().server().findUser(owner);
+    return user;
+  }
+
+  private UUID uuid;
+
+  /** A UUID used to identify the job in the system. */
+  public synchronized UUID uuid() {
+    if (uuid == null)
+      uuid = UUID.randomUUID();
+    return uuid;
+  }
+
+  /** Times of various important events. */
+  private Times times = new Times();
+  private static class Times {
+    long scheduled;
+    long start;
+    long completion;
+  }
 
   private transient Transfer transfer;
 
+  protected Scheduler scheduler() { return scheduler; }
+
   private class JobEndpointRequest extends EndpointRequest {
-    public JobEndpointRequest() {
-      System.out.println("MADE");
-      new Error().printStackTrace();
-    }
-    public Server server() { return Job.this.user().server(); }
-    public User user() {
-      System.out.println(getClass());
-      return Job.this.user();
-    }
+    public Server server() { return scheduler().server(); }
+    public User user() { return Job.this.user(); }
   }
 
-  /** The {@code User} this {@code Job} belongs to. */
-  public abstract User user();
+  public int jobId() {
+    return job_id;
+  }
+
+  public Job jobId(int id) {
+    job_id = id;
+    return this;
+  }
+
+  /** Get the status of the job. */
+  public synchronized JobStatus status() { return status; }
 
   /**
-   * Sets the status of the job, updates ad, and adjusts state according to the
-   * status. This can also be used to set a message.
+   * Set the status of the job. This will perform a state transition, and
+   * update the state of the job as necessary.
    */
-  public synchronized JobStatus status() {
-    return status;
-  } public synchronized Job status(JobStatus s) {
-    return status(s, message);
-  } public synchronized Job status(String msg) {
-    return status(status, msg);
-  } public synchronized Job status(JobStatus s, String msg) {
-    assert !s.isFilter;
+  public synchronized Job status(JobStatus status) {
+    if (status == null || status.isFilter)
+      throw new Error("Cannot set job state to status: "+status);
 
-    message = msg;
+    if (this.status == status)
+      return this;
 
-    // Update state.
-    switch (status = s) {
+    // Handle leaving the current state.
+    if (this.status != null) switch (this.status) {
+      case processing:
+        if (transfer != null)
+          transfer.stop();
+        transfer = null;
+    }
+
+    // Handle entering the new state.
+    switch (this.status = status) {
       case scheduled:
-        /*queue_timer = new Watch(true);*/ break;
+        times.scheduled = now(); break;
       case processing:
         /*run_timer = new Watch(true);*/ break;
       case removed:
@@ -70,86 +114,120 @@ public abstract class Job {
     } return this;
   }
 
-  /** Get the job id. */
-  public synchronized int jobId() {
-    return job_id;
+  /** Set the message associated with the job. */
+  public synchronized Job message(String message) {
+    this.message = message;
+    return this;
   }
 
-  /** Set the job id. */
-  public synchronized void jobId(int id) {
-    job_id = id;
+  /** Set the status and job message at the same time, for convenience. */
+  public synchronized Job status(JobStatus status, String message) {
+    message(message);
+    status(status);
+    return this;
   }
 
   /** Called when the job gets removed from the queue. */
-  public synchronized void remove(String reason) {
-    if (isTerminated())
+  public synchronized Job remove(String reason) {
+    if (isDone())
       throw new RuntimeException("The job has already terminated.");
-    message = reason;
-    status(removed);
+    return status(removed, reason);
   }
 
   /**
-   * This will increment the attempts counter, and set the status
-   * back to scheduled. It does not actually put the job back into
-   * the scheduler queue.
+   * Completely restarts the job. This will reset any state associated with the
+   * job and start it again as if it is the first time it has been seen by the
+   * system. This should only ever be called as a result of a user request.
    */
-  public synchronized void reschedule() {
-    attempts++;
-    status(scheduled);
+  public synchronized Job restart() {
+    // TODO
+    return this;
   }
 
-  /** Check if the job should be rescheduled. */
-  public synchronized boolean shouldReschedule() {
-    // If we've failed, don't reschedule.
-    if (isTerminated())
-      return false;
+  /** Reschedule the job, if possible. */
+  public synchronized Job reschedule() {
+    if (!canBeScheduled())
+      throw new RuntimeException("Job cannot be automatically rescheduled.");
+    status(scheduled);
+    scheduler.schedule(this);
+    return this;
+  }
 
-    // Check for custom max attempts.
+  private boolean hasMoreAttempts() {
+    // Check if we've reached max attempts.
     if (max_attempts > 0 && attempts >= max_attempts)
       return false;
 
     // Check for configured max attempts.
-    int max = Config.global.max_attempts;
+    int max = scheduler().server().config.max_attempts;
     if (max > 0 && attempts >= max)
       return false;
 
     return true;
   }
 
-  /**
-   * Return whether or not the job has terminated.
-   */
-  public synchronized boolean isTerminated() {
+  /** Check if we can schedule the job. */
+  public synchronized boolean canBeScheduled() {
     switch (status) {
       case failed:
-      case pending:
-      case complete:
+        return hasMoreAttempts();
+      case scheduled:
+      case processing:
         return true;
       default:
         return false;
     }
   }
 
+  /** Return whether or not the job has terminated. */
+  public synchronized boolean isDone() {
+    return done.filter().contains(status);
+  }
+
   /**
-   * Start the transfer between the specified resources.
+   * Start the transfer between the specified resources. This returns a {@code
+   * Bell} whose ringing indicates the completion of the job (or some
+   * other problem encountered when starting the job).
    */
-  public synchronized void start() {
-    if (status != scheduled) {
-      status(failed, "Trying to run unscheduled job.");
-    } else {
-      status(processing);
-      transfer =
-        src.resolveAs("source").transferTo(dest.resolveAs("destination"));
-      transfer.start();
-      transfer.onStop().new Promise() {
-        public void done() {
-          status(complete);
-        } public void fail(Throwable t) {
-          status(failed, t.getMessage());
-          transfer = null;
-        }
-      };
+  public synchronized Bell<Job> start() {
+    try {
+      return start0();
+    } catch (Exception e) {
+      return new Bell<Job>(e);
     }
+  }
+  
+  // Handle the actual starting the transfer. This method can throw any
+  // exception it wants.
+  private synchronized Bell<Job> start0() throws Exception {
+    if (status != scheduled)
+      throw new Exception("Job is not scheduled.");
+
+    status(processing);
+
+    // Keep this as a temporary in case we get unlucky and the job fails before
+    // we return, because the done handler sets this.transfer to null.
+    Transfer transfer = 
+      src.resolveAs("source").transferTo(dest.resolveAs("destination"));
+
+    this.transfer = transfer;
+
+    transfer.onStop().new Promise() {
+      public void done() {
+        // We did it! The transfer completed successfully.
+        status(complete);
+      } public void fail(Throwable t) {
+        // There was some problem during the transfer. Reschedule if possible.
+        status(failed, t.getMessage());
+        attempts++;
+        reschedule();
+      }
+    };
+
+    // Wish me luck!
+    transfer.start();
+
+    return transfer.onStop().as(this);
   }
 
   public String toString() {

@@ -1,5 +1,6 @@
 package stork.core.handlers;
 
+import stork.ad.*;
 import stork.core.server.*;
 import stork.feather.*;
 import stork.scheduler.*;
@@ -12,23 +13,20 @@ public class SubmitHandler extends Handler<JobRequest> {
 
     req.validate();
 
-    Job job = req.user().createJob(req);
+    Job job = req.createJob();
+    req.user().saveJob(job);
 
-    System.out.println(req.server.scheduler.add(job));
-    if (req.server.scheduler.add(job)) {
-      req.user().saveJob(job);
-      server.dumpState();
-    }
+    server.dumpState();
 
     req.ring(job);
   }
 }
 
 class JobRequest extends Request {
-  private SubEndpointRequest src, dest;
+  private JobEndpointRequest src, dest;
 
   // Hack to get around marshalling limitations.
-  private class SubEndpointRequest extends EndpointRequest {
+  private class JobEndpointRequest extends EndpointRequest {
     public Server server() { return user().server(); }
     public User user() { return JobRequest.this.user(); }
   };
@@ -38,5 +36,10 @@ class JobRequest extends Request {
     src.validateAs("source");
     dest.validateAs("destination");
     return this;
+  }
+
+  /** Create a {@code Job} from this request. */
+  public Job createJob() {
+    return Ad.marshal(this).unmarshal(new Job());
   }
 }

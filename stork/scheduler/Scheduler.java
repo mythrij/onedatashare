@@ -8,37 +8,59 @@ import stork.util.*;
 import java.util.*;
 import java.util.concurrent.*;
 
-public abstract class Scheduler implements Collection<Job> {
-  private int size = 0;
+/**
+ * Maintains a set of all {@code Job}s and handles ordering {@code Job} for
+ * execution. This class implements a {@code Set} interface so its state can be
+ * restored after restarting the system. {@code Job}s enter the system via the
+ * {@link #add(Job)} method, which handles filtering and other bookkeeping.
+ * Subclasses need only implement the {@link #schedule(Job)} method and any
+ * data structures necessary to support the scheduling of {@code Job}s.
+ */
+public abstract class Scheduler implements Set<Job> {
+  // All jobs known by the system, indexed by UUID.
+  private transient HashMap<UUID,Job> jobs = new HashMap<UUID,Job>();
 
   /**
-   * Schedule {@code job} to be executed. If {@code job} is already complete,
-   * this method should silently ignore it. If {@code job} is not yet complete
-   * (i.e., its status indicates that it is scheduled or running) it should be
-   * stopped and rescheduled.
+   * Schedule {@code job} to be executed. The scheduler implementation need
+   * only find a time to schedule the job based on whatever scheduling policy
+   * the schedule implements. This will be called again automatically if a job
+   * fails and it still has more attempts remaining.
    */
   protected abstract void schedule(Job job);
 
-  /** Get the job with the given {@code id}. */
-  public abstract Job get(int id);
+  /**
+   * The server this scheduler belongs to. Subclasses should not override this.
+   */
+  public Server server() { return null; }
 
-  /** Schedule a job to run. */
+  /**
+   * Add a job and schedule it if necessary. This will always either return
+   * {@code true} or throw a {@code RuntimeException}.
+   */
   public final boolean add(Job job) {
-    try {
+    if (contains(job))
+      throw new RuntimeException("Job is already scheduled.");
+
+    jobs.put(job.uuid(), job);
+
+    job.scheduler = this;
+
+    if (job.canBeScheduled()) try {
+      job.status(JobStatus.scheduled);
       schedule(job);
-      size++;
-      return true;
-    } catch (Exception e) {
-      e.printStackTrace();
-      return false;
+    } catch (RuntimeException e) {
+      job.status(JobStatus.failed, e.getMessage());
     }
+
+    return true;
   }
 
   public final boolean addAll(Collection<? extends Job> jobs) {
-    boolean changed = false;
+    if (jobs.isEmpty())
+      return false;
     for (Job job : jobs)
-      changed = add(job) || changed;
-    return changed;
+      add(job);
+    return true;
   }
 
   /** Jobs cannot be removed. */
@@ -46,80 +68,64 @@ public abstract class Scheduler implements Collection<Job> {
     throw new UnsupportedOperationException();
   }
 
-  public boolean contains(Object o) {
-    if (o == null || !(o instanceof Job))
-      return false;
-    Job job = (Job) o;
-    if (job.jobId() <= 0)
-      return false;
-    Job job2 = get(job.jobId());
-    if (job2 == null)
-      return false;
-    return job.equals(job2);
+  public final boolean contains(Object o) {
+    if (o instanceof Job)
+      return contains((Job) o);
+    return false;
   }
 
-  public boolean containsAll(Collection<?> c) {
+  public final boolean contains(Job job) {
+    return jobs.containsKey(job.uuid());
+  }
+
+  public final boolean containsAll(Collection<?> c) {
     for (Object o : c)
       if (!contains(c)) return false;
     return true;
   }
 
-  public boolean equals(Object o) {
+  public final boolean equals(Object o) {
     if (!(o instanceof Scheduler))
       return false;
     return containsAll((Scheduler) o);
   }
 
-  public int hashCode() {
-    int code = 0;
-    for (Job j : this)
-      code += j.hashCode();
-    return code;
+  /** Get a {@code Job} by its UUID. */
+  public final Job get(UUID uuid) {
+    return jobs.get(uuid);
   }
 
-  public boolean isEmpty() {
-    return size() <= 0;
+  public final int hashCode() {
+    return jobs.hashCode();
+  }
+
+  public final boolean isEmpty() {
+    return jobs.isEmpty();
   }
 
   public final Iterator<Job> iterator() {
-    return new Iterator<Job>() {
-      int index = 0;
-      public boolean hasNext() {
-        return index < size;
-      } public Job next() {
-        return get(index++);
-      } public void remove() {
-        throw new UnsupportedOperationException();
-      }
-    };
+    return jobs.values().iterator();
   }
 
-  public boolean remove(Object o) {
+  public final boolean remove(Object o) {
     throw new UnsupportedOperationException();
   }
 
-  public boolean removeAll(Collection<?> c) {
+  public final boolean removeAll(Collection<?> c) {
     throw new UnsupportedOperationException();
   }
 
-  public boolean retainAll(Collection<?> c) {
+  public final boolean retainAll(Collection<?> c) {
     throw new UnsupportedOperationException();
   }
 
-  public int size() { return size; }
+  public final int size() { return jobs.size(); }
 
   public final Object[] toArray() {
-    return toArray(new Job[size]);
+    return jobs.values().toArray(new Job[size()]);
   }
 
   public final <T> T[] toArray(T[] a) {
-    Class<T> c = (Class<T>) a.getClass().getComponentType();
-    if (a.length < size) {
-      a = Arrays.copyOf(a, size);
-    } else if (a.length > size) {
-      Arrays.fill(a, size, a.length, null);
-    } for (int i = 0; i < size; i++) {
-      a[i] = c.cast(get(i));
-    } return a;
+    return jobs.values().toArray(a);
   }
 }

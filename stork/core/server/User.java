@@ -22,8 +22,9 @@ public abstract class User {
   public boolean validated = true;
 
   public LinkedList<URI> history = new LinkedList<URI>();
-  public Map<String,StorkCred> credentials;
-  public List<UserJob> jobs = new LinkedList<UserJob>();
+  public Map<String,StorkCred> credentials = new HashMap<String,StorkCred>();
+
+  private ArrayList<UUID> jobs = new ArrayList<UUID>();
 
   /** Basic user login cookie. */
   public static class Cookie {
@@ -130,6 +131,33 @@ public abstract class User {
     return normalizeEmail(email);
   }
 
+  /** Save a {@link Job} to this {@code User}'s {@code jobs} list. */
+  public synchronized Job saveJob(Job job) {
+    job.owner = normalizedEmail();
+    jobs.add(job.uuid());
+    job.jobId(jobs.size());
+    return job;
+  }
+
+  /** Get one of this user's jobs by its ID. */
+  public synchronized Job getJob(int id) {
+    try {
+      UUID uuid = jobs.get(id);
+      return server().findJob(uuid);
+    } catch (Exception e) {
+      throw new RuntimeException("No job with that ID.");
+    }
+  }
+
+  /** Get a list of actual jobs owned by the user. */
+  public synchronized List<Job> jobs() {
+    // FIXME: Inefficient...
+    List<Job> list = new LinkedList<Job>();
+    for (int i = 0; i < jobs.size(); i++)
+      list.add(getJob(i));
+    return list;
+  }
+
   /** Generate a random salt using a secure random number generator. */
   public static String salt() { return salt(24); }
 
@@ -150,41 +178,16 @@ public abstract class User {
   public static String hash(String pass, String salt) {
     try {
       String saltpass = salt+'\n'+pass;
-      MessageDigest md = MessageDigest.getInstance("SHA-1");
+      MessageDigest md = MessageDigest.getInstance("SHA-256");
       byte[] digest = saltpass.getBytes("UTF-8");
 
-      // Run the digest for two rounds.
-      for (int i = 0; i < 2; i++)
+      // Run the digest for three rounds.
+      for (int i = 0; i < 3; i++)
         digest = md.digest(digest);
 
       return StorkUtil.formatBytes(digest, "%02x");
     } catch (Exception e) {
       throw new RuntimeException("Couldn't hash password.");
     }
-  }
-
-  /** Create a {@link Job} owned by this user. */
-  public Job createJob(Request job) {
-    UserJob uj = new UserJob();
-    return Ad.marshal(job).unmarshal(uj);
-  }
-
-  /** Save a {@link Job} to this {@code User}'s {@code jobs} list. */
-  public Job saveJob(Job job) {
-    if (job instanceof UserJob && job.user() == this) {
-      jobs.add((UserJob) job);
-    } else {
-      UserJob uj = new UserJob();
-      Ad.marshal(job).unmarshal(uj);
-      job = uj;
-      jobs.add(uj);
-    }
-    job.jobId(jobs.size());
-    return job;
-  }
-
-  /** Create a {@link Job} and add it to {@code jobs}. */
-  public Job createAndSaveJob(Request job) {
-    return saveJob(createJob(job));
   }
 }

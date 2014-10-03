@@ -10,7 +10,7 @@ public class QHandler extends Handler<QRequest> {
   public void handle(QRequest req) {
     req.assertLoggedIn();
     //final List list = new JobSearcher(req.user.jobs).query(Ad.marshal(req));
-    final List list = req.user().jobs;
+    final List list = req.user().jobs();
     req.ring(req.count ? new Object() { int count = list.size(); } : list);
   }
 }

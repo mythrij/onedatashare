@@ -3,13 +3,31 @@ package stork.scheduler;
 import stork.util.*;
 import java.util.*;
 
-// States a job can be in, and some special status filters.
-
+/** States a job can be in, and some special status filters. */
 public enum JobStatus {
-  scheduled, processing, paused, removed, failed, complete,
-  all(false), pending(false), done(false);
+  /** The job is scheduled to run in the future. */
+  scheduled,
+  /** The job is currently in progress. */
+  processing,
+  /** The job has been paused by request. */
+  paused,
+  /** The job has been removed by request. */
+  removed,
+  /** The job failed for some reason. */
+  failed,
+  /** The job has completed successfully. */
+  complete,
 
-  public final boolean isFilter;  // Jobs cannot have filter statuses.
+  /** Filter for all job statuses. */
+  all(false),
+  /** Filter for jobs that have not finished. */
+  pending(false),
+  /** Filter for all terminated jobs regardless of success. */
+  done(false);
+
+  /** Indicates whether this is a pseudo-status used for filtering. */
+  public final boolean isFilter;
+  private EnumSet<JobStatus> filter;
 
   JobStatus() {
     this(true);
@@ -17,29 +35,28 @@ public enum JobStatus {
     isFilter = !real;
   }
 
-  public static JobStatus unmarshal(String s) {
-    return byName(s);
-  }
-
-  // Get a filter for a status.
+  /** Get an {@code EnumSet} filter by status name. */
   public static EnumSet<JobStatus> filter(String s) {
     return byName(s).filter();
-  } public EnumSet<JobStatus> filter() {
-    if (!isFilter) {
-      return EnumSet.of(this);
+  }
+  
+  /** Get an {@code EnumSet} filter for this status. */
+  public EnumSet<JobStatus> filter() {
+    if (filter != null) {
+      return filter;
+    } if (!isFilter) {
+      filter = EnumSet.of(this);
     } switch (this) {
       case all:
-        return EnumSet.of(scheduled, processing, paused,
-                          removed, failed, complete);
+        return filter = EnumSet.allOf(JobStatus.class);
       case pending:
-        return EnumSet.of(scheduled, processing, paused);
+        return filter = EnumSet.of(scheduled, processing, paused);
       case done:
-        return EnumSet.of(removed, failed, complete);
-      default: return null;
-    }
+        return filter = EnumSet.of(removed, failed, complete);
+    } return filter;
   }
 
-  // Get a status by name. 
+  /** Get a status by name. */
   public static JobStatus byName(String name) {
     try {
       return Enum.valueOf(JobStatus.class, name.toLowerCase());

@@ -29,7 +29,6 @@ public class Server {
   /** Users registered with the system. */
   public Map<String,ServerUser> users = new HashMap<String,ServerUser>();
 
-  // A user that belongs to this server.
   private class ServerUser extends User {
     public ServerUser() { super(); }
     public ServerUser(String email, String password) {
@@ -38,15 +37,11 @@ public class Server {
     public Server server() { return Server.this; }
   }
 
-  public transient Scheduler scheduler = new Scheduler() {
-    private transient List<Job> jobs = new ArrayList<Job>();
+  public ServerScheduler scheduler;
 
-    public void schedule(Job job) {
-      jobs.add(job);
-    } public Job get(int i) {
-      return jobs.get(i);
-    }
-  };
+  private class ServerScheduler extends FIFOScheduler {
+    public Server server() { return Server.this; }
+  }
 
   public transient ModuleTable modules = new ModuleTable();
 
@@ -99,6 +94,16 @@ public class Server {
       Log.warning("Rejecting request: ", Ad.marshal(request));
       request.ring(new Exception("Rejected request."));
     } return request;
+  }
+
+  /** Find a {@link User} by email. */
+  public ServerUser findUser(String email) {
+    return users.get(email);
+  }
+
+  /** Find a job by its UUID. */
+  public Job findJob(UUID uuid) {
+    return scheduler.get(uuid);
   }
 
   /** Create a {@link User} and add it to the {@code users} map. */
