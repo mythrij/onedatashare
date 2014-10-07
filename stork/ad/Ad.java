@@ -638,6 +638,13 @@ public class Ad implements Serializable {
   }
 
   /**
+   * Marshal one object into another.
+   */
+  public static void marshal(Object from, Object to) {
+    marshal(from).unmarshal(to);
+  }
+
+  /**
    * Marshal an object into an ad. This method checks if the type of {@code
    * object} is registered as a special marshalling case, and if so delegates
    * to the marshalling handler. Otherwise, it marshals the object field-wise.
@@ -647,7 +654,7 @@ public class Ad implements Serializable {
    * object} is {@code null}.
    */
   public static Ad marshal(Object object) {
-    return marshal(object, null);
+    return marshal(object, (AdType) null);
   }
 
   public static Ad marshal(Object o, AdType t) {

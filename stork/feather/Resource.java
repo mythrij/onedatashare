@@ -10,7 +10,8 @@ import stork.feather.util.*;
  * directory) or a set thereof (such as a directory tree or files matching a
  * pattern). The existence of a {@code Resource} object does not guarantee the
  * existence or accessibility of the resource(s) it represents. In particular,
- * creating a {@code Resource} object does not 
+ * creating a {@code Resource} object does not imply the creation of an
+ * associated physical resource.
  * <p/>
  * A {@code Resource} should be thought of as a placeholder for or reference to
  * a physical resource, with a {@code Session} as the entity responsible for
@@ -42,7 +43,6 @@ import stork.feather.util.*;
  * is the subclass itself.
  */
 public class Resource<S extends Session<S,R>, R extends Resource<S,R>> {
-
   /** The selection {@code Path} of this {@code Resource}. */
   public final Path path;
   /** The {@code Session} associated with this {@code Resource}. */

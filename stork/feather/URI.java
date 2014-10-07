@@ -462,7 +462,8 @@ public class URI {
    * @return A URI based on this one with the given path component.
    */
   public URI path(Path path) {
-    return new URIBuilder() {{ this.path = path; }}.toURI();
+    final Path np = path;
+    return new URIBuilder() {{ this.path = np; }}.toURI();
   }
 
   /**

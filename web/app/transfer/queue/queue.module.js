@@ -48,9 +48,9 @@ $stork.queue = function (e, o) {
   // also accept its parent element as the second argument.
   var renderers = {
     'info': function (d) {
-      var i = $('<i class="btn btn-default icon-info" title="Details">')
+      var i = $('<i class="btn btn-default fa fa-info" title="Details">')
         .click(toggleInfoRow)
-      var x = $('<i class="btn btn-default icon-remove">')
+      var x = $('<i class="btn btn-default fa fa-remove">')
         .click(function () { removeJob(d.job_id|0) })
       if (d.status == 'complete' || d.status == 'failed' || d.status == 'removed')
         x.attr('disabled', 'disabled').addClass('btn-disabled')

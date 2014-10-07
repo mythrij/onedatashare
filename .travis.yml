@@ -1,0 +1,6 @@
+language: java
+
+git:
+  depth: 1
+
+script: make

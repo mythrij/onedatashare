@@ -9,14 +9,19 @@ import stork.cred.*;
 public class CredHandler extends Handler<CredRequest> {
   public void handle(CredRequest req) {
     req.assertLoggedIn();
-    req.assertMayChangeState();
 
     if (req.action == null) {
       throw new RuntimeException("No action specified.");
+    } if (req.action.equals("list")) {
+      if (req.user().credentials == null)
+        req.ring(Collections.emptySet());
+      else
+        req.ring(req.user().credentials.keySet());
     } if (req.action.equals("create")) {
+      req.assertMayChangeState();
       StorkCred<?> cred = req.resolve();
       String uuid = UUID.randomUUID().toString();
-      req.user.credentials.put(uuid, cred);
+      req.user().credentials.put(uuid, cred);
       req.ring(new stork.ad.Ad("uuid", uuid));
     } throw new RuntimeException("Invalid action.");
   }

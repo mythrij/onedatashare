@@ -70,12 +70,12 @@ public class HTTPInterface extends StorkInterface {
 
   // This handles whatever happens when a request has completed.
   private Bell<Object> requestDoneHandler(final HTTPBody body) {
-
     return new Bell<Object>() {
       public void done(Object o) {
         if (o != null)
           sendJSON(Pipes.tapFromString(Ad.marshal(o)));
       } public void fail(Throwable t) {
+        body.status = INTERNAL_SERVER_ERROR;
         sendJSON(Pipes.tapFromString(errorToAd(t)));
       } private void sendJSON(Tap tap) {
         body.contentType = "application/json; charset=UTF-8";
@@ -96,7 +96,9 @@ public class HTTPInterface extends StorkInterface {
     else
       request.mayChangeState = false;
     if (hr.cookie() != null)
-      request.unmarshalFrom(cookiesToAd(hr.cookie()));
+      request.cookie(cookiesToMap(hr.cookie()));
+    if (hr.cookie() != null)
+      System.out.println(Ad.marshal(request));
     if (hr.uri.query() != null)
       request.unmarshalFrom(queryToAd(hr.uri.query()));
     if (!hr.hasBody())
@@ -137,12 +139,12 @@ public class HTTPInterface extends StorkInterface {
   }
 
   // Convert a cookie string into an ad.
-  private Ad cookiesToAd(String cookie) {
-    Ad ad = new Ad();
+  private Map<String,String> cookiesToMap(String cookie) {
+    Map<String,String> map = new HashMap<String,String>();
     Set<Cookie> cookies = CookieDecoder.decode(cookie);
     for (Cookie c : cookies)
-      ad.put(c.getName(), c.getValue());
-    return ad;
+      map.put(c.getName(), c.getValue());
+    return map;
   }
 
   // Convert a query string into an ad.

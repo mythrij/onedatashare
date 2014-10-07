@@ -14,15 +14,20 @@ import stork.feather.*;
  * optional value that will be marshalled and sent to the requestor to complete
  * the request.
  */
-public abstract class Request extends Bell<Object> {
+public abstract class Request extends Bell<Object> implements Runnable {
   /** The command given with the request. */
   public String command;
 
   /** The handler which will handle this request. */
   public transient Handler handler;
 
-  /** The user who made the request. */
-  public transient User user;
+  private transient User user;
+
+  private transient RequestCookie cookie;
+
+  private class RequestCookie extends User.Cookie {
+    public Server server() { return Request.this.server; }
+  }
 
   /** The server this request was made to. */
   public transient Server server;
@@ -41,18 +46,37 @@ public abstract class Request extends Bell<Object> {
     Ad ad = Ad.marshal(this).merge(this.ad);
 
     request.command = command;
-    request.user = user;
     request.server = server;
+    request.cookie(cookie);
     request.mayChangeState = mayChangeState;
     request.resource = resource;
 
     return (R) request.unmarshalFrom(ad);
   }
 
+  /** Get the user associated with the request. */
+  public User user() {
+    if (cookie == null) {
+      user = server.anonymous;
+    } if (user == null) try {
+      user = cookie.login();
+    } catch (Exception e) {
+      user = server.anonymous;
+    } return user;
+  }
+
+  /** Marshal some object into a cookie. */
+  public void cookie(Object cookie) {
+    if (cookie != null)
+      this.cookie = Ad.marshal(cookie).unmarshal(new RequestCookie());
+    else
+      this.cookie = null;
+    user = null;
+  }
+
   /** Marshal an object into this request. */
   public Request unmarshalFrom(Object object) {
     ad = ad.merge(Ad.marshal(object));
-    System.out.println(ad);
     return ad.unmarshal(this);
   }
 
@@ -65,17 +89,20 @@ public abstract class Request extends Bell<Object> {
     }
   }
 
+  /** This just calls handle(). */
+  public void run() { handle(); }
+
   public Ad asAd() {
     return Ad.marshal(this).merge(ad);
   }
 
   public void assertLoggedIn() {
-    //if (user == null || user.isAnonymous())
-      //throw new RuntimeException("Permission denied.");
+    if (user() == null || user().isAnonymous())
+      throw new RuntimeException("Permission denied.");
   }
 
   public void assertMayChangeState() {
-    //if (!mayChangeState)
-      //throw new RuntimeException("Permission denied.");
+    if (!mayChangeState)
+      throw new RuntimeException("Permission denied.");
   }
 }

@@ -1,0 +1,158 @@
+<div class="panel panel-default container">
+  <div class="panel-collapse-header">
+    <h4>Browse and Transfer Files</h4>
+  </div>
+  <div id="stork-ls" class="panel-body container collapse in text-center">
+    <div class="col-xs-6" ng-controller="BrowseCtrl" ng-init="end = left" ng-include="'/app/transfer/browse/browse.html'">
+      <div class="progress progress-striped active fade in">
+        <div style="width: 100%" role="progressbar" class="progress-bar">
+          <big>Loading...</big>
+        </div>
+      </div>
+    </div>
+    <div class="col-xs-6" ng-controller="BrowseCtrl" ng-init="end = right" ng-include="'/app/transfer/browse/browse.html'">
+      <div class="progress progress-striped active fade in">
+        <div style="width: 100%" role="progressbar" class="progress-bar">
+          <big>Loading...</big>
+        </div>
+      </div>
+    </div>
+
+    <div class="clearfix"></div>
+
+    <div class="input-group-lg text-center panel panel-heading transfer-controls">
+      <div class="visible-xs"></div>
+      <button class="btn btn-lg btn-default" title="Transfer contents"
+              ng-disabled="!canTransfer(left, right, true)" ng-click="transfer(left, right, true)">
+        <i class="fa fa-share"></i>
+      </button>
+      <button class="btn btn-lg btn-default" title="Transfer"
+              ng-disabled="!canTransfer(left, right, false)" ng-click="transfer(left, right, false)">
+        <i class="fa fa-share-alt"></i>
+      </button>
+      <button class="btn btn-lg btn-default ph" title="Synchronize"
+              ng-disabled="!canSync(left, right)" ng-click="sync(left, right)">
+        <i class="fa fa-refresh"></i>
+      </button>
+      <button class="btn btn-lg btn-default" title="Transfer"
+              ng-disabled="!canTransfer(right, left, false)" ng-click="transfer(right, left, false)">
+        <i class="fa fa-share-alt fa fa-rotate-180"></i>
+      </button>
+      <button class="btn btn-lg btn-default" title="Transfer contents"
+              ng-disabled="!canTransfer(right, left, true)" ng-click="transfer(right, left, true)">
+        <i class="fa fa-share fa fa-rotate-180"></i>
+      </button>
+    </div>
+
+    <div class="clearfix" ng-if="debugMode"></div>
+
+    <div class="text-left col-xs-12" ng-if="debugMode">
+      <h4>Raw Job Info</h4>
+      <pre>{{job|json}}</pre>
+    </div>
+  </div>
+</div>
+
+<div class="container panel panel-default panel-collapsed">
+  <div class="panel-collapse-header">
+    <h4>Transfer Options</h4>
+  </div>
+
+  <div id="transfer-options" class="panel-body collapse">
+    <span class="text-muted">
+      Note: Some of these options are non-functional placeholders for now.
+    </span>
+    <form role="form">
+      <div class="form-group container">
+        <div style="height: 13em" class="form-group col-lg-3 col-md-4 col-sm-6" ng-repeat="o in optSet">
+          <h4>{{o.title}}</h4>
+          <div class="btn-group">
+            <button class="btn btn-large btn-default" ng-model="job.options[o.param]"
+                    ng-repeat="c in o.choices" btn-radio="c[1]">{{c[0]}}</button>
+          </div>
+          <p class="help-block">
+            {{o.description}}
+          </p>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="container panel panel-default">
+  <div class="panel-collapse-header">
+    <h4>Transfer Progress and Queue</h4>
+  </div>
+  <div class="collapse in" ng-include="'/app/transfer/queue/queue.html'">
+    <div class="progress progress-striped active fade in">
+      <div style="width: 100%" role="progressbar" class="progress-bar">
+        <big>Loading...</big>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Create new credential modal -->
+<script type="text/ng-template" id="add-cred-modal.html">
+  <div class="modal-header">
+    <button type="button" class="close" ng-click="$dismiss()" aria-hidden="true">
+      &times;
+    </button>
+    <h4 class="modal-title">
+      Add a New Credential
+    </h4>
+    <div class="small text-muted">
+      Currently only MyProxy credentials are supported.
+    </div>
+  </div>
+  <form ng-init="nc = {type: 'gss-cert'}" ng-submit="$close(end.cred = nc)">
+    <div class="modal-body">
+      <div class="form-group col-md-12">
+        <label>MyProxy server</label>
+        <input type="text" class="form-control" ng-model="nc.myproxy_host" placeholder="e.g., myproxy.teragrid.org" required>
+      </div>
+
+      <div class="form-group col-md-6">
+        <label>MyProxy username</label>
+        <input type="text" class="form-control" ng-model="nc.myproxy_user" required>
+      </div>
+
+      <div class="form-group col-md-6">
+        <label>MyProxy password</label>
+        <input type="password" class="form-control" ng-model="nc.myproxy_pass" required>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-default" ng-click="$dismiss()">
+        Cancel
+      </button>
+      <button type="submit" class="pull-right btn btn-primary">
+        Add credential
+      </button>
+    </div>
+  </form>
+</script>
+
+<!-- Transfer/sync confirmation modal -->
+<script type="text/ng-template" id="xfer-modal.html">
+  <div class="modal-header">
+    <button type="button" class="close" ng-click="$dismiss()" aria-hidden="true">
+      &times;
+    </button>
+    <h3>Confirm Transfer</h3>
+  </div>
+  <div class="modal-body text-center">
+    This will perform a transfer from
+    <div class="large">{{job.src.uri}}</div>
+    to
+    <div class="large">{{job.dest.uri}}</div>
+    <div class="text-left col-xs-12" ng-if="debugMode">
+      <h4>Raw Job Info</h4>
+      <pre>{{job|json}}</pre>
+    </div>
+  </div>
+  <div class="modal-footer">
+    <button class="btn btn-warning" ng-click="$dismiss()">Cancel</button>
+    <button class="btn btn-primary" ng-click="$close(job)">Submit</button>
+  </div>
+</script>

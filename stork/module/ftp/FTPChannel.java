@@ -47,7 +47,7 @@ public class FTPChannel {
 
   // Internal representation of the remote server type.
   private static enum Protocol {
-    ftp(21), gridftp(2811);
+    ftp(21), gridftp(2811), gsiftp(2811);
 
     int port;
 
@@ -516,6 +516,18 @@ public class FTPChannel {
   }
 
   // Try to authenticate with a GSS credential.
+  public Bell<Reply> authenticate(final Bell<GSSCredential> cred) {
+    final Bell<Reply> rb = new Bell<Reply>();
+    cred.new Promise() {
+      public void done(GSSCredential cred) {
+        authenticate(cred).promise(rb);
+      } public void fail(Throwable t) {
+        rb.ring(t);
+      }
+    };
+    return rb;
+  }
+
   public Bell<Reply> authenticate(GSSCredential cred) {
     final GSSSecurityContext sec;
 

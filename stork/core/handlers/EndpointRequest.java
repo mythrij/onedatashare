@@ -56,7 +56,7 @@ public class EndpointRequest extends Request {
   public Server server() { return server; }
 
   /** This may be overridden by subclasses. */
-  public User user() { return user; }
+  public User user() { return super.user(); }
 }
 
 // This is really just a holder for three objects.

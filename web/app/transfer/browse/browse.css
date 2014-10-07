@@ -1,0 +1,56 @@
+.stork-list {
+  padding-left: 0;
+	margin: 0;
+} .stork-list ul {
+	padding-left: 1.2em;
+}
+
+.stork-list li {
+	list-style: none;
+	white-space: nowrap;
+}
+
+.stork-list div, .stork-list i {
+  cursor: default;
+}
+
+.stork-list .inaccessible {
+  color: #F00;
+}
+
+.stork-list li ul {
+  display: none;
+} .stork-list li.open > ul {
+  display: block;
+}
+
+.stork-list i {
+  float: left;
+  display: inline-block;
+  width: 1.2em;
+  text-align: center;
+}
+
+.hide-dots .stork-list .dot {
+  display: none;
+} .stork-list .dot div:before,
+  .stork-list .dot {
+  color: #888;
+}
+
+.selected {
+  border: 1px solid blue;
+  background: lightblue;
+}
+
+.stork-list .fa-folder, .stork-list .fa-file {
+  font-size: 1.2em;
+  width: 1em;
+  display: inline-block;
+  margin-right: 0.2em;
+}
+
+/* Don't show [+] toggle on files. */
+.stork-list .file > i {
+  visibility: hidden;
+}

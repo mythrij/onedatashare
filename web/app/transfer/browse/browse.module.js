@@ -1,9 +1,6 @@
 // stork.list.js
 // -------------
-// Create a nested file listing by querying a
-
-if (!$stork)
-  var $stork = {}
+var $stork = $stork || {};
 
 // Cast on anything to replace its contents with a file tree.
 $stork.list = function (e, o) {
@@ -32,7 +29,7 @@ $stork.list = function (e, o) {
         convertAjaxResults(data)
         cachedList(path, data)
       }).fail(function (data) {
-        //console.log('failed: '+JSON.stringify(data))
+        console.log('failed: '+JSON.stringify(data))
       })
     }
 

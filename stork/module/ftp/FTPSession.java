@@ -48,6 +48,7 @@ public class FTPSession extends Session<FTPSession, FTPResource> {
       if (credential == null) {
         channel.authorize(user, pass).promise(this);
       } else if (credential instanceof StorkGSSCred) {
+        System.out.println("sdfjksdfjkshdfjksdf");
         StorkGSSCred cred = (StorkGSSCred) credential;
         final String p = pass;
         channel.authenticate(cred.data()).new Promise() {

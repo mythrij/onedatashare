@@ -793,6 +793,11 @@ public class Bell<T> implements Future<T> {
   protected void finalize() {
     if (!isDone()) cancel();
   }
+
+  /** Put some runnable task on the main dispatch queue. */
+  public static void dispatch(Runnable runnable) {
+    Dispatcher.dispatch(runnable);
+  }
 }
 
 /** A task for the dispatch loop. */
@@ -830,7 +835,6 @@ final class Dispatcher {
    * Schedule {@code runnable} to be executed as soon as possible.
    */
   static synchronized void dispatch(final Runnable runnable) {
-    //pool.schedule(wrap(runnable), (long)1E3, TimeUnit.MICROSECONDS);
     pool.schedule(wrap(runnable), 0, TimeUnit.MICROSECONDS);
   }
 
