@@ -1,11 +1,18 @@
-<div class="container panel">
-  <div class="panel-heading">
-    <h4 class="panel-title panel-collapse-header">
-      Profile Information
-    </h4>
-  </div>
-  The user settings page is currently under construction.
-  <div ng-if="debugMode" class="panel-body container collapse in text-center">
-    <pre>{{$user}}</pre>
+<div class="container panel-group">
+  <div class="panel panel-default" bs-collapse>
+    <div class="panel-heading">
+      <h4 class="panel-title">
+        <a bs-collapse-toggle>Profile Information</a>
+      </h4>
+    </div>
+
+    <div id="transfer-options" class="panel-collapse" bs-collapse-target>
+      <div class="panel-body">
+        The user settings page is currently under construction.
+        <div ng-if="debugMode" class="panel-body container collapse in text-center">
+          <pre>{{$user}}</pre>
+        </div>
+      </div>
+    </div>
   </div>
 </div>

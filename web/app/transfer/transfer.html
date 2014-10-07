@@ -1,93 +1,97 @@
-<div class="panel panel-default container">
-  <div class="panel-collapse-header">
-    <h4>Browse and Transfer Files</h4>
-  </div>
-  <div id="stork-ls" class="panel-body container collapse in text-center">
-    <div class="col-xs-6" ng-controller="BrowseCtrl" ng-init="end = left" ng-include="'/app/transfer/browse/browse.html'">
-      <div class="progress progress-striped active fade in">
-        <div style="width: 100%" role="progressbar" class="progress-bar">
-          <big>Loading...</big>
+<div class="container panel-group">
+  <div class="panel panel-default" bs-collapse>
+    <div class="panel-heading">
+      <h4 class="panel-title">
+        <a bs-collapse-toggle>Browse and Transfer Files</a>
+      </h4>
+    </div>
+
+    <div id="stork-ls" class="panel-collapse text-center" bs-collapse-target>
+      <div class="panel-body">
+        <!-- Left and right browsing widgets -->
+        <div class="col-xs-6" ng-controller="BrowseCtrl" ng-init="end = left"
+             ng-include="'/app/transfer/browse/browse.html'"></div>
+        <div class="col-xs-6" ng-controller="BrowseCtrl" ng-init="end = right"
+             ng-include="'/app/transfer/browse/browse.html'"></div>
+
+        <div class="clearfix"></div>
+
+        <div class="input-group-lg text-center panel panel-heading transfer-controls">
+          <div class="visible-xs"></div>
+          <button class="btn btn-lg btn-default" title="Transfer contents"
+                  ng-disabled="!canTransfer(left, right, true)" ng-click="transfer(left, right, true)">
+            <i class="fa fa-share"></i>
+          </button>
+          <button class="btn btn-lg btn-default" title="Transfer"
+                  ng-disabled="!canTransfer(left, right, false)" ng-click="transfer(left, right, false)">
+            <i class="fa fa-share-alt"></i>
+          </button>
+          <button class="btn btn-lg btn-default ph" title="Synchronize"
+                  ng-disabled="!canSync(left, right)" ng-click="sync(left, right)">
+            <i class="fa fa-refresh"></i>
+          </button>
+          <button class="btn btn-lg btn-default" title="Transfer"
+                  ng-disabled="!canTransfer(right, left, false)" ng-click="transfer(right, left, false)">
+            <i class="fa fa-share-alt fa fa-rotate-180"></i>
+          </button>
+          <button class="btn btn-lg btn-default" title="Transfer contents"
+                  ng-disabled="!canTransfer(right, left, true)" ng-click="transfer(right, left, true)">
+            <i class="fa fa-share fa fa-rotate-180"></i>
+          </button>
+        </div>
+
+        <div class="clearfix" ng-if="debugMode"></div>
+
+        <div class="text-left col-xs-12" ng-if="debugMode">
+          <h4>Raw Job Info</h4>
+          <pre>{{job|json}}</pre>
         </div>
       </div>
     </div>
-    <div class="col-xs-6" ng-controller="BrowseCtrl" ng-init="end = right" ng-include="'/app/transfer/browse/browse.html'">
-      <div class="progress progress-striped active fade in">
-        <div style="width: 100%" role="progressbar" class="progress-bar">
-          <big>Loading...</big>
-        </div>
-      </div>
-    </div>
-
-    <div class="clearfix"></div>
-
-    <div class="input-group-lg text-center panel panel-heading transfer-controls">
-      <div class="visible-xs"></div>
-      <button class="btn btn-lg btn-default" title="Transfer contents"
-              ng-disabled="!canTransfer(left, right, true)" ng-click="transfer(left, right, true)">
-        <i class="fa fa-share"></i>
-      </button>
-      <button class="btn btn-lg btn-default" title="Transfer"
-              ng-disabled="!canTransfer(left, right, false)" ng-click="transfer(left, right, false)">
-        <i class="fa fa-share-alt"></i>
-      </button>
-      <button class="btn btn-lg btn-default ph" title="Synchronize"
-              ng-disabled="!canSync(left, right)" ng-click="sync(left, right)">
-        <i class="fa fa-refresh"></i>
-      </button>
-      <button class="btn btn-lg btn-default" title="Transfer"
-              ng-disabled="!canTransfer(right, left, false)" ng-click="transfer(right, left, false)">
-        <i class="fa fa-share-alt fa fa-rotate-180"></i>
-      </button>
-      <button class="btn btn-lg btn-default" title="Transfer contents"
-              ng-disabled="!canTransfer(right, left, true)" ng-click="transfer(right, left, true)">
-        <i class="fa fa-share fa fa-rotate-180"></i>
-      </button>
-    </div>
-
-    <div class="clearfix" ng-if="debugMode"></div>
-
-    <div class="text-left col-xs-12" ng-if="debugMode">
-      <h4>Raw Job Info</h4>
-      <pre>{{job|json}}</pre>
-    </div>
-  </div>
-</div>
-
-<div class="container panel panel-default panel-collapsed">
-  <div class="panel-collapse-header">
-    <h4>Transfer Options</h4>
   </div>
 
-  <div id="transfer-options" class="panel-body collapse">
-    <span class="text-muted">
-      Note: Some of these options are non-functional placeholders for now.
-    </span>
-    <form role="form">
-      <div class="form-group container">
-        <div style="height: 13em" class="form-group col-lg-3 col-md-4 col-sm-6" ng-repeat="o in optSet">
-          <h4>{{o.title}}</h4>
-          <div class="btn-group">
-            <button class="btn btn-large btn-default" ng-model="job.options[o.param]"
-                    ng-repeat="c in o.choices" btn-radio="c[1]">{{c[0]}}</button>
+  <div class="panel panel-default" bs-collapse data-start-collapsed="true">
+    <div class="panel-heading">
+      <h4 class="panel-title">
+        <a bs-collapse-toggle>Transfer Options</a>
+      </h4>
+    </div>
+
+    <div id="transfer-options" class="panel-collapse" bs-collapse-target>
+      <div class="panel-body">
+        <span class="text-muted">
+          Note: Some of these options are non-functional placeholders for now.
+        </span>
+        <form role="form">
+          <div class="form-group">
+            <div style="height: 13em" class="form-group col-lg-3 col-md-4 col-sm-6" ng-repeat="opt in optSet">
+              <h4>{{opt.title}}</h4>
+              <div class="btn-group" bs-button-group>
+                <label class="btn btn-large btn-default" ng-repeat="choice in opt.choices"
+                       ng-class="(job.options[opt.param] === choice[1]) && 'active'">
+                  <input type="radio" class="hide" ng-model="job.options[opt.param]" ng-value="choice[1]">
+                  {{choice[0]}}
+                </label>
+              </div>
+              <p class="help-block">
+                {{opt.description}}
+              </p>
+            </div>
           </div>
-          <p class="help-block">
-            {{o.description}}
-          </p>
-        </div>
+        </form>
       </div>
-    </form>
+    </div>
   </div>
-</div>
 
-<div class="container panel panel-default">
-  <div class="panel-collapse-header">
-    <h4>Transfer Progress and Queue</h4>
-  </div>
-  <div class="collapse in" ng-include="'/app/transfer/queue/queue.html'">
-    <div class="progress progress-striped active fade in">
-      <div style="width: 100%" role="progressbar" class="progress-bar">
-        <big>Loading...</big>
-      </div>
+  <div class="panel panel-default" bs-collapse>
+    <div class="panel-heading">
+      <h4 class="panel-title">
+        <a bs-collapse-toggle>Transfer Progress and Queue</a>
+      </h4>
+    </div>
+
+    <div id="transfer-options" class="panel-collapse" bs-collapse-target>
+      <div class="panel-body" ng-include="'/app/transfer/queue/queue.html'"></div>
     </div>
   </div>
 </div>

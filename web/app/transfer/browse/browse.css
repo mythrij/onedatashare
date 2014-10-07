@@ -1,3 +1,66 @@
+/* URI input. */
+.uri > div {
+  position: relative;
+}
+
+.uri button, .uri input {
+  line-height: 1 !important;
+  height: 2.5em;
+}
+
+.uri .buttons {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+}
+
+.uri button {
+  color: gray;
+  background: transparent;
+  width: 1.5em;
+  float: right;
+  padding: 0 !important;
+}
+
+.uri button:active, .uri button:focus, .uri button:hover, button.active {
+  outline: 0;
+  color: black;
+  border-width: 0;
+}
+
+input.uri-input {
+  padding-right: 3.7em !important;
+}
+
+.uri button.history {
+  right: 1.5em;
+  cursor: default;
+}
+
+.uri button.go {
+  display: none;
+}
+
+.uri .changed button.go {
+  display: inline-block;
+}
+
+.uri .changed button.reload {
+  display: none;
+}
+
+/* File list. */
+.tree {
+  height: 100%;
+} .tree > div {
+  height: 20em;
+  margin: 0.4em;
+  text-align: left;
+  overflow-y: auto;
+  overflow-x: auto;
+}
+
 .stork-list {
   padding-left: 0;
 	margin: 0;

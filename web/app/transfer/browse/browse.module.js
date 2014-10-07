@@ -183,6 +183,12 @@ $stork.list = function (e, o) {
 
     // Toggle a directory, or force it open or closed.
     var toggle = function(oc) {
+      // This prevents double-clicking from selecting text.
+      if (document.selection)
+        document.selection.empty();
+      else
+        window.getSelection().removeAllRanges();
+
       var e = $(this).parent()
       if (oc != 'close' && !e.hasClass('open')) {
         expandList(e)

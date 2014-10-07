@@ -219,49 +219,6 @@ tr.min-cell {
   float: right;
 }
 
-.uri > div {
-  position: relative;
-} .uri button, .uri input {
-  line-height: 1;
-  height: 2.5em;
-} .uri .buttons {
-  position: absolute;
-  right: 0;
-  top: 0;
-  bottom: 0;
-} .uri button {
-  color: gray;
-  background: transparent;
-  width: 1.5em;
-  float: right;
-  padding: 0 !important;
-} .uri button:active, .uri button:focus, .uri button:hover {
-  outline: 0;
-  color: black;
-  border-width: 0;
-} .uri button.history {
-  right: 1.5em;
-  cursor: default;
-} .uri button.go {
-  display: none;
-} .uri .changed button.go {
-  display: inline-block;
-} .uri .changed button.reload {
-  display: none;
-} input.uri-input {
-  padding-right: 3.7em !important;
-}
-
-.tree {
-  height: 100%;
-} .tree > div {
-  height: 20em;
-  margin: 0.4em;
-  text-align: left;
-  overflow-y: auto;
-  overflow-x: auto;
-}
-
 #stork-ls .transfer-controls {
   padding: 10px;
 } #stork-ls .transfer-controls .btn {
@@ -276,25 +233,13 @@ tr.min-cell {
   height: 2.5em;
 }
 
-/* Collapsible blocks */
-.panel-collapse-header {
-  cursor: pointer;
-} .panel-collapse-header:before {
-  float: left;
-  padding-right: 0.5em;
-  font-family: FontAwesome;
-  -webkit-font-smoothing: antialiased;
-  font-size: 1.2em;
-  content: "\f13a";
-} .panel-collapsed .collapse {
-  display: none;
-} .panel-collapsed .panel-collapse-header:before {
-  content: "\f138";
-}
-
 /* Bootstrap hacks */
 .pagination {
   margin: 0;
+}
+
+.modal-backdrop {
+  background: rgba(0, 0, 0, 0.2);
 }
 
 /* Special UI stuff for logged in users */

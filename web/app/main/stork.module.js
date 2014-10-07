@@ -1,7 +1,11 @@
 'use strict';
 
-angular.module('stork', ['ngRoute', 'ui.bootstrap', 'ui', 'stork.util'],
-  function ($provide, $routeProvider) {
+/** The main Stork AngularJS module. Welcome! */
+angular.module('stork', [
+  'ngRoute', 'ngResource', 'ui',
+  'mgcrea.ngStrap', 'mgcrea.ngStrap.collapse', 'mgcrea.ngStrap.tooltip',
+  'stork.util', 'stork.user'
+  ], function ($provide, $routeProvider) {
     /* This is where you can add routes and change page titles. */
     $routeProvider.when('/', {
       title: 'Home',
@@ -25,10 +29,14 @@ angular.module('stork', ['ngRoute', 'ui.bootstrap', 'ui', 'stork.util'],
       redirectTo: '/'
     });
   }
-).factory('Stork', function ($http, $q) {
+)
+
+/** Provides easy access to Stork API resources. */
+.factory('stork', function ($http, $q) {
   var api = function (r) {
     return '/api/stork/'+r
   };
+
   var gr = function (r) { return r.data };
   var ge = function (r) { return $q.reject(r.data.error) };
   return {
@@ -61,9 +69,12 @@ angular.module('stork', ['ngRoute', 'ui.bootstrap', 'ui', 'stork.util'],
       }, info));
     },
     history: function (uri) {
-      return this.$post('user', {
+      if (uri) return this.$post('user', {
         action: 'history',
         uri: uri
+      });
+      return this.$get('user', {
+        action: 'history'
       });
     },
     ls: function (ep, d) {
@@ -101,97 +112,61 @@ angular.module('stork', ['ngRoute', 'ui.bootstrap', 'ui', 'stork.util'],
       this.$download(uri);
     }
   };
-}).factory('User', function (Stork, $location, $rootScope) {
-  return {
-    user: function () {
-      return $rootScope.$user;
-    },
-    saveLogin: function (u) {
-      $rootScope.$user = u;
-      var exp = { expires: 31536000 };
-      Cookies.set('email', u.email, exp);
-      Cookies.set('hash', u.hash, exp);
-    },
-    forgetLogin: function (error) {
-      delete $rootScope.$user;
-      Cookies.expire('email');
-    },
-    login: function (info) {
-      if (info) {
-        var f = Stork.login(info);
-        f.then(this.saveLogin, this.forgetLogin);
-        return f;
-      }
-    },
-    checkAccess: function (redirectTo) {
-      if (!$rootScope.$user)
-        $location.path(redirectTo||'/');
-    },
-    history: function (uri) {
-      return uri ? Stork.history(uri).then(function (h) {
-        return $rootScope.$user.history = h;
-      }) : $rootScope.$user.history();
-    },
-    $init: function () {
-      var u = {
-        email: Cookies.get('email'),
-        hash:  Cookies.get('hash')
-      };
+})
 
-      if (u.email && u.hash)
-        this.login(u);
-      else
-        this.forgetLogin(u);
-
-      delete this.$init;
-      return this;
-    }
-  }.$init()
-}).config(function ($tooltipProvider) {
-  $tooltipProvider.options({
-    appendToBody: true,
-    animation: false
+.config(function ($tooltipProvider) {
+  /* Configure AngularStrap tooltips. */
+  angular.extend($tooltipProvider.defaults, {
+    animation: false,
+    placement: 'top',
+    container: 'body',
+    trigger: 'focus hover'
   });
-}).run(function ($location, $document, $rootScope, User) {
+})
+
+.run(function ($location, $document, $rootScope, user) {
   $rootScope.$on('$routeChangeSuccess',
     function (event, current, previous) {
       if (!current.$$route)
         return;
       if (current.$$route.requireLogin)
-        User.checkAccess();
+        user.checkAccess();
       $document[0].title = 'StorkCloud - '+current.$$route.title;
     }
   );
-}).controller('LoginCtrl', function ($scope, Stork, $location, User, $modal) {
+})
+
+.controller('LoginCtrl', function ($scope, stork, $location, user, $modal) {
   $scope.logout = function () {
-    User.forgetLogin();
+    user.forgetLogin();
     $location.path('/login');
   };
   $scope.login = function (u) {
-    return User.login(u).then(function (o) {
-      $scope.$close();
-    }, function (e) {
-      alert(e);
-    });
+    return user.login(u);
   };
   $scope.loginModal = function () {
-    $modal.open({
-      templateUrl: '/app/user/login.html',
-      controller: 'LoginCtrl',
-      size: 'sm'
+    $modal({
+      animation: false,
+      title: 'Log in',
+      container: 'body',
+      contentTemplate: '/app/user/login.html'
     });
   };
-}).controller('RegisterCtrl', function ($scope, Stork, $location, User, $modal) {
+})
+
+.controller('RegisterCtrl', function ($scope, stork, $location, user, $modal) {
   $scope.register = function (u) {
-    return Stork.register(u).then(function (d) {
-      User.saveLogin(d);
+    return stork.register(u).then(function (d) {
+      user.saveLogin(d);
       $location.path('/');
       delete $scope.user;
     }, function (e) {
       alert(e);
     })
   }
-}).controller('TransferCtrl', function ($scope, User, Stork, $modal) {
+})
+
+.controller('TransferCtrl', function ($scope, user, stork, $modal) {
   // Hardcoded options.
   $scope.optSet = [{
       'title': 'Use transfer optimization',
@@ -260,7 +235,7 @@ angular.module('stork', ['ngRoute', 'ui.bootstrap', 'ui', 'stork.util'],
         $scope.job = job
       }
     }).result.then(function (job) {
-      return Stork.submit(job).then(
+      return stork.submit(job).then(
         function (d) {
           alert('Job submitted successfully!');
           return d;
@@ -270,7 +245,9 @@ angular.module('stork', ['ngRoute', 'ui.bootstrap', 'ui', 'stork.util'],
       )
     });
   };
-}).controller('BrowseCtrl', function ($scope, Stork, $q, $modal, User) {
+})
+
+.controller('BrowseCtrl', function ($scope, stork, $q, $modal, user) {
   $scope.uri_state = { };
   $scope.showHidden = false;
 
@@ -282,7 +259,7 @@ angular.module('stork', ['ngRoute', 'ui.bootstrap', 'ui', 'stork.util'],
     var ep = angular.copy($scope.end);
     ep.uri = u.href();
 
-    return Stork.ls(ep, 1).then(
+    return stork.ls(ep, 1).then(
       function (d) {
         if (scope.root)
           d.name = scope.root.name || d.name;
@@ -295,6 +272,10 @@ angular.module('stork', ['ngRoute', 'ui.bootstrap', 'ui', 'stork.util'],
     });
   };
 
+  $scope.history = function () {
+    return user.history();
+  };
+
   // Open the mkdir dialog.
   $scope.mkdir = function () {
     $modal.open({
@@ -302,7 +283,7 @@ angular.module('stork', ['ngRoute', 'ui.bootstrap', 'ui', 'stork.util'],
       scope: $scope
     }).result.then(function (pn) {
       var u = new URI(pn[0]).segment(pn[1]);
-      return Stork.mkdir(u.href()).then(
+      return stork.mkdir(u.href()).then(
         function (m) {
           $scope.refresh();
         }, function (e) {
@@ -316,7 +297,7 @@ angular.module('stork', ['ngRoute', 'ui.bootstrap', 'ui', 'stork.util'],
   $scope.rm = function (uris) {
     _.each(uris, function (u) {
       if (confirm("Delete "+u+"?")) {
-        return Stork.delete(u).then(
+        return stork.delete(u).then(
           function () {
             $scope.refresh();
           }, function (e) {
@@ -334,7 +315,7 @@ angular.module('stork', ['ngRoute', 'ui.bootstrap', 'ui', 'stork.util'],
     else if (uris.length > 1)
       alert('You can only download one file at a time.');
     else
-      Stork.get(uris[0]);
+      stork.get(uris[0]);
   };
 
   // Return the scope corresponding to the parent directory.
@@ -382,7 +363,7 @@ angular.module('stork', ['ngRoute', 'ui.bootstrap', 'ui', 'stork.util'],
     delete $scope.root;
 
     // Add the URL to the local history.
-    User.history(u.toString());
+    user.history(u.toString());
 
     if (!u) {
       delete $scope.root;
@@ -466,7 +447,7 @@ angular.module('stork', ['ngRoute', 'ui.bootstrap', 'ui', 'stork.util'],
       scope: $scope
     }).result;
   };
-}).controller('QueueCtrl', function ($scope, $rootScope, Stork, $timeout) {
+}).controller('QueueCtrl', function ($scope, $rootScope, stork, $timeout) {
   $scope.filters = {
     all: function (j) {
       return true
@@ -544,7 +525,7 @@ angular.module('stork', ['ngRoute', 'ui.bootstrap', 'ui', 'stork.util'],
   $scope.cancel = function (j) {
     if (j.job_id &&
         confirm("Are you sure you want to remove job "+j.job_id+"?"))
-      return Stork.rm(j.job_id).then(
+      return stork.rm(j.job_id).then(
         function (m) {
           j.status = 'removed';
         }, function (e) {
@@ -562,7 +543,7 @@ angular.module('stork', ['ngRoute', 'ui.bootstrap', 'ui', 'stork.util'],
   }
 
   $scope.refresh = function () {
-    return Stork.q().then(
+    return stork.q().then(
       function (jobs) {
         for (var i in jobs) {
           var j = jobs[i];
@@ -588,24 +569,4 @@ angular.module('stork', ['ngRoute', 'ui.bootstrap', 'ui', 'stork.util'],
   };
 
   $scope.autoRefresh();
-});
-
-// Collapsible panels
-$(document).on('click', '.panel-collapse-header', function (e) {
-  var h = $(this).closest('.panel');
-  var b = h.find('.collapse');
-  b.slideToggle(function () {
-    h.toggleClass('panel-collapsed');
-  });
-});
-
-// Tooltips
-$(document).on('mouseover', '[title]', function () {
-  $('.tooltip').remove();
-  $(this).tooltip({
-    animation: 'none',
-    container: 'body',
-    placement: 'auto top'
-  });
-  $(this).tooltip('show');
 });

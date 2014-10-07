@@ -1,7 +1,9 @@
 'use strict';
 
 /** Various utilities used throughout the application. */
-angular.module('stork.util', [])
+angular.module('stork.util', [
+  'mgcrea.ngStrap.tooltip'
+])
 
 /** Filter to make byte counts human-readable. */
 .filter('size', function () {
@@ -102,8 +104,31 @@ angular.module('stork.util', [])
   return {    
     link: function (scope, element, attrs, model) {                
       $timeout(function () {
-        $(element[0]).focus();
+        element[0].focus();
       }, 20);
+    }
+  };
+})
+
+/** Automatically make anything with a title use tooltips. */
+.directive('title', function ($tooltip) {
+  return {
+    restrict: 'A',
+    link: function (scope, element, attrs) {
+      var title = element.attr('title');
+      var tip = $tooltip(element, {title: title});
+
+      element.on('mouseover', function () {
+        var title = element.attr('title');
+        element.removeAttr('title');
+        element.attr('data-title', title);
+      });
+
+      element.on('mouseleave', function () {
+        var title = element.attr('data-title');
+        element.removeAttr('data-title');
+        element.attr('title', title);
+      });
     }
   };
 });

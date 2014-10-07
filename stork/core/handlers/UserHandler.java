@@ -29,7 +29,6 @@ public class UserHandler extends Handler<UserRequest> {
         req.assertMayChangeState();
         req.user().addHistory(req.uri);
       }
-      System.out.println(req.user().history);
       req.ring(req.user().history);
     } else {
       throw new RuntimeException("Invalid action.");
