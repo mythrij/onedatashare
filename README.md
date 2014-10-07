@@ -1,3 +1,6 @@
+[![Build Status](https://travis-ci.org/didclab/stork.svg)]
+  (https://travis-ci.org/didclab/stork)
+
 Introduction
 ============
 
