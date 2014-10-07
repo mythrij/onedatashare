@@ -15,7 +15,7 @@ public class Config {
     System.getProperty("stork.exedir", ".")+"/stork.conf",
     "./stork.conf",
     "../stork.conf",
-    "/usr/local/stork/stork.conf"
+    "/usr/share/stork/etc/stork.conf"
   };
 
   /** Global configuration. */
@@ -47,7 +47,11 @@ public class Config {
 
   // Check that path is readable and return absolutized file, else null.
   private static boolean canAccessPath(String path) {
-    return new File(path).getAbsoluteFile().canRead();
+    try {
+      return new File(path).getAbsoluteFile().canRead();
+    } catch (Exception e) {
+      return false;
+    }
   }
 
   // Parse config file, where each line is either a comment or an
