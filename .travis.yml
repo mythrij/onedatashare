@@ -3,4 +3,4 @@ language: java
 git:
   depth: 1
 
-script: make
+script: make buildtest

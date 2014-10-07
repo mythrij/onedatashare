@@ -28,7 +28,7 @@ DOC=doc
 LIB=lib
 
 .PHONY: all install classes clean discover fetchdeps pkglist \
-	$(PROJECT)_cmds release doc help
+	$(PROJECT)_cmds release doc help buildtest
 .SUFFIXES: .java .class
 
 # Recursive wildcard function from jgc.org.
@@ -119,10 +119,17 @@ clean:
 distclean: clean
 	@$(MAKE) --no-print-directory -C lib distclean
 
+buildtest: distclean
+	$(MAKE) help
+	$(MAKE)
+	$(MAKE) clean
+	$(MAKE) distclean
+
 help:
 	@echo 'Possible targets:'
 	@echo
 	@echo '  all         Build everything. This is the default target.'
+	@echo '  buildtest   Test the whole build system.'
 	@echo '  clean       Clean up after a build.'
 	@echo '  discover    Find changed sources.'
 	@echo '  distclean   Clean after build and also clean dependencies.'
