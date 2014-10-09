@@ -67,8 +67,15 @@ public abstract class Transfer<S extends Resource, D extends Resource> {
   /** Get the destination {@code Resource}. */
   public final D destination() { return destination; }
 
-  /** Start the transfer. */
-  public final synchronized void start() { onStart.ring(); }
+  /**
+   * Start the transfer.
+   *
+   * @return This {@code Transfer}.
+   */
+  public final synchronized Transfer<S,D> start() {
+    onStart.ring();
+    return this;
+  }
 
   /**
    * Start this transfer when {@code bell} rings.
@@ -76,11 +83,22 @@ public abstract class Transfer<S extends Resource, D extends Resource> {
    * @param bell a {@code Bell} whoses ringing indicates the transfer should
    * start. If {@code Bell} fails, the transfer fails with the same {@code
    * Throwable}.
+   * @return This {@code Transfer}.
    */
-  public final void startOn(Bell bell) { bell.promise(onStart); }
+  public final Transfer<S,D> startOn(Bell bell) {
+    bell.promise(onStart);
+    return this;
+  }
 
-  /** Stop the transfer. */
-  public final void stop() { onStop.ring(); }
+  /**
+   * Stop the transfer.
+   *
+   * @return This {@code Transfer}.
+   */
+  public final Transfer<S,D> stop() {
+    onStop.ring();
+    return this;
+  }
 
   /**
    * Fail the transfer with the given reason. Subclasses should call {@code
@@ -88,14 +106,22 @@ public abstract class Transfer<S extends Resource, D extends Resource> {
    *
    * @param reason a {@code Throwable} indicating the reason the transfer
    * failed.
+   * @return This {@code Transfer}.
    */
-  public final void stop(Throwable reason) { onStop.ring(reason); }
+  public final Transfer<S,D> stop(Throwable reason) {
+    onStop.ring(reason);
+    return this;
+  }
 
   /**
    * Cancel the transfer. This is equivalent to failing the transfer with a
    * {@code CancellationException}.
+   *
+   * @return This {@code Transfer}.
    */
-  public final void cancel() { stop(new CancellationException()); }
+  public final Transfer<S,D> cancel() {
+    return stop(new CancellationException());
+  }
 
   /**
    * Stop this transfer when {@code bell} rings.
@@ -103,36 +129,45 @@ public abstract class Transfer<S extends Resource, D extends Resource> {
    * @param bell a {@code Bell} whoses ringing indicates the transfer should
    * stop. If {@code Bell} fails, the transfer fails with the same {@code
    * Throwable}.
+   * @return This {@code Transfer}.
    */
-  public final void stopOn(Bell bell) {
+  public final Transfer<S,D> stopOn(Bell bell) {
     bell.new Promise() {
       public void done() { start(); }
       public void fail(Throwable t) { stop(t); }
     };
+    return this;
   }
 
   /**
    * Pause the transfer temporarily. {@code resume()} should be called to
    * resume transfer after pausing. Implementors should assume this method will
    * only be called from a running state.
+   *
+   * @return This {@code Transfer}.
    */
-  protected void pause() { }
+  protected Transfer<S,D> pause() {
+    return this;
+  }
 
   /**
    * Resume the transfer after a pause. Implementors should assume this method
    * will only be called from a paused state.
+   *
+   * @return This {@code Transfer}.
    */
-  protected void resume() { }
+  protected Transfer<S,D> resume() { return this; }
 
   /** Check if the transfer is complete. */
-  public final boolean isDone() {
-    return onStop.isDone();
-  }
+  public final boolean isDone() { return onStop.isDone(); }
 
-  /** Used by subclasses to note progress. */
-  protected final void addProgress(long size) {
+  /**
+   * Used by subclasses to note progress.
+   */
+  protected final Transfer<S,D> addProgress(long size) {
     progress.add(size);
     throughput.update(size);
+    return this;
   }
 
   /**

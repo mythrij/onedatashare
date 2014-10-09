@@ -4,6 +4,7 @@ import io.netty.buffer.*;
 
 import stork.cred.*;
 import stork.feather.*;
+import stork.feather.util.*;
 import stork.module.*;
 import stork.scheduler.*;
 import stork.util.*;
@@ -112,10 +113,8 @@ public class FTPSession extends Session<FTPSession, FTPResource> {
   }
 
   public static void main(String[] args) {
-    String uri1 = (args.length > 0) ? args[0] : "ftp://didclab-ws8/stuff/";
-    String uri2 = (args.length > 1) ? args[1] : "ftp://didclab-ws8/stuff2/";
-    final Resource src = new FTPModule().select(URI.create(uri1));
-    final Resource dest = new FTPModule().select(URI.create(uri2));
-    src.transferTo(dest);
+    String uri = (args.length > 0) ? args[0] : "ftp://didclab-ws8/stuff/";
+    final Resource src = new FTPModule().select(URI.create(uri));
+    src.transferTo(new HexDumpResource()).start().onStop().debugOnRing();
   }
 }
