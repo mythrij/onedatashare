@@ -81,8 +81,12 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
         } if (stat.files != null && stat.files.length != 1) {
           stat.dir = true;
           return new Bell<Stat>(stat);
+        } if (stat.files[0].name.contains("/")) {
+          // Stat name contains slashes, assume file.
+          stat.files[0].name = stat.name;
+          return new Bell<Stat>(stat.files[0]);
         } if (!path.name().equals(stat.files[0].name)) {
-          // List contains different name, assume directory...
+          // List contains different name, assume directory.
           stat.dir = true;
           return new Bell<Stat>(stat);
         } return checkIfDirectory().new As<Stat>() {
@@ -127,7 +131,7 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
 
         parser.name(StorkUtil.basename(path.name()));
 
-        //Log.fine("Trying list command: ", cmd);
+        Log.fine("Trying list command: ", cmd);
 
         // When doing MLSx listings, we can reduce the response size with this.
         if (hint == 'M' && !session.mlstOptsAreSet) {

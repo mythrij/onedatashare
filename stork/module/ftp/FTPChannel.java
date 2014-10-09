@@ -583,6 +583,14 @@ public class FTPChannel {
     return bell;
   }
 
+  // Features assumed to exist on all FTP servers.
+  private static String[] defaultCommands = {
+    "ABOR", "ACCT", "ALLO", "APPE", "CDUP", "CWD",  "DELE", "HELP", "LIST",
+    "MKD",  "MODE", "NLST", "NOOP", "PASS", "PASV", "PORT", "PWD",  "QUIT",
+    "REIN", "REST", "RETR", "RMD",  "RNFR", "RNTO", "SITE", "SMNT", "STAT",
+    "STOR", "STOU", "STRU", "SYST", "TYPE", "USER"
+  };
+
   // A structure used to hold a set of features supported by a server. A fine
   // specimen of overengineering.
   // TODO: This should probably propagate control channel errors.
@@ -595,6 +603,10 @@ public class FTPChannel {
         return;
 
       features = new HashMap<String,Bell>();
+
+      // Add all features guaranteed to exist.
+      for (String cmd : defaultCommands)
+        addFeature(cmd);
 
       // ...and pipe all the check commands.
       new Command("HELP") {
