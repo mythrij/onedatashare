@@ -364,7 +364,7 @@ public class FTPChannel {
       }
     }
 
-    public void close(ChannelHandlerContext ctx, ChannelPromise promise) {
+    public void channelInactive(ChannelHandlerContext ctx) {
       FTPChannel.this.close();
     }
 
