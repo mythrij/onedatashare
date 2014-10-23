@@ -125,7 +125,8 @@ public class HTTPBody extends Resource<HTTPRequest,HTTPBody> {
         HttpResponseStatus st = status == null ? OK : status;
         HttpResponse r = new DefaultHttpResponse(session.version(), st);
 
-        r.headers().set(CONTENT_LENGTH, stat.size);
+        if (stat.size > 0)
+          r.headers().set(CONTENT_LENGTH, stat.size);
         r.headers().set(CONTENT_TYPE, contentType);
 
         if (stat.name != null) {
@@ -144,6 +145,7 @@ public class HTTPBody extends Resource<HTTPRequest,HTTPBody> {
    * Create an HTTP response for a throwable.
    */
   private HttpResponse errorToHttpMessage(Throwable t) {
+    t.printStackTrace();
     String message = StorkInterface.errorToAd(t).get("message");
     ByteBuf b = Unpooled.copiedBuffer(message.getBytes());
     FullHttpResponse r = new DefaultFullHttpResponse(

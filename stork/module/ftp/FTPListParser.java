@@ -242,7 +242,7 @@ public class FTPListParser extends Bell<Stat> {
 
       case 'U':  // Check for a Unix listing.
       if (tokens.length >= 6) try {
-        String perm = tokens[0], name;
+        String perm = tokens[0], name, link = null;
         long time, size;
         boolean dir = false;
 
@@ -300,7 +300,9 @@ public class FTPListParser extends Bell<Stat> {
             if (perm.charAt(0) == 'l') {
               if (name.endsWith("/"))
                 dir = true;
-              name = name.replaceAll(" -> .*$", "");
+              String[] names = name.split(" -> ");
+              name = names[0];
+              link = names[1];
             }
           } catch (Exception e) {
             name = tokens[tokens.length-1];
@@ -314,6 +316,7 @@ public class FTPListParser extends Bell<Stat> {
           ft.dir = dir;
           ft.file = !dir;
           ft.perm = perm;
+          ft.link = link;
 
           list_type = 'U';
           return ft;

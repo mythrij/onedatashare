@@ -14,6 +14,7 @@ import stork.feather.util.*;
 public class ProxyTransfer<S extends Resource<?,S>, D extends Resource<?,D>>
 extends Transfer<S,D> {
   private LinkedList<Pending> queue = new LinkedList<Pending>();
+  private Throwable error = null;
   
   // A pending transfer and a bell to ring when it starts.
   private static class Pending {
@@ -61,7 +62,12 @@ extends Transfer<S,D> {
   // Check if the transfer is complete. If there are no more pending tasks,
   // declare the transfer to be complete.
   private synchronized void checkIfComplete() {
-    if (pendingTasks() <= 0) stop();
+    if (pendingTasks() <= 0) {
+      if (error != null)
+        stop(error);
+      else
+        stop();
+    }
   }
 
   // Transfer a resource given its path, and return a bell that rings when the
@@ -75,10 +81,12 @@ extends Transfer<S,D> {
       transferStarted(path);
       return transfer0(path).new Promise() {
         public void fail(Throwable t) {
+          error = t;
           transferEnded(path);
         }
       };
     } catch (Exception e) {
+      error = e;
       transferEnded(path);
       return new Bell(e);
     }
@@ -93,8 +101,6 @@ extends Transfer<S,D> {
     return src.stat().new AsBell<Object>() {
       public Bell<Object> convert(Stat stat) {
         Bell b = Bell.rungBell();
-        if (stat.link != null)
-          throw new RuntimeException("Cannot transfer links.");
         if (stat.dir)
           b = b.and(dest.mkdir()).and(transferList(path));
         if (stat.file)

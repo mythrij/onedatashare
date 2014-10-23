@@ -27,7 +27,6 @@ public abstract class Transfer<S extends Resource, D extends Resource> {
   private boolean startCalled = false;
   private final Bell onStart = new Bell() {
     public void done() {
-      System.out.println("Transfer starting...");
       if (!Transfer.this.isDone())
         timer = new Time(); 
     } public void fail(Throwable t) {
@@ -37,13 +36,10 @@ public abstract class Transfer<S extends Resource, D extends Resource> {
   private final Bell onStop = new Bell() {
     public void done() {
       if (timer != null) timer.stop();
-      System.out.println("Transfer complete.");
-      System.out.println("Total:  "+progress);
-      System.out.println("Avg.Th: "+progress.rate(timer));
+      source.onTransferComplete(Transfer.this);
+      destination.onTransferComplete(Transfer.this);
     } public void fail(Throwable t) {
       if (timer != null) timer.stop();
-      System.out.println("Transfer failed!");
-      t.printStackTrace();
     } public void always() {
       onStart.cancel();
     }

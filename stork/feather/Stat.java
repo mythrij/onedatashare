@@ -22,7 +22,7 @@ public class Stat {
   /** Whether or not the resource is a file. */
   public boolean file;
   /** If the resource is a link, the link target. */
-  public Path    link;
+  public String  link;
   /** An implementation-specific permissions string. */
   public String  perm;
   /** An array of subresources, if known. */

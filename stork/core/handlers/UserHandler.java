@@ -9,7 +9,7 @@ import static stork.core.server.User.PASS_LEN;
 
 /** Handle user registration, login, and settings. */
 public class UserHandler extends Handler<UserRequest> {
-  public void handle(UserRequest req) {
+  public void handle(final UserRequest req) {
     Bell bell = new Bell();
     if (req.action == null) {
       throw new RuntimeException("No action provided.");
@@ -19,10 +19,15 @@ public class UserHandler extends Handler<UserRequest> {
       stork.util.Log.info("Registering user: ", user.email);
       server.dumpState();
       req.ring(user.getLoginCookie());
-    } else if (req.action.equals("login")) {
+    } else if (req.action.equals("login")) try {
       UserLogin log = req.marshalInto(new UserLogin());
       User user = log.login();
       req.ring(user.getLoginCookie());
+    } catch (final Exception e) {
+      // Delay if login credentials are wrong.
+      Bell.timerBell(1).new Promise() {
+        public void done() { req.ring(e); }
+      };
     } else if (req.action.equals("history")) {
       req.assertLoggedIn();
       if (req.uri != null) {

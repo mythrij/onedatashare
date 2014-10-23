@@ -250,7 +250,7 @@ public class Resource<S extends Session<S,R>, R extends Resource<S,R>> {
 
   /**
    * Initiate a transfer from this {@code Resource} to {@code resource} using
-   * whatever method is deemed most appropriate by the implementation.  The
+   * whatever method is deemed most appropriate by the implementation. The
    * implementation should try to transfer this {@code Resource} as efficiently
    * as possible, and so should inspect the destination {@code Resource} to
    * determine if more efficient alternatives to proxy transferring can be
@@ -267,6 +267,14 @@ public class Resource<S extends Session<S,R>, R extends Resource<S,R>> {
   public <D extends Resource<?,D>> Transfer<R,D> transferTo(D resource) {
     return new ProxyTransfer<R,D>((R)this, resource);
   }
+
+  /**
+   * Called whenever a {@code Transfer} involving this {@code Resource} has
+   * completed.
+   *
+   * @param transfer the {@code Transfer} that has completed.
+   */
+  public void onTransferComplete(Transfer<?,?> transfer) { }
 
   public String toString() {
     return session.uri.append(path).toString();
