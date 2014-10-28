@@ -27,15 +27,15 @@
         </li>
       </ul>
 
-      <ul class="nav navbar-nav navbar-right">
+      <ul ng-controller="User" class="nav navbar-nav navbar-right">
         <li class="hidden-xs" bs-route="/user">
           <a id="user-button" class="logged-in" href="#/user" ng-cloak>
             <i class="fa fa-user"></i>
             <span ng-bind="$user.email"></span>
           </a>
         </li>
-        <li ng-controller="LoginCtrl">
-          <a class="logged-out" href="#/" ng-click="loginModal()">
+        <li>
+          <a class="logged-out" href="#/" ng-click="login()">
             <i class="fa fa-sign-in"></i>
             <span>Log in</span>
           </a>

@@ -9,34 +9,20 @@
     <div id="stork-ls" class="panel-collapse text-center" bs-collapse-target>
       <div class="panel-body">
         <!-- Left and right browsing widgets -->
-        <div class="col-xs-6" ng-controller="BrowseCtrl" ng-init="end = left"
+        <div class="col-xs-6" ng-controller="Browse" ng-init="end = left"
              ng-include="'/app/transfer/browse/browse.html'"></div>
-        <div class="col-xs-6" ng-controller="BrowseCtrl" ng-init="end = right"
+        <div class="col-xs-6" ng-controller="Browse" ng-init="end = right"
              ng-include="'/app/transfer/browse/browse.html'"></div>
 
         <div class="clearfix"></div>
 
-        <div class="input-group-lg text-center panel panel-heading transfer-controls">
-          <div class="visible-xs"></div>
-          <button class="btn btn-lg btn-default" title="Transfer contents"
-                  ng-disabled="!canTransfer(left, right, true)" ng-click="transfer(left, right, true)">
-            <i class="fa fa-share"></i>
-          </button>
-          <button class="btn btn-lg btn-default" title="Transfer"
+        <div class="large input-group-lg text-center panel panel-heading transfer-controls">
+          <button class="fa fa-arrow-left btn btn-lg btn-default" title="Transfer"
                   ng-disabled="!canTransfer(left, right, false)" ng-click="transfer(left, right, false)">
-            <i class="fa fa-share-alt"></i>
-          </button>
-          <button class="btn btn-lg btn-default ph" title="Synchronize"
+          </button><button class="fa fa-refresh btn btn-lg btn-default ph" title="Synchronize"
                   ng-disabled="!canSync(left, right)" ng-click="sync(left, right)">
-            <i class="fa fa-refresh"></i>
-          </button>
-          <button class="btn btn-lg btn-default" title="Transfer"
+          </button><button class="btn fa fa-arrow-right btn-lg btn-default" title="Transfer"
                   ng-disabled="!canTransfer(right, left, false)" ng-click="transfer(right, left, false)">
-            <i class="fa fa-share-alt fa fa-rotate-180"></i>
-          </button>
-          <button class="btn btn-lg btn-default" title="Transfer contents"
-                  ng-disabled="!canTransfer(right, left, true)" ng-click="transfer(right, left, true)">
-            <i class="fa fa-share fa fa-rotate-180"></i>
           </button>
         </div>
 

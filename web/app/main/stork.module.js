@@ -2,9 +2,9 @@
 
 /** The main Stork AngularJS module. Welcome! */
 angular.module('stork', [
-  'ngRoute', 'ngResource', 'ui',
+  'ngRoute', 'ngResource', 'ui', 'cgBusy', 'pasvaz.bindonce',
   'mgcrea.ngStrap', 'mgcrea.ngStrap.collapse', 'mgcrea.ngStrap.tooltip',
-  'stork.util', 'stork.user'
+  'stork.util', 'stork.user', 'stork.transfer'
   ], function ($provide, $routeProvider) {
     /* This is where you can add routes and change page titles. */
     $routeProvider.when('/', {
@@ -32,31 +32,28 @@ angular.module('stork', [
 )
 
 /** Provides easy access to Stork API resources. */
-.factory('stork', function ($http, $q) {
-  var api = function (r) {
-    return '/api/stork/'+r
-  };
-
+.factory('stork', function ($window, $http, $q) {
   var gr = function (r) { return r.data };
   var ge = function (r) { return $q.reject(r.data.error) };
   return {
+    $uri: function (path, query) {
+      var uri = new URI('/api/stork/'+path);
+      if (typeof query === 'object')
+        query = URI.buildQuery(query);
+      if (typeof query === 'string')
+        uri.query(query);
+      return uri.readable();
+    },
     $post: function (name, data) {
-      return $http.post(api(name), data).then(gr, ge);
+      return $http.post(this.$uri(name), data).then(gr, ge);
     },
     $get: function (name, data) {
-      return $http.get(api(name), data).then(gr, ge);
+      return $http.get(this.$uri(name, data)).then(gr, ge);
     },
     $download: function (uri) {
-      uri = api('get')+'?uri='+uri;
-      var id = 'hiddenDownloadFrame';
-      var iframe = document.getElementById(id);
-      if (!iframe) {
-        iframe = document.createElement('iframe');
-        iframe.id = id;
-        iframe.style.display = 'none';
-        document.body.appendChild(iframe);
-      }
-      iframe.src = uri;
+      uri = this.$uri('get', {uri: uri});
+      console.log(uri);
+      $window.open(uri);
     },
     login: function (info) {
       return this.$post('user', angular.extend({
@@ -73,9 +70,7 @@ angular.module('stork', [
         action: 'history',
         uri: uri
       });
-      return this.$get('user', {
-        action: 'history'
-      });
+      return this.$get('user', {action: 'history'});
     },
     ls: function (ep, d) {
       if (typeof ep === 'string')
@@ -124,6 +119,12 @@ angular.module('stork', [
   });
 })
 
+.value('cgBusyDefaults',{
+    message:'Loading',
+    backdrop: false,
+    delay: 200
+})
+
 .run(function ($location, $document, $rootScope, user) {
   $rootScope.$on('$routeChangeSuccess',
     function (event, current, previous) {
@@ -134,24 +135,6 @@ angular.module('stork', [
       $document[0].title = 'StorkCloud - '+current.$$route.title;
     }
   );
-})
-
-.controller('LoginCtrl', function ($scope, stork, $location, user, $modal) {
-  $scope.logout = function () {
-    user.forgetLogin();
-    $location.path('/login');
-  };
-  $scope.login = function (u) {
-    return user.login(u);
-  };
-  $scope.loginModal = function () {
-    $modal({
-      animation: false,
-      title: 'Log in',
-      container: 'body',
-      contentTemplate: '/app/user/login.html'
-    });
-  };
 })
 
 .controller('RegisterCtrl', function ($scope, stork, $location, user, $modal) {
@@ -247,198 +230,7 @@ angular.module('stork', [
   };
 })
 
-.controller('BrowseCtrl', function ($scope, stork, $q, $modal, user) {
-  $scope.uri_state = { };
-  $scope.showHidden = false;
-
-  // Fetch and cache the listing for the given URI.
-  $scope.fetch = function (u) {
-    var scope = this;
-    scope.loading = true;
-
-    var ep = angular.copy($scope.end);
-    ep.uri = u.href();
-
-    return stork.ls(ep, 1).then(
-      function (d) {
-        if (scope.root)
-          d.name = scope.root.name || d.name;
-        return scope.root = d;
-      }, function (e) {
-        return $q.reject(scope.error = e);
-      }
-    ).finally(function () {
-      scope.loading = false;
-    });
-  };
-
-  $scope.history = function () {
-    return user.history();
-  };
-
-  // Open the mkdir dialog.
-  $scope.mkdir = function () {
-    $modal.open({
-      templateUrl: 'new-folder.html',
-      scope: $scope
-    }).result.then(function (pn) {
-      var u = new URI(pn[0]).segment(pn[1]);
-      return stork.mkdir(u.href()).then(
-        function (m) {
-          $scope.refresh();
-        }, function (e) {
-          alert('Could not create folder.');
-        }
-      );
-    });
-  };
-
-  // Delete the selected files.
-  $scope.rm = function (uris) {
-    _.each(uris, function (u) {
-      if (confirm("Delete "+u+"?")) {
-        return stork.delete(u).then(
-          function () {
-            $scope.refresh();
-          }, function (e) {
-            alert('Could not delete file: '+e);
-          }
-        );
-      }
-    });
-  };
-
-  // Download the selected file.
-  $scope.download = function (uris) {
-    if (uris == undefined || uris.length == 0)
-      alert('You must select a file.')
-    else if (uris.length > 1)
-      alert('You can only download one file at a time.');
-    else
-      stork.get(uris[0]);
-  };
-
-  // Return the scope corresponding to the parent directory.
-  $scope.parentNode = function () {
-    if (this !== $scope) {
-      if (this.$parent.root !== this.root)
-        return this.$parent;
-      return this.$parent.parentNode();
-    }
-  };
-
-  // Get or set the endpoint URI.
-  $scope.uri = function (u) {
-    if (u === undefined) {
-      if (this.root !== $scope.root) {
-        u = this.parentNode().uri();
-        return u.segment(URI.encode(this.root.name));
-      } else {
-        return new URI($scope.end.uri);
-      }
-    } else if (!u) {
-      if (this.root === $scope.root)
-        delete $scope.end.uri;
-    } else {
-      if (typeof u === 'string') {
-        var u = new URI(u).normalize();
-      } else {
-        u = u.clone().normalize();
-      }
-
-      $scope.temp_uri = u.readable();
-      $scope.uri_state.changed = false;
-      return new URI($scope.end.uri = u.href());
-    }
-  };
-
-  $scope.refresh = function (u) {
-    if (u === undefined)
-      u = $scope.temp_uri;
-    u = $scope.uri(u);
-
-    // Clean up from last refresh.
-    $scope.unselectAll();
-    delete $scope.error;
-    delete $scope.root;
-
-    // Add the URL to the local history.
-    user.history(u.toString());
-
-    if (!u) {
-      delete $scope.root;
-      $scope.uri_state.changed = false;
-    } else {
-      $scope.open = true;
-      $scope.fetch(u).then(
-        function (f) {
-          if (f.dir)
-            $scope.uri(u = u.filename(u.filename()+'/'));
-          f.name = u.toString();
-          return f
-        }, function (e) {
-          $scope.error = e;
-        }
-      )
-    }
-  };
-
-  $scope.up_dir = function () {
-    var u = $scope.uri();
-    if (!u) return;
-    u = u.clone().filename('../').normalize();
-    $scope.refresh(u);
-  };
-
-  $scope.toggle = function () {
-    var scope = this
-    if (scope.root && scope.root.dir)
-    if (scope.open = !scope.open)
-    if (!scope.root.files) {
-      // We're opening, fetch subdirs if we haven't.
-      scope.fetch(scope.uri());
-    }
-  };
-
-  $scope.select = function (e) {
-    var scope = this;
-    var u = this.uri().toString();
-
-    // Unselect text.
-    if (document.selection && document.selection.empty)
-      document.selection.empty();
-    else if (window.getSelection)
-      window.getSelection().removeAllRanges();
-
-    if (!this.selected) {
-      if (!e.ctrlKey)
-        $scope.unselectAll();
-      $scope.end.$selected[u] = new function () {
-        this.unselect = function () {
-          delete scope.selected;
-        };
-      };
-      this.selected = true;
-    } else {
-      if (!e.ctrlKey)
-        $scope.unselectAll();
-      delete $scope.end.$selected[u];
-      delete this.selected;
-    }
-  };
-
-  $scope.unselectAll = function () {
-    var s = $scope.end.$selected;
-    if (s) _.each(s, function (f) {
-      f.unselect();
-    })
-    $scope.end.$selected = { };
-  };
-
-  $scope.selectedUris = function () {
-    return _.keys($scope.end.$selected);
-  };
-}).controller('CredCtrl', function ($scope, $modal) {
+.controller('CredCtrl', function ($scope, $modal) {
   $scope.creds = [ ];
   /* Open a modal, return a future credential. */
   $scope.newCredential = function (type) {
