@@ -120,6 +120,8 @@ public abstract class User {
 
   /** Normalize an email string for comparison. */
   public static String normalizeEmail(String email) {
+    if (email == null)
+      return null;
     String[] parts = email.split("@");
     if (parts.length != 2)
       throw new RuntimeException("Invalid email address.");

@@ -8,6 +8,7 @@ import stork.core.*;
 import stork.core.server.*;
 import stork.core.handlers.*;
 import stork.feather.*;
+import stork.util.*;
 
 import static stork.scheduler.JobStatus.*;
 import static stork.feather.util.Time.now;
@@ -31,7 +32,7 @@ public class Job {
   private transient User user;
 
   /** Should be set by scheduler. */
-  public Scheduler scheduler;
+  public transient Scheduler scheduler;
 
   /** The {@code User} this {@code Job} belongs to. */
   public User user() {
@@ -52,9 +53,7 @@ public class Job {
   /** Times of various important events. */
   private Times times = new Times();
   private static class Times {
-    long scheduled;
-    long start;
-    long completion;
+    Long scheduled, started, completed;
   }
 
   private transient Transfer transfer;
@@ -102,15 +101,13 @@ public class Job {
       case scheduled:
         times.scheduled = now(); break;
       case processing:
-        /*run_timer = new Watch(true);*/ break;
+        times.started = now(); break;
       case removed:
-        if (transfer != null)
-          transfer.cancel();
       case failed:
       case complete:
-        //queue_timer.stop();
-        //run_timer.stop();
-        //progress.transferEnded(true);
+        if (transfer != null)
+          transfer.cancel();
+        times.completed = now(); break;
     } return this;
   }
 
@@ -191,8 +188,10 @@ public class Job {
    */
   public synchronized Bell<Job> start() {
     try {
+      Log.info("Starting job: ", this);
       return start0();
     } catch (Exception e) {
+      Log.warning("Job failed: ", e);
       return new Bell<Job>(e);
     }
   }
@@ -207,7 +206,7 @@ public class Job {
 
     // Keep this as a temporary in case we get unlucky and the job fails before
     // we return, because the done handler sets this.transfer to null.
-    Transfer transfer = 
+    Transfer transfer =
       src.resolveAs("source").transferTo(dest.resolveAs("destination"));
 
     this.transfer = transfer;
@@ -215,9 +214,11 @@ public class Job {
     transfer.onStop().new Promise() {
       public void done() {
         // We did it! The transfer completed successfully.
+        Log.info("Job complete: ", uuid());
         status(complete);
       } public void fail(Throwable t) {
         // There was some problem during the transfer. Reschedule if possible.
+        Log.warning("Job failed: ", uuid(), " ", t);
         status(failed, t.getMessage());
         attempts++;
         reschedule();

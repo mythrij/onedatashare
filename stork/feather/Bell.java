@@ -624,6 +624,8 @@ public class Bell<T> implements Future<T> {
    * this {@code Bell} succeeds.
    */
   public <V> Bell<V> and(final Bell<V> other) {
+    if (other == null)
+      return this.as((V) null);
     if (isFailed())
       return (Bell<V>) this;
     if (isDone())

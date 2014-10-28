@@ -1009,7 +1009,6 @@ public class FTPChannel {
             context = ctx;
         }
       } public void channelWritabilityChanged(ChannelHandlerContext ctx) {
-        System.out.println(ctx.channel().isWritable());
         writable(ctx.channel().isWritable());
       }
     }

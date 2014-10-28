@@ -33,6 +33,7 @@ public class TCPInterface extends BaseTCPInterface {
     channel.pipeline().addLast(new SimpleChannelInboundHandler<Ad>() {
       public void messageReceived(final ChannelHandlerContext ctx, Ad ad) {
         Request r = getRequestForm(ad.get("command")).unmarshalFrom(ad);
+        r.mayChangeState = true;  // Always allow state change.
         issueRequest(r).new Promise() {
           public void done(Object res) {
             ctx.channel().writeAndFlush(Ad.marshal(res));

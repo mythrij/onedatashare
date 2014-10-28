@@ -166,7 +166,6 @@ extends Transfer<S,D> {
 
   // Called whenever a data transfer starts or completes.
   private synchronized void transferStarted(Path path) {
-    System.out.println("Starting transfer: "+path);
     transfers.add(path);
   } private synchronized void transferEnded(Path path) {
     transfers.remove(path);
@@ -176,7 +175,6 @@ extends Transfer<S,D> {
 
   // Called whenever a listing starts or completes.
   private synchronized void listingStarted(Path path) {
-    System.out.println("Starting listing: "+path);
     listings.add(path);
   } private synchronized void listingEnded(Path path) {
     listings.remove(path);
