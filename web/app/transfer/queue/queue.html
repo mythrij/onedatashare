@@ -1,4 +1,4 @@
-<div id="stork-queue" ng-init="page = 1" ng-controller="QueueCtrl">
+<div id="stork-queue" ng-init="page = 1" ng-controller="Queue">
   <script type="text/ng-template" id="prog-pop.html">
     <dl class="dl-horizontal">
       <dt>Bytes</dt>
@@ -49,7 +49,8 @@
           Progress
         </div>
         <div class="col-xs-9 col-sm-3">
-          <div class="progress" data-placement="top" data-popover="" data-trigger="hover" bs-popover="'prog-pop.html'"
+          <div class="progress" data-placement="top" data-trigger="hover"
+               bs-popover content-template="prog-pop.html"
                ng-class="{processing: 'progress-striped active'}[j.status]">
             <div role="progressbar" ng-class="color[j.status]" class="progress-bar"
                  ng-style="{width:(j.status=='processing'&&(j.progress.bytes|percent))||'100%'}"></div>
@@ -74,9 +75,9 @@
           Endpoints
         </div>
         <div class="col-xs-9 col-sm-4 clearfix endpoints text-center">
-          <abbr title="{{j.src.uri[0]}}">{{(j.src.uri[0]|URI).host()}}</abbr>
+          <span title="{{j.src.uri}}">{{(j.src.uri|URI).host()}}</span>
           <i class="fa fa-long-arrow-right"></i>
-          <abbr title="{{j.dest.uri[0]}}">{{(j.dest.uri[0]|URI).host()}}</abbr>
+          <span title="{{j.dest.uri}}">{{(j.dest.uri|URI).host()}}</span>
         </div>
 
         <div class="clearfix"></div>

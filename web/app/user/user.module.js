@@ -44,15 +44,16 @@ angular.module('stork.user', [
 
 .controller('User', function ($scope, $modal, $location, user) {
   /* If info is given, log the user in. Otherwise show modal. */
-  $scope.login = function (info) {
+  $scope.login = function (info, then) {
     if (!info)
       return $modal({
         title: 'Log in',
         container: 'body',
         contentTemplate: '/app/user/login.html'
       });
-    return user.login(info).then(function () {
-      $scope.$hide();
+    return user.login(info).then(function (v) {
+      if (then)
+        then(v);
       $modal({
         title: "Welcome!",
         content: "You have successfully logged in.",

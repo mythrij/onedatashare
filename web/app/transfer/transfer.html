@@ -99,7 +99,7 @@
     <div class="modal-body">
       <div class="form-group col-md-12">
         <label>MyProxy server</label>
-        <input type="text" class="form-control" ng-model="nc.myproxy_host" placeholder="e.g., myproxy.teragrid.org" required>
+        <input type="text" class="form-control" ng-model="nc.myproxy_host" placeholder="e.g., myproxy.example.com" required>
       </div>
 
       <div class="form-group col-md-6">
@@ -124,25 +124,22 @@
 </script>
 
 <!-- Transfer/sync confirmation modal -->
-<script type="text/ng-template" id="xfer-modal.html">
-  <div class="modal-header">
-    <button type="button" class="close" ng-click="$dismiss()" aria-hidden="true">
-      &times;
-    </button>
-    <h3>Confirm Transfer</h3>
-  </div>
-  <div class="modal-body text-center">
-    This will perform a transfer from
-    <div class="large">{{job.src.uri}}</div>
-    to
-    <div class="large">{{job.dest.uri}}</div>
-    <div class="text-left col-xs-12" ng-if="debugMode">
-      <h4>Raw Job Info</h4>
-      <pre>{{job|json}}</pre>
+<script type="text/ng-template" id="transfer-modal.html">
+  <form ng-submit="submit(job, $hide)">
+    <div class="text-center">
+      This will perform a transfer from
+      <div class="large" bindonce bo-bind="job.src.uri"></div>
+      to
+      <div class="large" bindonce bo-bind="job.dest.uri"></div>
+      <div class="text-left col-xs-12" ng-if="debugMode">
+        <h4>Raw Job Info</h4>
+        <pre>{{job|json}}</pre>
+      </div>
     </div>
-  </div>
-  <div class="modal-footer">
-    <button class="btn btn-warning" ng-click="$dismiss()">Cancel</button>
-    <button class="btn btn-primary" ng-click="$close(job)">Submit</button>
-  </div>
+    <div class="modal-footer text-center">
+      <button class="btn btn-warning" ng-click="$hide()">Cancel</button>
+      <button class="btn btn-primary" ng-click="$close(job)">Submit</button>
+    </div>
+    <div cg-busy="promise"></div>
+  </form>
 </script>
