@@ -79,8 +79,8 @@ angular.module('stork', [
         depth: d||0
       }));
     },
-    rm: function (id) {
-      return this.$post('rm', {
+    cancel: function (id) {
+      return this.$post('cancel', {
         range: id
       });
     },

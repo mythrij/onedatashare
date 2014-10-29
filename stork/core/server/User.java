@@ -147,7 +147,7 @@ public abstract class User {
       UUID uuid = jobs.get(id);
       return server().findJob(uuid);
     } catch (Exception e) {
-      throw new RuntimeException("No job with that ID.");
+      throw new RuntimeException("No job with that ID.", e);
     }
   }
 

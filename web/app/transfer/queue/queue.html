@@ -1,28 +1,4 @@
 <div id="stork-queue" ng-init="page = 1" ng-controller="Queue">
-  <script type="text/ng-template" id="prog-pop.html">
-    <dl class="dl-horizontal">
-      <dt>Bytes</dt>
-      <dd ng-if="j.progress.bytes">
-        <span ng-bind="percent(j.progress.bytes)"></span>
-        <span ng-bind="progress(j.progress.bytes)"></span>
-      </dd>
-      <dt>Files</dt>
-      <dd ng-if="j.progress.files">
-        <span ng-bind="percent(j.progress.files)"></span>
-        <span ng-bind="progress(j.progress.files)"></span>
-      </dd>
-    </dl>
-  </script>
-
-  <script type="text/ng-template" id="template/pagination/pagination.html">
-    <ul class="pagination">
-      <li ng-class="{active: page.active}" ng-repeat="page in pages">
-        <a href ng-class="{disabled: page.disabled}" ng-click="selectPage(page.number)" ng-bind="page.text">
-        </a>
-      </li>
-    </ul>
-  </script>
-
   <div class="hidden-xs clearfix panel-heading" style="font-weight: bold">
     <div class="col-sm-2"></div>
     <div class="col-sm-1">Job ID</div>
@@ -171,3 +147,36 @@
     </div>
   </div>
 </div>
+
+<script type="text/ng-template" id="prog-pop.html">
+  <dl class="dl-horizontal">
+    <dt>Bytes</dt>
+    <dd ng-if="j.progress.bytes">
+      <span ng-bind="percent(j.progress.bytes)"></span>
+      <span ng-bind="progress(j.progress.bytes)"></span>
+    </dd>
+    <dt>Files</dt>
+    <dd ng-if="j.progress.files">
+      <span ng-bind="percent(j.progress.files)"></span>
+      <span ng-bind="progress(j.progress.files)"></span>
+    </dd>
+  </dl>
+</script>
+
+<script type="text/ng-template" id="template/pagination/pagination.html">
+  <ul class="pagination">
+    <li ng-class="{active: page.active}" ng-repeat="page in pages">
+      <a href ng-class="{disabled: page.disabled}" ng-click="selectPage(page.number)" ng-bind="page.text">
+      </a>
+    </li>
+  </ul>
+</script>
+
+<script type="text/ng-template" id="template/pagination/pagination.html">
+  <ul class="pagination">
+    <li ng-class="{active: page.active}" ng-repeat="page in pages">
+      <a href ng-class="{disabled: page.disabled}" ng-click="selectPage(page.number)" ng-bind="page.text">
+      </a>
+    </li>
+  </ul>
+</script>

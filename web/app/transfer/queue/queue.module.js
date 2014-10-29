@@ -3,7 +3,7 @@
 /** Module for monitoring transfers. */
 angular.module('stork.transfer.queue', [])
 
-.controller('Queue', function ($scope, $rootScope, stork, $timeout) {
+.controller('Queue', function ($scope, $rootScope, stork, $timeout, $modal) {
   $scope.filters = {
     all: function (j) {
       return true
@@ -79,9 +79,12 @@ angular.module('stork.transfer.queue', [])
   };
 
   $scope.cancel = function (j) {
+    $modal({
+      contentTemplate: 'cancel-job.html'
+    });
     if (j.job_id &&
         confirm("Are you sure you want to remove job "+j.job_id+"?"))
-      return stork.rm(j.job_id).then(
+      return stork.cancel(j.job_id).then(
         function (m) {
           j.status = 'removed';
         }, function (e) {

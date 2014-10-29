@@ -47,7 +47,7 @@ angular.module('stork.transfer.browse', [
   });
 })
 
-.controller('Browse', function ($scope, stork, $q, $modal, user) {
+.controller('Browse', function ($scope, stork, $q, $modal, user, history) {
   // Reset (or initialize) the browse pane.
   $scope.reset = function () {
     $scope.uri = {};
@@ -71,6 +71,8 @@ angular.module('stork.transfer.browse', [
     $scope.end.uri = uri.toString();
 
     delete $scope.root;
+
+    history.fetch(uri.toString());
 
     $scope.fetch(uri).then(function (list) {
       $scope.root = list;
@@ -115,10 +117,12 @@ angular.module('stork.transfer.browse', [
 
   // Open the mkdir dialog.
   $scope.mkdir = function () {
-    $modal.open({
-      templateUrl: 'new-folder.html',
-      scope: $scope
-    }).result.then(function (pn) {
+    $modal({
+      title: 'Create Directory',
+      contentTemplate: 'new-folder.html'
+    }).$scope = $scope;
+
+    result.then(function (pn) {
       var u = new URI(pn[0]).segment(pn[1]);
       return stork.mkdir(u.href()).then(
         function (m) {
