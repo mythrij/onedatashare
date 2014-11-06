@@ -37,9 +37,11 @@ public class Server {
     public Server server() { return Server.this; }
   }
 
-  public ServerScheduler scheduler;
+  public ServerScheduler<Job> scheduler = new ServerScheduler<Job>();
 
-  private class ServerScheduler extends FIFOScheduler {
+  // The need for a type parameter here is a hack to get around
+  // ad unmarshalling badness.
+  private class ServerScheduler<J> extends FIFOScheduler {
     public Server server() { return Server.this; }
   }
 
@@ -99,6 +101,12 @@ public class Server {
   /** Find a {@link User} by email. */
   public ServerUser findUser(String email) {
     return users.get(email);
+  }
+
+  /** Schedule a job. */
+  public void schedule(Job job) {
+    Log.info("Scheduling job: ", job.uuid());
+    scheduler.add(job);
   }
 
   /** Find a job by its UUID. */
@@ -165,6 +173,7 @@ public class Server {
     handlers.put("get", GetHandler.class);
 
     modules.populate();
+    scheduler.start();
 
     dumpStateThread = new DumpStateThread(config, this);
     dumpState();

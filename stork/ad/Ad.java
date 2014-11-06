@@ -587,20 +587,21 @@ public class Ad implements Serializable {
     } else if (o instanceof Map) {
       AdType kt = t.generics()[0];
       AdType vt = t.generics()[1];
-      if (kt.isInner()) kt.outer(t.outer);
-      if (vt.isInner()) vt.outer(t.outer);
+      kt.outer(t.outer);
+      vt.outer(t.outer);
+      System.out.println(t+"<"+kt.outer+","+vt.outer+">");
       Map<String,AdObject> map = map(false);
       if (map != null) for (Map.Entry<String, AdObject> e : map.entrySet())
         ((Map)o).put(e.getKey(), e.getValue().as(vt));
     } else if (o instanceof Collection) {
       AdType vt = t.generics()[0];
-      if (vt.isInner()) vt.outer(t.outer);
+      vt.outer(t.outer);
       List<AdObject> list = list(false);
       if (list != null) for (AdObject v : list)
         ((Collection)o).add(v.as(vt));
     } else if (t.isArray()) {
       AdType vt = t.component();
-      if (vt.isInner()) vt.outer(o);
+      vt.outer(o);
       int i = 0;
       List<AdObject> list = list(false);
       if (list != null) for (AdObject v : list) try {
@@ -610,7 +611,7 @@ public class Ad implements Serializable {
       }
     } else for (AdMember f : t.fields().values()) try {
       AdObject ao = getObject(f.name());
-      if (f.isInner()) f.outer(o);
+      f.outer(o);
       if (ao != null && !f.ignore()) f.set(o, ao.as(f));
     } catch (Exception e) {
       // Either ad had no such member or it was final and we couldn't set it.

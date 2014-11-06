@@ -98,7 +98,7 @@ public class LocalResource extends Resource<LocalSession,LocalResource> {
         
         File sym = resolveLink(file);
         if (sym != null)
-          stat.link = Path.create(file.toString());
+          stat.link = file.toString();
         stat.time = file.lastModified();
         return stat;
       }

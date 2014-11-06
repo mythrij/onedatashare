@@ -74,9 +74,9 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
         };
       }
 
-      // A sort of hacky way of dealing with statting directories.
-      private Bell<Stat> filterStat(final Stat stat) {
-        if (list || stat.dir) {
+      // Fix for FTP oddities regarding statting directories.
+      private Bell<Stat> fixDirectoryAmbiguity(final Stat stat) {
+        if (list && stat.dir) {
           return new Bell<Stat>(stat);
         } if (stat.files != null && stat.files.length != 1) {
           stat.dir = true;
@@ -96,6 +96,23 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
         };
       }
 
+      // Fix for FTP servers that incorrectly report size for links.
+      private Bell<Stat> fixLinkSize(final Stat stat) {
+        if (stat.link == null || stat.dir ||
+            stat.link.length() != stat.size)
+          return new Bell<Stat>(stat);
+        return channel.new Command("SIZE", makePath()).expectComplete().
+          new As<Stat>() {
+            public Stat convert(FTPChannel.Reply r) {
+              stat.size = Integer.parseInt(r.message());
+              return stat;
+            } public Stat convert(Throwable t) {
+              stat.size = -1;
+              return stat;
+            }
+          };
+      }
+
       // Unfortunately FTP has no reliable method for checking if something is
       // a directory without altering the state of the channel...
       private Bell<Boolean> checkIfDirectory() {
@@ -110,6 +127,19 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
         return bell.as(true, false);
       }
 
+      // Fixes some problems with listing output encountered in the wild.
+      private Bell<Stat> fixStat(final Bell<Stat> stat) {
+        return stat.new AsBell<Stat>() {
+          public Bell<Stat> convert(Stat stat) {
+            return fixDirectoryAmbiguity(stat);
+          }
+        }.new AsBell<Stat>() {
+          public Bell<Stat> convert(Stat stat) {
+            return fixLinkSize(stat);
+          }
+        };
+      }
+
       // This will get called once we've found a command that is supported.
       // However, if this fails, fall back to the next command.
       private void sendCommand(final FTPListCommand cmd) {
@@ -122,7 +152,7 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
         final FTPListParser parser = new FTPListParser(base, hint) {
           // The parser should ring this bell if it's successful.
           public void done(Stat stat) {
-            filterStat(stat).promise(tb);
+            fixStat(Bell.wrap(stat)).promise(tb);
           } public void fail() {
             // TODO: Check for permanent errors.
             tryCommand(cmd.next());

@@ -250,7 +250,7 @@ public class HTTPMessageHandler extends ChannelHandlerAdapter {
     }
     stat.dir = false;
     stat.file = true;
-    stat.link = tap.getPath();
+    stat.link = tap.getPath().toString();
     stat.size = (length == null) ? -1l : Long.valueOf(length);
     stat.time = (time == null) ? -1l : time.getTime();
     

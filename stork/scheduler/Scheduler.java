@@ -20,6 +20,9 @@ public abstract class Scheduler implements Set<Job> {
   // All jobs known by the system, indexed by UUID.
   private transient HashMap<UUID,Job> jobs = new HashMap<UUID,Job>();
 
+  // Jobs added before start() has been called.
+  private transient List<Job> pending = new LinkedList<Job>();
+
   /**
    * Schedule {@code job} to be executed. The scheduler implementation need
    * only find a time to schedule the job based on whatever scheduling policy
@@ -37,7 +40,7 @@ public abstract class Scheduler implements Set<Job> {
    * Add a job and schedule it if necessary. This will always either return
    * {@code true} or throw a {@code RuntimeException}.
    */
-  public final boolean add(Job job) {
+  public final synchronized boolean add(Job job) {
     if (contains(job))
       throw new RuntimeException("Job is already scheduled.");
 
@@ -45,14 +48,33 @@ public abstract class Scheduler implements Set<Job> {
 
     job.scheduler = this;
 
+    // If we're still waiting for start() to be called, add it to the pending
+    // list.
+    if (pending != null)
+      pending.add(job);
+    else
+      doSchedule(job);
+
+    return true;
+  }
+
+  private void doSchedule(Job job) {
     if (job.canBeScheduled()) try {
       job.status(JobStatus.scheduled);
       schedule(job);
     } catch (RuntimeException e) {
       job.status(JobStatus.failed, e.getMessage());
     }
+  }
 
-    return true;
+  /**
+   * Call this to indicate that the server state has been finalized and jobs
+   * may begin being scheduled.
+   */
+  public final synchronized void start() {
+    for (Job job : pending)
+      doSchedule(job);
+    pending = null;
   }
 
   public final boolean addAll(Collection<? extends Job> jobs) {

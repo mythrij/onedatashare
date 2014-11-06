@@ -97,6 +97,8 @@ public abstract class Request extends Bell<Object> implements Runnable {
   }
 
   public void assertLoggedIn() {
+    if (!server.config.registration)
+      return;
     if (user() == null || user().isAnonymous())
       throw new RuntimeException("Permission denied.");
   }

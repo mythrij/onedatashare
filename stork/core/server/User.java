@@ -120,6 +120,8 @@ public abstract class User {
 
   /** Normalize an email string for comparison. */
   public static String normalizeEmail(String email) {
+    if (email == null)
+      return null;
     String[] parts = email.split("@");
     if (parts.length != 2)
       throw new RuntimeException("Invalid email address.");
@@ -145,7 +147,7 @@ public abstract class User {
       UUID uuid = jobs.get(id);
       return server().findJob(uuid);
     } catch (Exception e) {
-      throw new RuntimeException("No job with that ID.");
+      throw new RuntimeException("No job with that ID.", e);
     }
   }
 
@@ -153,9 +155,11 @@ public abstract class User {
   public synchronized List<Job> jobs() {
     // FIXME: Inefficient...
     List<Job> list = new LinkedList<Job>();
-    for (int i = 0; i < jobs.size(); i++)
+    for (int i = 0; i < jobs.size(); i++) try {
       list.add(getJob(i));
-    return list;
+    } catch (Exception e) {
+      // This handles invalid UUIDs in the jobs list.
+    } return list;
   }
 
   /** Generate a random salt using a secure random number generator. */

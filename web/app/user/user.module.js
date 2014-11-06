@@ -29,12 +29,6 @@ angular.module('stork.user', [
     if (!$rootScope.$user)
       $location.path(redirectTo||'/');
   };
-  this.history = function (uri) {
-    return (uri || !$rootScope.$user.history) ?
-      stork.history(uri).then(function (h) {
-        return $rootScope.$user.history = h;
-      }) : $rootScope.$user.history;
-  };
 
   // If there's a cookie, attempt to log in.
   var u = {
@@ -48,8 +42,35 @@ angular.module('stork.user', [
     this.forgetLogin();
 })
 
-.controller('UserCtrl', function ($scope, stork, user) {
-  $scope.login = function (info) {
-    return user.login(info);
+.controller('User', function ($scope, $modal, $location, user) {
+  /* If info is given, log the user in. Otherwise show modal. */
+  $scope.login = function (info, then) {
+    if (!info)
+      return $modal({
+        title: 'Log in',
+        container: 'body',
+        contentTemplate: '/app/user/login.html'
+      });
+    return user.login(info).then(function (v) {
+      if (then)
+        then(v);
+      $modal({
+        title: "Welcome!",
+        content: "You have successfully logged in.",
+        show: true
+      });
+    }, function (error) {
+      $scope.error = error;
+    });
+  };
+
+  /* Log the user out. */
+  $scope.logout = function () {
+    user.forgetLogin();
+    $location.path('/');
+    $modal({
+      content: "You have successfully logged out.",
+      show: true
+    });
   };
 });

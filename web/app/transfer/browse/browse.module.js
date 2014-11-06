@@ -1,223 +1,225 @@
-// stork.list.js
-// -------------
-var $stork = $stork || {};
+'use strict';
 
-// Cast on anything to replace its contents with a file tree.
-$stork.list = function (e, o) {
-  // Sanitize options.
-  if (!o)       o = {}
-  if (!o.root)  o.root  = { }
-  if (!o.url)   o.url   = '/api/stork/ls'
-  if (!o.cache) o.cache = { }
+/** Module for browsing transfer endpoints. */
+angular.module('stork.transfer.browse', [
+  'mgcrea.ngStrap.typeahead'
+])
 
-  function ce(t, c) {
-    return $(document.createElement(t)).addClass(c)
-  }
-  
-  $(this).each(function() {
-    // Get the listing for a tree entry and cache the results.
-    // Return the XHR object.
-    function fetchListing(path, d) {
-      var ad = $.extend({}, o.root)
-      ad.uri = ad.uri+path
+.config(function ($typeaheadProvider) {
+  angular.extend($typeaheadProvider.defaults, {
+    animation: false,
+    minLength: 1,
+    limit: 10,
+    position: 'bottom'
+  });
+})
 
-      if (d) ad.depth = d
+.service('history', function (stork) {
+  var history = [];
+  var listeners = [];
 
-      return $.ajax(o.url, {
-        data: ad
-      }).done(function (data) {
-        convertAjaxResults(data)
-        cachedList(path, data)
-      }).fail(function (data) {
-        console.log('failed: '+JSON.stringify(data))
-      })
-    }
+  this.history = history;
 
-    // Call this when a user expands a list entry.
-    function expandList(e) {
-      // Get the path associated with this element.
-      var path = $(e).attr('rel')
-      if (!path)
-        return $(e).addClass('inaccessible')
+  this.fetch = function (uri) {
+    stork.history(uri).then(function (h) {
+      history = h;
+      for (var i = 0; i < listeners.length; i++)
+        listeners[i](history);
+    });
+  };
 
-      // Check if we can render the listing from cached data.
-      var cl = cachedList(e.attr('rel'))
-      if (cl)
-        renderList(e, cl)
+  this.fetch();
 
-      // If we're already fetching, don't bother fetching again.
-      if ($(e).hasClass('wait'))
-        return
-      $(e).addClass('open')
+  /** Add a callback for when history changes. */
+  this.listen = function (f) {
+    if (!angular.isFunction(f))
+      return;
+    listeners.push(f);
+    f(history);
+  };
+})
 
-      if (!cl)
-        $(e).addClass('wait')
+.controller('History', function (history) {
+  var me = this;
+  this.list = [];
+  history.listen(function (history) {
+    me.list = history;
+  });
+})
 
-      // Fetch the listing for this entry and update if needed.
-      return fetchListing(path).done(function (data) {
-        // Re-render the listing. TODO: Detect updates.
-        renderList(e, data)
-        // If there are subdirs, prefetch. Assume dirs come first.
-        if (data['files'])
-          fetchListing(path, 1)
-        $(e).removeClass('inaccessible')
-      }).fail(function () {
-        $(e).addClass('inaccessible')
-        $(e).removeClass('open')
-      }).always(function () {
-        $(e).removeClass('wait')
-      })
-    }
+.controller('Browse', function ($scope, stork, $q, $modal, user, history) {
+  // Reset (or initialize) the browse pane.
+  $scope.reset = function () {
+    $scope.uri = {};
+    $scope.state = {};
+    delete $scope.root;
+  };
 
-    // Check if a file/directory name should be ignored.
-    function ignored(n) {
-      return !n || n == '.' || n == '..'
-    }
+  $scope.reset();
 
-    // Convert results into a proper tree.
-    function convertAjaxResults(data) {
-      var f = data['files']
-      var fn = f ? { } : undefined
+  // Set the endpoint URI.
+  $scope.go = function (uri) {
+    if (!uri)
+      return $scope.reset();
+    if (typeof uri === 'string')
+      uri = new URI(uri).normalize();
+    else
+      uri = uri.clone().normalize();
+    $scope.uri.parsed = uri;
+    $scope.uri.text = uri.readable();
+    $scope.uri.state.changed = false;
+    $scope.end.uri = uri.toString();
 
-      delete data['name']
-      delete data['files']
+    delete $scope.root;
 
-      if (f) for (var i = 0; i < f.length; i++) {
-        var n = f[i]['name']
-        if (ignored(n)) continue
-        fn[n] = convertAjaxResults(f[i])
+    history.fetch(uri.toString());
+
+    $scope.fetch(uri).then(function (list) {
+      $scope.root = list;
+      $scope.root.name = uri.readable();
+      $scope.open = true;
+      $scope.unselectAll();
+    });
+  };
+
+  /* Reload the existing listing. */
+  $scope.refresh = function () {
+    $scope.go($scope.uri.parsed);
+  };
+
+  /* Fetch and cache the listing for the given URI. */
+  $scope.fetch = function (uri) {
+    var scope = this;
+    scope.loading = true;
+
+    var ep = angular.copy($scope.end);
+    ep.uri = uri.href();
+
+    return stork.ls(ep, 1).then(
+      function (d) {
+        if (scope.root)
+          d.name = scope.root.name || d.name;
+        return scope.root = d;
+      }, function (e) {
+        return $q.reject(scope.error = e);
       }
+    ).finally(function () {
+      scope.loading = false;
+    });
+  };
 
-      if (fn)
-        data['files'] = fn
+  // Get the path URI of this item.
+  $scope.path = function () {
+    if ($scope.root === this.root)
+      return $scope.uri.parsed.clone();
+    return this.parent().path().segmentCoded(this.root.name);
+  };
 
-      return data
-    }
+  // Open the mkdir dialog.
+  $scope.mkdir = function () {
+    $modal({
+      title: 'Create Directory',
+      contentTemplate: 'new-folder.html'
+    }).$scope = $scope;
 
-    // Get/set the cached listing.
-    function cachedList(path, data) {
-      path = path.replace(/^\s*\/*|\/*\s*$/g,'').split(/\/+/)
-      var t = o.cache
+    result.then(function (pn) {
+      var u = new URI(pn[0]).segment(pn[1]);
+      return stork.mkdir(u.href()).then(
+        function (m) {
+          $scope.refresh();
+        }, function (e) {
+          alert('Could not create folder.');
+        }
+      );
+    });
+  };
 
-      if (!path[0])
-        return data ? (o.cache = data) : o.cache
-      while (path.length > 1)
-        if (!(t = t['files'][path.shift()])) return
-      if (data)
-        return t['files'][path.shift()] = data
-      else
-        return t['files'][path.shift()]
-    }
-
-    // Check if a cached listing needs to be re-rendered. Super gross.
-    function hasChanged(e, n) {
-      var o = $(e).data('list')
-
-      if (!e || !n || !o)
-        return true
-
-      var od = o['dirs']
-      var of = o['files']
-      var nd = n['dirs']
-      var nf = n['files']
-      var sd = {}
-      var sf = {}
-
-      if (!od != !nd || !of != !nf)
-        return true
-      if (od && od.length != nd.length)
-        return true
-      if (of && of.length != nf.length)
-        return true
-      if (od) for (var i = 0; i < od.length; i++)
-        sd[od[i]['name']] = true
-      if (of) for (var i = 0; i < of.length; i++)
-        sf[of[i]['name']] = true
-      if (nd) for (var i = 0; i < nd.length; i++)
-        if (!sd.hasOwnProperty(nd[i]['name']))
-          return true
-        else delete sd[nd[i]['name']]
-      if (nf) for (var i = 0; i < nf.length; i++)
-        if (!sf.hasOwnProperty(nf[i]['name']))
-          return true
-        else delete sf[nf[i]['name']]
-      for (var k in sd)
-        if (sd.hasOwnProperty(k)) return true
-      for (var k in sf)
-        if (sf.hasOwnProperty(k)) return true
-      return false
-    }
-
-    // Generate the DOM for a listing. Pass a selector for the entry
-    // element as e. Adds a ul inside of it.
-    function renderList(e, data) {
-      var f = data['files']
-      var u = ce('ul', 'stork-list')
-      var t = $(e).attr('rel')
-
-      // Get selected item first, if there is one.
-      var sr = $('.selected', e).attr('rel')
-
-      if (f) for (var k in f) {
-        if (f[k]['dir'])
-          u.append(createItem('dir', k, t+k+'/', f[k]))
-        else
-          u.append(createItem('file', k, t+k, f[k]))
+  // Delete the selected files.
+  $scope.rm = function (uris) {
+    _.each(uris, function (u) {
+      if (confirm("Delete "+u+"?")) {
+        return stork.delete(u).then(
+          function () {
+            $scope.refresh();
+          }, function (e) {
+            alert('Could not delete file: '+e);
+          }
+        );
       }
+    });
+  };
 
-      $('ul', e).remove()
-      $(e).append(u)
+  // Download the selected file.
+  $scope.download = function (uris) {
+    console.log(uris);
+    if (uris == undefined || uris.length == 0)
+      alert('You must select a file.')
+    else if (uris.length > 1)
+      alert('You can only download one file at a time.');
+    else
+      stork.get(uris[0]);
+  };
 
-      // Reselect element if there was one.
-      if (sr) $('li[rel="'+sr+'"]', e).addClass('selected')
+  // Return the scope corresponding to the parent directory.
+  $scope.parent = function () {
+    if (this !== $scope) {
+      if (this.$parent.root !== this.root)
+        return this.$parent;
+      return this.$parent.parent();
     }
+  };
 
-    // Create the DOM element for a list item.
-    function createItem(c, n, t, o) {
-      var e = ce('li', c).attr('rel', t).append(ce('i'))
-      e.append(ce('div').text(n))
-      if (o && o['error']) e.addClass('inaccessible')
-      if (n.charAt(0) == '.') e.addClass('dot')
-      return e
+  $scope.up_dir = function () {
+    var u = $scope.uri.parsed;
+    if (!u) return;
+    u = u.clone().filename('../').normalize();
+    $scope.go(u);
+  };
+
+  $scope.toggle = function () {
+    var scope = this;
+    var root = scope.root;
+    if (root && root.dir && (scope.open = !scope.open) && !root.files) {
+      scope.fetch(scope.path());
     }
+  };
 
-    // Toggle a directory, or force it open or closed.
-    var toggle = function(oc) {
-      // This prevents double-clicking from selecting text.
-      if (document.selection)
-        document.selection.empty();
-      else
-        window.getSelection().removeAllRanges();
+  $scope.select = function (e) {
+    var scope = this;
+    var u = this.path();
 
-      var e = $(this).parent()
-      if (oc != 'close' && !e.hasClass('open')) {
-        expandList(e)
-      } else if (oc != 'open' && e.hasClass('open')) {
-        e.removeClass('open')
-        e.removeClass('wait')
-        $('ul', e).remove()
-      }
+    // Unselect text.
+    if (document.selection && document.selection.empty)
+      document.selection.empty();
+    else if (window.getSelection)
+      window.getSelection().removeAllRanges();
+
+    if (!this.selected) {
+      if (!e.ctrlKey)
+        $scope.unselectAll();
+      $scope.end.$selected[u] = new function () {
+        this.unselect = function () {
+          delete scope.selected;
+        };
+      };
+      this.selected = true;
+    } else {
+      if (!e.ctrlKey)
+        $scope.unselectAll();
+      delete $scope.end.$selected[u];
+      delete this.selected;
     }
+  };
 
-    // Sanitize root.
-    if (typeof o.root.uri === 'string')
-      o.root.uri = o.root.uri.replace(/\/+$/g, '')
+  $scope.unselectAll = function () {
+    var s = $scope.end.$selected;
+    if (s) _.each(s, function (f) {
+      f.unselect();
+    })
+    $scope.end.$selected = { };
+  };
 
-    // Add delegated bindings.
-    $(e).off('click dblclick mousedown')
-    $(e).on('click', 'li.dir > i', toggle)
-        .on('dblclick', 'li.dir > div', toggle)
-        .on('mousedown', 'li > div', function () {
-          $(this).closest('.root').parent()
-            .find('.selected').removeClass('selected')
-          $(this).parent().addClass('selected')
-        })
-
-    // Get root of tree with the root URI. Return fetch promise.
-    $(e).empty()
-    var d = createItem('dir root', o.root.uri).attr('rel', '/')
-    $(e).append(ce('ul', 'stork-list').append(d))
-
-    return expandList(d)
-  })
-}
+  $scope.selectedUris = function () {
+    return _.keys($scope.end.$selected);
+  };
+});

@@ -153,18 +153,14 @@ public class Pipe {
    * some reason known immediately. The default implementation will never
    * throw.
    */
-  protected Bell drain(Slice slice) throws Exception {
+  protected synchronized Bell drain(Slice slice) throws Exception {
     if (!finished) try {
       Bell bell = downstream().drain(slice);
       if (bell == null)
         bell = Bell.rungBell();
-      synchronized (this) {
-        return lastDrain = bell;
-      }
+      return lastDrain = bell;
     } catch (Exception e) {
-      synchronized (this) {
-        return lastDrain = new Bell(e);
-      }
+      return lastDrain = new Bell(e);
     } throw new RuntimeException("The pipeline is finished.");
   }
 
@@ -184,13 +180,9 @@ public class Pipe {
       Bell bell = downstream().drain(error);
       if (bell == null)
         bell = Bell.rungBell();
-      synchronized (this) {
-        return lastDrain = bell;
-      }
+      return lastDrain = bell;
     } catch (Exception e) {
-      synchronized (this) {
-        return lastDrain = new Bell(e);
-      }
+      return lastDrain = new Bell(e);
     } throw new RuntimeException("The pipeline is finished.");
   }
 

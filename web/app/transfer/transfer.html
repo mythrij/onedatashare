@@ -9,34 +9,20 @@
     <div id="stork-ls" class="panel-collapse text-center" bs-collapse-target>
       <div class="panel-body">
         <!-- Left and right browsing widgets -->
-        <div class="col-xs-6" ng-controller="BrowseCtrl" ng-init="end = left"
+        <div class="col-xs-6" ng-controller="Browse" ng-init="end = left"
              ng-include="'/app/transfer/browse/browse.html'"></div>
-        <div class="col-xs-6" ng-controller="BrowseCtrl" ng-init="end = right"
+        <div class="col-xs-6" ng-controller="Browse" ng-init="end = right"
              ng-include="'/app/transfer/browse/browse.html'"></div>
 
         <div class="clearfix"></div>
 
-        <div class="input-group-lg text-center panel panel-heading transfer-controls">
-          <div class="visible-xs"></div>
-          <button class="btn btn-lg btn-default" title="Transfer contents"
-                  ng-disabled="!canTransfer(left, right, true)" ng-click="transfer(left, right, true)">
-            <i class="fa fa-share"></i>
-          </button>
-          <button class="btn btn-lg btn-default" title="Transfer"
+        <div class="large input-group-lg text-center panel panel-heading transfer-controls">
+          <button class="fa fa-arrow-left btn btn-lg btn-default" title="Transfer"
                   ng-disabled="!canTransfer(left, right, false)" ng-click="transfer(left, right, false)">
-            <i class="fa fa-share-alt"></i>
-          </button>
-          <button class="btn btn-lg btn-default ph" title="Synchronize"
+          </button><button class="fa fa-refresh btn btn-lg btn-default ph" title="Synchronize"
                   ng-disabled="!canSync(left, right)" ng-click="sync(left, right)">
-            <i class="fa fa-refresh"></i>
-          </button>
-          <button class="btn btn-lg btn-default" title="Transfer"
+          </button><button class="btn fa fa-arrow-right btn-lg btn-default" title="Transfer"
                   ng-disabled="!canTransfer(right, left, false)" ng-click="transfer(right, left, false)">
-            <i class="fa fa-share-alt fa fa-rotate-180"></i>
-          </button>
-          <button class="btn btn-lg btn-default" title="Transfer contents"
-                  ng-disabled="!canTransfer(right, left, true)" ng-click="transfer(right, left, true)">
-            <i class="fa fa-share fa fa-rotate-180"></i>
           </button>
         </div>
 
@@ -113,7 +99,7 @@
     <div class="modal-body">
       <div class="form-group col-md-12">
         <label>MyProxy server</label>
-        <input type="text" class="form-control" ng-model="nc.myproxy_host" placeholder="e.g., myproxy.teragrid.org" required>
+        <input type="text" class="form-control" ng-model="nc.myproxy_host" placeholder="e.g., myproxy.example.com" required>
       </div>
 
       <div class="form-group col-md-6">
@@ -138,25 +124,22 @@
 </script>
 
 <!-- Transfer/sync confirmation modal -->
-<script type="text/ng-template" id="xfer-modal.html">
-  <div class="modal-header">
-    <button type="button" class="close" ng-click="$dismiss()" aria-hidden="true">
-      &times;
-    </button>
-    <h3>Confirm Transfer</h3>
-  </div>
-  <div class="modal-body text-center">
-    This will perform a transfer from
-    <div class="large">{{job.src.uri}}</div>
-    to
-    <div class="large">{{job.dest.uri}}</div>
-    <div class="text-left col-xs-12" ng-if="debugMode">
-      <h4>Raw Job Info</h4>
-      <pre>{{job|json}}</pre>
+<script type="text/ng-template" id="transfer-modal.html">
+  <form ng-submit="submit(job, $hide)">
+    <div class="text-center">
+      This will perform a transfer from
+      <div class="large" bindonce bo-bind="job.src.uri"></div>
+      to
+      <div class="large" bindonce bo-bind="job.dest.uri"></div>
+      <div class="text-left col-xs-12" ng-if="debugMode">
+        <h4>Raw Job Info</h4>
+        <pre>{{job|json}}</pre>
+      </div>
     </div>
-  </div>
-  <div class="modal-footer">
-    <button class="btn btn-warning" ng-click="$dismiss()">Cancel</button>
-    <button class="btn btn-primary" ng-click="$close(job)">Submit</button>
-  </div>
+    <div class="modal-footer text-center">
+      <button class="btn btn-warning" ng-click="$hide()">Cancel</button>
+      <button class="btn btn-primary" ng-click="$close(job)">Submit</button>
+    </div>
+    <div cg-busy="promise"></div>
+  </form>
 </script>

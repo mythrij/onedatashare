@@ -65,12 +65,13 @@ input.uri-input {
   padding-left: 0;
 	margin: 0;
 } .stork-list ul {
-	padding-left: 1.2em;
+	padding-left: 1.4em;
 }
 
 .stork-list li {
 	list-style: none;
 	white-space: nowrap;
+	position: relative;
 }
 
 .stork-list div, .stork-list i {
@@ -91,7 +92,6 @@ input.uri-input {
   float: left;
   display: inline-block;
   width: 1.2em;
-  text-align: center;
 }
 
 .hide-dots .stork-list .dot {
@@ -106,14 +106,25 @@ input.uri-input {
   background: lightblue;
 }
 
-.stork-list .fa-folder, .stork-list .fa-file {
+.stork-list .fa {
   font-size: 1.2em;
-  width: 1em;
   display: inline-block;
-  margin-right: 0.2em;
+}
+
+.stork-list .fa-spin {
+	position: absolute;
+	right: 1em;
+}
+
+.stork-list .toggle {
 }
 
 /* Don't show [+] toggle on files. */
 .stork-list .file > i {
   visibility: hidden;
+}
+
+/* Dropdown endpoint list. */
+.uri .dropdown-menu {
+	width: 100%;
 }

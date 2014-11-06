@@ -26,6 +26,15 @@ public class Main extends Command {
         return URI.create(uri);
       }
     };
+
+    // Register a handler to marshal UUIDs.
+    new Ad.Marshaller<UUID>(UUID.class) {
+      public String marshal(UUID uuid) {
+        return uuid.toString();
+      } public UUID unmarshal(String uuid) {
+        return UUID.fromString(uuid);
+      }
+    };
   }
 
   /** Try to get the version and build time from the build tag. */

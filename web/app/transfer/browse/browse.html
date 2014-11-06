@@ -1,27 +1,30 @@
 <div class="file-list panel panel-default">
   <!-- Top of the widget where user enters a URI. -->
   <div class="panel-heading">
-    <form class="uri" ng-submit="refresh(temp_uri)">
-      <div ng-class="uri_state" class="text-left input-group-lg"
-           ng-init="uri_state.changed = true" dropdown is-open="showHistory">
-        <input class="uri-input form-control" type="text" ng-change="uri_state.changed = true"
-               ng-model="temp_uri" placeholder="Enter a URL" bs-typeahead
-               ng-options="h for h in [$viewValue].concat([]) | filter:$viewValue">
+    <form class="uri" ng-submit="go(uri.text)">
+      <div ng-controller="History as history" class="text-left input-group-lg"
+           ng-class="uri.state" ng-init="uri.state.changed = true">
+        <input class="uri-input form-control" type="text" ng-change="uri.state.changed = true"
+               ng-model="uri.text" placeholder="Enter a URL">
+
+        <!-- History dropdown menu. -->
+        <div class="dropdown" ng-class="{open:history.show}">
+          <ul tabindex="-1" ng-if="(history.list | filter:uri.text).length"
+              class="dropdown-menu">
+            <li ng-repeat="h in history.list | filter:uri.text">
+              <a ng-click="history.show = false; go(h)" ng-bind="h"></a>
+            </li>
+          </ul>
+        </div>
 
         <!-- Buttons on the right of the URI input. -->
         <span class="buttons">
           <button type="submit" class="large fa fa-arrow-right go" title="Go"></button>
           <button type="submit" class="large fa fa-repeat reload" title="Reload"></button>
-          <button type="button" class="large fa fa-chevron-down dropdown-toggle" title="History"
-                  ng-class="showHistory && 'active'" ng-click="showHistory = !showHistory"></button>
+          <button type="button" class="large fa fa-chevron-down history"
+                  ng-class="history.show && 'active'"
+                  ng-click="history.show = !history.show"></button>
         </span>
-
-        <!-- Dropdown history menu. -->
-        <ul class="dropdown-menu" role="menu">
-          <li>
-            <a href>item</a>
-          </li>
-        </ul>
       </div>
     </form>
   </div>
@@ -63,49 +66,53 @@
 
   <!-- Where files are displayed and can be browsed. -->
   <div class="tree" ng-class="{'hide-dots': !showHidden}">
-    <script type="text/ng-template" id="browse-node.html">
-      <li ng-repeat="root in files | orderBy:['-dir','name']"
-          ng-class="{ dir: root.dir, file: !root.dir, loading: loading, open: open,
-                      dot: root.name && root.name.charAt(0) == '.' }">
-        <i class="fa text-muted" ng-mousedown="root.dir && toggle()"
-           ng-class="'fa-' + (open && 'minus' || 'plus') + '-square-o'"></i>
-        <div ng-class="{'alert-info': selected, 'alert-warning': !!error}" ng-dblclick="toggle()"
-             ng-mousedown="select($event)">
-          <i class="fa" ng-class="root.dir && 'fa-folder' || 'fa-file'"></i>
-          {{root.name}}
-          <span class="small text-muted" ng-if="!root.dir">{{root.size | size}}B</span>
-          <span ng-class="loading && 'in'" class="fade fa fa-refresh fa-spin text-muted"></span>
-          <div class="small text-muted" style="padding-left:1em">
-            <span ng-if="root.time">{{root.time*1000 | date:'medium'}}</span>
-            {{root.perm}}
-          </div>
-        </div>
-        <ul ng-if="root.files" ng-init="files = root.files; selected = false; open = false"
-            class="stork-list" ng-include="'browse-node.html'">
-        </ul>
-        <ul ng-if="error" class="alert-danger" style="overflow-x: auto">
-          <li>
-            <strong>Error:</strong> {{error}}
-          </li>
-        </ul>
-      </li>
-      <li ng-if="!files.length">
-        <em ng-show="loading" class="text-muted">Loading...</em>
-        <em ng-hide="loading" class="text-muted">(empty)</em>
-      </li>
-    </script>
     <div>
       <ul class="stork-list" ng-if="root && !error" ng-init="files = [root]"
           ng-include="'browse-node.html'">
       </ul>
       <ul class="stork-list" ng-if="error" class="alert-danger" style="overflow-x: auto">
         <li>
-          <strong>Error:</strong> {{error}}
+          <strong>Error:</strong> <span ng-bind="error"></span>
         </li>
       </ul>
     </div>
   </div>
 </div>
+
+<!-- A node in the file browser tree. -->
+<script type="text/ng-template" id="browse-node.html">
+  <li bindonce="root" ng-repeat="root in files | orderBy:['-dir','name']"
+      bo-class="{ dir: root.dir, file: !root.dir, loading: loading,
+                  dot: root.name && root.name.charAt(0) == '.' }"
+      ng-class="{open:open}">
+    <i class="fa text-muted toggle" ng-mousedown="root.dir && toggle()"
+       ng-class="{'fa-minus-square-o': open, 'fa-plus-square-o': !open}"></i>
+    <div ng-class="{'alert-info': selected, 'alert-warning': !!error}"
+         ng-dblclick="toggle()" ng-mousedown="select($event)">
+      <i class="fa" bo-class="{'fa-file': !root.dir}" ng-class="{'fa-folder': (root.dir && !open), 'fa-folder-open': (root.dir && open)}"></i>
+      <span bo-bind="root.name"></span>
+      <span class="small text-muted" bo-if="!root.dir"
+            bo-bind="(root.size | size)+'B'"></span>
+      <span class="fade fa fa-refresh text-muted" ng-class="loading && 'in fa-spin'"></span>
+      <div class="small text-muted" style="padding-left:1em">
+        <span bo-if="root.time" bo-bind="root.time*1000 | date:'medium'"></span>
+        <span bo-bind="root.perm"></span>
+      </div>
+    </div>
+    <ul ng-if="root.files" ng-init="files = root.files; selected = false; open = false"
+        class="stork-list" ng-include="'browse-node.html'">
+    </ul>
+    <ul ng-if="error" class="alert-danger" style="overflow-x: auto">
+      <li>
+        <strong>Error:</strong> <span ng-bind="error"></span>
+      </li>
+    </ul>
+  </li>
+  <li ng-if="!files.length">
+    <em ng-show="loading" class="text-muted">Loading...</em>
+    <em ng-hide="loading" class="text-muted">(empty)</em>
+  </li>
+</script>
 
 <!-- Modal dialog to create a new folder. -->
 <script type="text/ng-template" id="new-folder.html">

@@ -111,11 +111,11 @@ angular.module('stork.util', [
 })
 
 /** Automatically make anything with a title use tooltips. */
-.directive('title', function ($tooltip) {
+.directive('title', function ($tooltip, $interpolate) {
   return {
     restrict: 'A',
     link: function (scope, element, attrs) {
-      var title = element.attr('title');
+      var title = $interpolate(element.attr('title'))(scope);
       var tip = $tooltip(element, {title: title});
 
       element.on('mouseover', function () {
