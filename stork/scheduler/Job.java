@@ -8,6 +8,7 @@ import stork.core.*;
 import stork.core.server.*;
 import stork.core.handlers.*;
 import stork.feather.*;
+import stork.feather.util.*;
 import stork.util.*;
 
 import static stork.scheduler.JobStatus.*;

@@ -18,25 +18,25 @@ public class SMTPChannel {
   Bell bell;
   EventLoopGroup workerGroup = new NioEventLoopGroup();
   ChannelFuture channelFuture;
-  
-  SMTPChannel(final Bell bell){
+
+  SMTPChannel(final Bell bell) {
     Bootstrap b = new Bootstrap(); 
     b.group(workerGroup); 
     b.channel(NioSocketChannel.class); 
     b.option(ChannelOption.SO_KEEPALIVE, true); 
     b.handler(new ChannelInitializer<SocketChannel>() {
       public void initChannel(SocketChannel ch) throws Exception {
-        ch.pipeline().addLast(new LineBasedFrameDecoder(1000){
-            public void channelRead(ChannelHandlerContext ctx, Object msg){
-              String str = ((ByteBuf)msg).toString(CharsetUtil.UTF_8);
-              System.out.println("Got: "+str);
-              if (!replies.isEmpty())
-                replies.pop().ring(str);
-            }
-          });
+        ch.pipeline().addLast(new LineBasedFrameDecoder(1000) {
+          public void channelRead(ChannelHandlerContext ctx, Object msg) {
+            String str = ((ByteBuf)msg).toString(CharsetUtil.UTF_8);
+            System.out.println("Got: "+str);
+            if (!replies.isEmpty())
+              replies.pop().ring(str);
+          }
+        });
         bell.ring();
       }
-      public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause){
+      public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         bell.ring(cause);
       }
     });
@@ -45,29 +45,29 @@ public class SMTPChannel {
     this.bell = bell;
   }
 
-	public void enableBase64(){
+  public void enableBase64() {
     Bell last = replies.peekLast();
     if (last == null)
       last = Bell.rungBell();
     last.new Promise() {
       public void done() {
-				channelFuture.channel().pipeline().addLast("Base64Encoder", new Base64Encoder());
-			}
+        channelFuture.channel().pipeline().addLast("Base64Encoder", new Base64Encoder());
+      }
     };
-	}
+  }
 
-	public void disableBase64(){
+  public void disableBase64() {
     Bell last = replies.peekLast();
     if (last == null)
       last = Bell.rungBell();
     last.new Promise() {
       public void done() {
-				channelFuture.channel().pipeline().remove("Base64Encoder");
-			}
+        channelFuture.channel().pipeline().remove("Base64Encoder");
+      }
     };
-	}
+  }
 
-  public synchronized Bell<String> sendCommand(final String command){
+  public synchronized Bell<String> sendCommand(final String command) {
     Bell<String> bell = new Bell<String>();
     Bell last = replies.peekLast();
 
@@ -87,7 +87,7 @@ public class SMTPChannel {
     return bell;
   }
 
-  public synchronized Bell send(final String line){
+  public synchronized Bell send(final String line) {
     Bell last = replies.peekLast();
 
     if (last == null)
@@ -102,7 +102,7 @@ public class SMTPChannel {
     };
   }
 
-  public synchronized Bell send(final ByteBuf bytebuf){
+  public synchronized Bell send(final ByteBuf bytebuf) {
     Bell last = replies.peekLast();
 
     if (last == null)
@@ -114,8 +114,8 @@ public class SMTPChannel {
       }
     };
   }
-  
-  public Bell getBell(){
+
+  public Bell getBell() {
     return bell;
   }
 
