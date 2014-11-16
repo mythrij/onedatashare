@@ -10,14 +10,12 @@ import stork.feather.Tap;
 /**
  * Stores the requested full {@link Path}, and state information of the 
  * connection. It creates {@link HTTPTap} instances.
- * 
- * @see {@link Resource}
  */
 public class HTTPResource extends Resource<HTTPSession, HTTPResource> {
-  
+
   // Rung when the first resource response header is received
   private Bell<Stat> statBell = new Bell<Stat> ();
-  
+
   /**
    * Constructs a {@code resource} with HTTP connection request.
    * 
@@ -28,24 +26,40 @@ public class HTTPResource extends Resource<HTTPSession, HTTPResource> {
     super(session, path);
   }
 
-  @Override
   public HTTPTap tap() {
     return new HTTPTap();
   }
-  
-  @Override
-  public Bell<Stat> stat() {
-    return statBell;
+
+  public synchronized Bell<Stat> stat() {
+    return initialize().new AsBell<Stat>() {
+      public Bell<Stat> convert(HTTPResource r) {
+        if (statBell.isDone())
+          return statBell;
+
+        HTTPBuilder builder = session.builder;
+
+        // We need to make a HEAD request.
+        if (!builder.onCloseBell.isDone()) {
+          HTTPChannel ch = builder.getChannel();
+
+          ch.addChannelTask(new HTTPTap());  // FIXME hacky
+          ch.writeAndFlush(builder.prepareHead(path));
+        } else {
+          statBell.ring(new HTTPException("Http session " +
+                builder.getHost() + " has been closed."));
+        }
+
+        return statBell;
+      }
+    };
   }
-  
+
   /**
    * This can be considered as a specific download task for the
    * request from a {@link HTTPResource}.
-   *
-   * @see {@link Tap}
    */
   public class HTTPTap extends Tap<HTTPResource> {
-    
+
     protected Bell<Void> onStartBell, sinkReadyBell;
     private HTTPBuilder builder;
     private Path resourcePath;
@@ -59,51 +73,52 @@ public class HTTPResource extends Resource<HTTPSession, HTTPResource> {
       this.builder = HTTPResource.this.session.builder;
       onStartBell = new Bell<Void> ();
       setPath(path);
+      new Error().printStackTrace();
     }
-    
-    @Override 
-    public Bell<?> start(Bell bell) {
-      if (bell.isFailed()) {
-        return bell;
-      }
-      if (builder.onCloseBell.isDone()) {
-        return onStartBell.cancel();
-      }
-      sinkReadyBell = bell;
-      
-      synchronized (builder.getChannel()) {
-        if (!builder.onCloseBell.isDone()) {
-          HTTPChannel ch = builder.getChannel();
-          
-          if (builder.isKeepAlive()) {
-              ch.addChannelTask(this);
-              ch.writeAndFlush(
-                  builder.prepareGet(resourcePath));
-          } else {
-              builder.tryResetConnection(this);
+
+    public Bell<?> start(final Bell bell) {
+      return initialize().and(bell).new AsBell() {
+        public Bell convert(Object o) {
+          if (builder.onCloseBell.isDone()) {
+            return onStartBell.cancel();
           }
-        } else {
-          onStartBell.ring(new HTTPException("Http session " +
-              builder.getHost() + " has been closed."));
-        }
-      }
-      
-      sinkReadyBell.new Promise() {
-        public void fail(Throwable t) {
-          onStartBell.ring(t);
-          finish(t);
+          sinkReadyBell = bell;
+
+          synchronized (builder.getChannel()) {
+            if (!builder.onCloseBell.isDone()) {
+              HTTPChannel ch = builder.getChannel();
+
+              if (builder.isKeepAlive()) {
+                ch.addChannelTask(HTTPTap.this);
+                ch.writeAndFlush(
+                    builder.prepareGet(resourcePath));
+              } else {
+                builder.tryResetConnection(HTTPTap.this);
+              }
+            } else {
+              onStartBell.ring(new HTTPException("Http session " +
+                    builder.getHost() + " has been closed."));
+            }
+          }
+
+          sinkReadyBell.new Promise() {
+            public void fail(Throwable t) {
+              onStartBell.ring(t);
+              finish(t);
+            }
+          };
+
+          return onStartBell;
         }
       };
-
-      return onStartBell;
     }
-    
-    @Override
-    public Bell<?> drain(Slice slice) { return super.drain(slice); }
-    
-    @Override
-    public void finish() { super.finish(); } 
-    
+
+    public Bell<?> drain(Slice slice) {
+      return super.drain(slice);
+    }
+
+    public void finish() { super.finish(); }
+
     /** 
      * Tells whether this {@code HTTPTap} instance has acquired
      * state info.
@@ -111,12 +126,12 @@ public class HTTPResource extends Resource<HTTPSession, HTTPResource> {
     protected boolean hasStat() {
       return statBell.isDone();
     }
-    
+
     /** Sets state info and rings its {@code state Bell}. */
     protected void setStat(Stat stat) {
       statBell.ring(stat);
     }
-    
+
     /**
      * Reconfigures its {@code path}. 
      * 
@@ -125,7 +140,7 @@ public class HTTPResource extends Resource<HTTPSession, HTTPResource> {
     protected void setPath(Path path) {
       resourcePath = path;
     }
-    
+
     /*** Gets reconfigured {@code path}. */
     protected Path getPath() {
       return resourcePath;
