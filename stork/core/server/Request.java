@@ -18,6 +18,9 @@ public abstract class Request extends Bell<Object> implements Runnable {
   /** The command given with the request. */
   public String command;
 
+  /** The requested API version. Currently ignored. */
+  public String version;
+
   /** The handler which will handle this request. */
   public transient Handler handler;
 
