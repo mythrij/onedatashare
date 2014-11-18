@@ -115,7 +115,8 @@
   </div>
 
   <div class="clearfix panel-footer">
-    <div class="btn-group input-group col-xs-4 text-left">
+    <!-- Auto-refresh controls. -->
+    <div class="btn-group input-group col-xs-4 text-left pull-left">
       <button ng-click="refresh()" title="Refresh" class="btn btn-default" ng-disabled="auto">
         <i class="fa fa-repeat"></i>
       </button>
@@ -124,22 +125,41 @@
       </button>
     </div>
 
-    <div class="col-xs-4 text-center">
-      <ul pagination total-items="filteredJobs.length" items-per-page="perPage" page="page" max-size="4"
-          previous-text="&laquo;" next-text="&raquo;"></ul>
+    <!-- Pager controls. -->
+    <div class="col-xs-4 text-center pull-left">
+      <ul pagination total-items="filteredJobs.length" items-per-page="perPage"
+          page="page" max-size="4" previous-text="&laquo;" next-text="&raquo;"></ul>
+
+      <ul class="pagination">
+        <li><a href ng-click="page = (page-1)||1">&laquo;</a></li>
+        <li><a ng-bind="page"></a></li>
+        <li><a href ng-click="page = page+1">&raquo;</a></li>
+      </ul>
+    </div>
+
+    <!-- Hidden job hint. -->
+    <div ng-if="jobs" class="text-muted text-center pull-left"
+         ng-pluralize count="(jobs | keys).length - filteredJobs.length"
+         when="{'0':   'No jobs hidden by filter.',
+                one:   '{} job hidden by filter.',
+                other: '{} jobs hidden by filter.'}">
     </div>
       
-    <div class="btn-group dropup pull-right">
-      <label>
+    <!-- Filter menu. -->
+    <div ng-init="filterMenu = {show:false}" class="btn-group dropup pull-left">
+      <label ng-class="{open:filterMenu.show}">
         Filter:
-        <button class="btn btn-default dropdown-toggle" data-toggle="dropdown">
-          <span class="caret"></span> {{filter | inflector}}
+        <button class="btn btn-default dropdown-toggle"
+                ng-click="filterMenu.show = !filterMenu.show">
+          <span class="caret"></span>
+          <span ng-bind="filter | inflector"></span>
         </button>
         <ul class="dropdown-menu" role="menu">
-          <li ng-repeat="f in filterList" role="presentation" ng-class="{divider: !f}">
-            <a href ng-if="f" class="show" tabindex="-1" ng-click="set_filter(f)">
+          <li bindonce ng-repeat="f in filterList" role="presentation" ng-class="{divider: !f}">
+            <a href ng-if="f" class="show" tabindex="-1"
+               ng-click="set_filter(f); filterMenu.show = false">
               <i class="fa fa-ok" ng-class="{invisible: f != filter}"></i>
-              {{f | inflector}}
+              <span ng-bind="f | inflector"></span>
             </a>
           </li>
         </ul>
@@ -161,22 +181,4 @@
       <span ng-bind="progress(j.progress.files)"></span>
     </dd>
   </dl>
-</script>
-
-<script type="text/ng-template" id="template/pagination/pagination.html">
-  <ul class="pagination">
-    <li ng-class="{active: page.active}" ng-repeat="page in pages">
-      <a href ng-class="{disabled: page.disabled}" ng-click="selectPage(page.number)" ng-bind="page.text">
-      </a>
-    </li>
-  </ul>
-</script>
-
-<script type="text/ng-template" id="template/pagination/pagination.html">
-  <ul class="pagination">
-    <li ng-class="{active: page.active}" ng-repeat="page in pages">
-      <a href ng-class="{disabled: page.disabled}" ng-click="selectPage(page.number)" ng-bind="page.text">
-      </a>
-    </li>
-  </ul>
 </script>
