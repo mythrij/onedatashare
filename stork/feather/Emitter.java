@@ -113,6 +113,14 @@ public class Emitter<T> extends Bell {
     finalizeRemaining(null);
   }
 
+  /** Consume the contents of the emitter into a list. */
+  public Bell<List<T>> asList() {
+    final List<T> list = new LinkedList<T>();
+    return new ForEach() {
+      public void each(T t) { list.add(t); }
+    }.as(list);
+  }
+
   /** Create an emitter from an array. */
   public static <V> Emitter<V> from(final V[] v) {
     Emitter<V> emitter = new Emitter<V>();

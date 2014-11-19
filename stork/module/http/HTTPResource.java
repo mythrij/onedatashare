@@ -1,11 +1,8 @@
 package stork.module.http;
 
-import stork.feather.Bell;
-import stork.feather.Path;
-import stork.feather.Resource;
-import stork.feather.Slice;
-import stork.feather.Stat;
-import stork.feather.Tap;
+import java.util.*;
+
+import stork.feather.*;
 
 /**
  * Stores the requested full {@link Path}, and state information of the 
@@ -52,6 +49,10 @@ public class HTTPResource extends Resource<HTTPSession, HTTPResource> {
         return statBell;
       }
     };
+  }
+
+  public Emitter<String> list() {
+    return new HTMLParser(uri());
   }
 
   /**

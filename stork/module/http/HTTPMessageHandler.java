@@ -235,20 +235,22 @@ public class HTTPMessageHandler extends ChannelHandlerAdapter {
   // Gathers meta data information
   private Stat getStat(HttpResponse response) {
     Stat stat = new Stat(tap.getPath().toString());
-    String length = response.headers().
-      get(HttpHeaders.Names.CONTENT_LENGTH);
+    String length = response.headers().get("Content-Length");;
+    String type = response.headers().get("Content-Type");
     Date time = null;
+
+    System.out.println(type);
 
     try {
       time = HttpHeaders.getDate(response);
     } catch (ParseException e) {
       // This means date meta data is not available
     }
-    stat.dir = false;
-    stat.file = true;
+    stat.dir = (type != null && type.startsWith("text/html"));
+    stat.file = !stat.dir;
     stat.link = tap.getPath().toString();
     stat.size = (length == null) ? -1l : Long.valueOf(length);
-    stat.time = (time == null) ? -1l : time.getTime();
+    stat.time = (time == null) ? -1l : time.getTime()/1000;
 
     return stat;
   }
