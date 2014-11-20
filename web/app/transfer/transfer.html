@@ -82,47 +82,6 @@
   </div>
 </div>
 
-<!-- Create new credential modal -->
-<script type="text/ng-template" id="add-cred-modal.html">
-  <div class="modal-header">
-    <button type="button" class="close" ng-click="$dismiss()" aria-hidden="true">
-      &times;
-    </button>
-    <h4 class="modal-title">
-      Add a New Credential
-    </h4>
-    <div class="small text-muted">
-      Currently only MyProxy credentials are supported.
-    </div>
-  </div>
-  <form ng-init="nc = {type: 'gss-cert'}" ng-submit="$close(end.cred = nc)">
-    <div class="modal-body">
-      <div class="form-group col-md-12">
-        <label>MyProxy server</label>
-        <input type="text" class="form-control" ng-model="nc.myproxy_host" placeholder="e.g., myproxy.example.com" required>
-      </div>
-
-      <div class="form-group col-md-6">
-        <label>MyProxy username</label>
-        <input type="text" class="form-control" ng-model="nc.myproxy_user" required>
-      </div>
-
-      <div class="form-group col-md-6">
-        <label>MyProxy password</label>
-        <input type="password" class="form-control" ng-model="nc.myproxy_pass" required>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button type="button" class="btn btn-default" ng-click="$dismiss()">
-        Cancel
-      </button>
-      <button type="submit" class="pull-right btn btn-primary">
-        Add credential
-      </button>
-    </div>
-  </form>
-</script>
-
 <!-- Transfer/sync confirmation modal -->
 <script type="text/ng-template" id="transfer-modal.html">
   <form ng-submit="submit(job, $hide)">
@@ -143,3 +102,118 @@
     <div cg-busy="promise"></div>
   </form>
 </script>
+
+<!-- A node in the file browser tree. -->
+<script type="text/ng-template" id="browse-node.html">
+  <li bindonce="root" ng-repeat="root in files | orderBy:['-dir','name']"
+      bo-class="{ dir: root.dir, file: !root.dir, loading: loading,
+                  dot: root.name && root.name.charAt(0) == '.' }"
+      ng-class="{open:open}">
+    <i class="fa text-muted toggle" ng-mousedown="root.dir && toggle()"
+       ng-class="{'fa-minus-square-o': open, 'fa-plus-square-o': !open}"></i>
+    <div ng-class="{'alert-info': selected, 'alert-warning': !!error}"
+         ng-dblclick="toggle()" ng-mousedown="select($event)">
+      <i class="fa" bo-class="{'fa-file': !root.dir}" ng-class="{'fa-folder': (root.dir && !open), 'fa-folder-open': (root.dir && open)}"></i>
+      <span bo-bind="root.name"></span>
+      <span class="small text-muted" bo-if="!root.dir"
+            bo-bind="(root.size | size)+'B'"></span>
+      <span class="fade fa fa-refresh text-muted" ng-class="loading && 'in fa-spin'"></span>
+      <div class="small text-muted" style="padding-left:1em">
+        <span bo-if="root.time" bo-bind="root.time*1000 | date:'medium'"></span>
+        <span bo-bind="root.perm"></span>
+      </div>
+    </div>
+    <ul ng-if="root.files" ng-init="files = root.files; selected = false; open = false"
+        class="stork-list" ng-include="'browse-node.html'">
+    </ul>
+    <ul ng-if="error" class="alert-danger" style="overflow-x: auto">
+      <li>
+        <strong>Error:</strong> <span ng-bind="error"></span>
+      </li>
+    </ul>
+  </li>
+  <li ng-if="!files.length">
+    <em ng-show="loading" class="text-muted">Loading...</em>
+    <em ng-hide="loading" class="text-muted">(empty)</em>
+  </li>
+</script>
+
+<!-- Modal dialog to create a new folder. -->
+<script type="text/ng-template" id="new-folder.html">
+  <div class="modal-body">
+    <div class="form-group col-sm-push-3 col-sm-6">
+      <label>Name</label>
+      <input type="text" class="form-control" ng-model="name" focus-me required>
+    </div>
+  </div>
+  <div class="clearfix"></div>
+  <div class="text-center modal-footer">
+    <button type="submit" class="btn btn-primary">
+      OK
+    </button>
+    <button ng-click="$hide()" type="button" class="btn btn-default">
+      Cancel
+    </button>
+  </div>
+</script>
+
+<!-- Modal dialog to select a credential. -->
+<script type="text/ng-template" id="select-credential.html">
+  <form ng-init="new = { cred: (end.cred | copy) }"
+        ng-submit="end.cred = new.cred; $hide()">
+    <div class="form-group" ng-class="modal-body" ng-controller="CredCtrl">
+      <select ng-model="new.cred.type" class="form-control nullable">
+        <option value="">No credential</option>
+        <optgroup label="Saved credentials">
+          <option disabled ng-if="creds.length == 0">(none)</option>
+          <option value="{{c.uuid}}" ng-repeat="c in creds">
+            {{c.name || 'Unnamed ('+c.type+')'}}
+          </option>
+        </optgroup>
+        <optgroup class="new-credential" label="New credential">
+          <option value="gss">MyProxy</option>
+        </optgroup>
+      </select>
+
+      <div class="modal-body" ng-switch="new.cred.type">
+        <div ng-switch-when="gss">
+          <div ng-include="'new-myproxy-cred.html'"></div>
+        </div>
+        <div ng-switch-default>
+          <div ng-init="new.cred = undefined"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="clearfix"></div>
+
+    <div class="text-center modal-footer">
+      <button type="submit" class="btn btn-primary">
+        OK
+      </button>
+      <button ng-click="$hide()" type="button" class="btn btn-default">
+        Cancel
+      </button>
+    </div>
+  </form>
+</script>
+
+<!-- Create new credential MyProxy credential. -->
+<script type="text/ng-template" id="new-myproxy-cred.html">
+  <div class="form-group col-md-12">
+    <label>MyProxy server</label>
+    <input type="text" class="form-control" ng-model="new.cred.myproxy_host"
+           placeholder="e.g., myproxy.example.com" required>
+  </div>
+
+  <div class="form-group col-md-6">
+    <label>MyProxy username</label>
+    <input type="text" class="form-control" ng-model="new.cred.myproxy_user" required>
+  </div>
+
+  <div class="form-group col-md-6">
+    <label>MyProxy password</label>
+    <input type="password" class="form-control" ng-model="new.cred.myproxy_pass" required>
+  </div>
+</script>
+

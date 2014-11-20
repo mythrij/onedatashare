@@ -134,6 +134,15 @@ angular.module('stork.transfer.browse', [
     });
   };
 
+  /* Open cred modal. */
+  $scope.credModal = function () {
+    $modal({
+      title: 'Select Credential',
+      contentTemplate: 'select-credential.html',
+      scope: $scope
+    });
+  };
+
   // Delete the selected files.
   $scope.rm = function (uris) {
     _.each(uris, function (u) {
