@@ -81,7 +81,7 @@ angular.module('stork', [
     },
     cancel: function (id) {
       return this.$post('cancel', {
-        range: id
+        job_id: id
       });
     },
     q: function (filter, range) {
