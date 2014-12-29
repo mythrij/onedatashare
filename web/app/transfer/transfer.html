@@ -159,10 +159,10 @@
 
 <!-- Modal dialog to select a credential. -->
 <script type="text/ng-template" id="select-credential.html">
-  <form ng-init="new = { cred: (end.cred | copy) }"
-        ng-submit="end.cred = new.cred; $hide()">
+  <form ng-init="new = { credential: (end.credential | copy) }"
+        ng-submit="end.credential = new.credential; $hide()">
     <div class="form-group" ng-class="modal-body" ng-controller="CredCtrl">
-      <select ng-model="new.cred.type" class="form-control nullable">
+      <select ng-model="new.credential.type" class="form-control nullable">
         <option value="">No credential</option>
         <optgroup label="Saved credentials">
           <option disabled ng-if="creds.length == 0">(none)</option>
@@ -175,12 +175,12 @@
         </optgroup>
       </select>
 
-      <div class="modal-body" ng-switch="new.cred.type">
+      <div class="modal-body" ng-switch="new.credential.type">
         <div ng-switch-when="gss">
           <div ng-include="'new-myproxy-cred.html'"></div>
         </div>
         <div ng-switch-default>
-          <div ng-init="new.cred = undefined"></div>
+          <div ng-init="new.credential = undefined"></div>
         </div>
       </div>
     </div>
@@ -202,18 +202,18 @@
 <script type="text/ng-template" id="new-myproxy-cred.html">
   <div class="form-group col-md-12">
     <label>MyProxy server</label>
-    <input type="text" class="form-control" ng-model="new.cred.myproxy_host"
+    <input type="text" class="form-control" ng-model="new.credential.myproxy_host"
            placeholder="e.g., myproxy.example.com" required>
   </div>
 
   <div class="form-group col-md-6">
     <label>MyProxy username</label>
-    <input type="text" class="form-control" ng-model="new.cred.myproxy_user" required>
+    <input type="text" class="form-control" ng-model="new.credential.myproxy_user" required>
   </div>
 
   <div class="form-group col-md-6">
     <label>MyProxy password</label>
-    <input type="password" class="form-control" ng-model="new.cred.myproxy_pass" required>
+    <input type="password" class="form-control" ng-model="new.credential.myproxy_pass" required>
   </div>
 </script>
 

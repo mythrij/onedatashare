@@ -2,6 +2,8 @@ package stork.module.ftp;
 
 import io.netty.buffer.*;
 
+import org.ietf.jgss.*;
+
 import stork.cred.*;
 import stork.feather.*;
 import stork.feather.util.*;
@@ -32,7 +34,7 @@ public class FTPSession extends Session<FTPSession, FTPResource> {
     return new Bell() {{
       String user = "anonymous";
       String pass = "stork@storkcloud.org";
- 
+
       // Initialize connection to server.
       channel = new FTPChannel(uri);
 
@@ -45,18 +47,26 @@ public class FTPSession extends Session<FTPSession, FTPResource> {
       if (uri.password() != null)
         pass = uri.password();
 
+      final String finalPass = pass;
+
       // Act depending on the credential type.
       if (credential == null) {
         channel.authorize(user, pass).promise(this);
       } else if (credential instanceof StorkGSSCred) {
-        System.out.println("sdfjksdfjkshdfjksdf");
-        StorkGSSCred cred = (StorkGSSCred) credential;
-        final String p = pass;
-        channel.authenticate(cred.data()).new Promise() {
-          public void done() {
-            channel.authorize(":globus-mapping:", p).promise(this);
-          }
-        };
+        final Bell thisBell = this;
+        channel.new Lock() {{
+          StorkGSSCred cred = (StorkGSSCred) credential;
+          cred.data().new AsBell<FTPChannel.Reply>() {
+            public Bell<Reply> convert(GSSCredential cred) throws Exception {
+              return authenticate(cred);
+            }
+          }.new AsBell<FTPChannel.Reply>() {
+            public Bell<FTPChannel.Reply> convert(FTPChannel.Reply r) {
+              return authorize(":globus-mapping:", finalPass);
+            }
+            public void always() { unlock(); }
+          }.promise(thisBell);
+        }};
       } else if (credential instanceof StorkUserinfo) {
         StorkUserinfo cred = (StorkUserinfo) credential;
         user = cred.username;
@@ -105,11 +115,7 @@ public class FTPSession extends Session<FTPSession, FTPResource> {
       } public Boolean convert(Throwable t) {
         return false;
       }
-    }.promise(canList).new Promise() {
-      public void done(Boolean b) {
-        System.out.println("Can support "+cmd+": "+b);
-      }
-    };
+    }.promise(canList);
   }
 
   public static void main(String[] args) {
