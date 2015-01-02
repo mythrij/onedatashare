@@ -15,6 +15,11 @@ angular.module('stork', [
       templateUrl: 'app/transfer/transfer.html',
       controller: 'Transfer',
       requireLogin: true
+    }).when('/queue', {
+      title: 'Queue',
+      templateUrl: 'app/queue/queue.html',
+      controller: 'Transfer',
+      requireLogin: true
     }).when('/user', {
       title: 'User Settings',
       templateUrl: 'app/user/user.html',

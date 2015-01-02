@@ -174,13 +174,23 @@ tr.min-cell {
 #wrapper {
   height: auto !important;
   min-height: 100%;
-  margin: 0 auto -3em;
-  padding: 70px 0 8em;
+  padding: 1em;
+  margin: 0 0 -3.1em 1em;
+}
+
+/* Dark background with light text. */
+.dark {
+  color: #AAA;
+  background: #444;
+}
+
+/* Light background with dark text. */
+.light {
+  color: #333;
+  background: #FFF;
 }
 
 .footer {
-  color: #777;
-  background: #444;
   height: 3.1em;
   bottom: 0;
 } .footer > div {
@@ -196,6 +206,40 @@ tr.min-cell {
   text-align: left;
 } .welcome h1 {
   font-size: 45px;
+}
+
+/* Sidebar */
+.sidebar {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  z-index: 999;
+  padding-right: 1em;
+}
+
+.sidebar-content {
+  width: 250px;
+}
+
+.sidebar a {
+  display: block;
+  padding: 0.3em;
+  color: #AAA;
+}
+
+.sidebar > .toggle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 1em;
+  box-shadow: -3px 0 6px #333;
+}
+
+.sidebar > .toggle > i {
+  position: absolute;
+  top: 50%;
+  margin-top: -100%;
 }
 
 #stork-queue .endpoints {

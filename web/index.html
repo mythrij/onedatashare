@@ -23,11 +23,6 @@
   <style>
     .ng-leave { visibility: hidden; }
   </style>
-
-  <!--[if lt IE 9]>
-    <script src="//cdnjs.cloudflare.com/ajax/libs/html5shiv/3.6.2/html5shiv.min.js"></script>
-    <script src="//cdnjs.cloudflare.com/ajax/libs/respond.js/1.2.0/respond.min.js"></script>
-  <![endif]-->
 </head>
 
 <body ng-class="$user && 'logged-in' || 'logged-out'">
@@ -35,14 +30,17 @@
   <noscript class="modal-backdrop">
     <div class="modal-content" id="noscript">
       <div>This site <em>needs</em> JavaScript to function!</div>
-      <div>Please allow scripts from <u>storkcloud.org</u> and <u>cdnjs.cloudflare.com</u>.</div>
+      <div>
+        Please allow scripts from <u>storkcloud.org</u> and <u>cdnjs.cloudflare.com</u>.
+      </div>
     </div>
   </noscript>
 
-  <!-- This is where the navbar and page content will be loaded. -->
-  <div id="wrapper">
-    <div ng-include="'/app/main/navbar.html'"></div>
+  <!-- The side navigation bar. -->
+  <div ng-include="'/app/main/navbar.html'"></div>
 
+  <!-- This is where page content will be loaded. -->
+  <div id="wrapper">
     <div class="view" ng-view>
       <div id="app-load-indicator" class="progress progress-striped active fade">
         <div style="width: 100%" role="progressbar" class="progress-bar">
@@ -107,7 +105,7 @@
   <script src="/app/main/stork.module.js"></script>
   <script src="/app/util/util.module.js"></script>
   <script src="/app/transfer/browse/browse.module.js"></script>
-  <script src="/app/transfer/queue/queue.module.js"></script>
+  <script src="/app/queue/queue.module.js"></script>
   <script src="/app/transfer/transfer.module.js"></script>
   <script src="/app/user/user.module.js"></script>
 </body>

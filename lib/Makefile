@@ -29,8 +29,12 @@ jsch-0.1.51.jar:
 	$g https://search.maven.org/remotecontent?filepath=com/jcraft/jsch/0.1.51/jsch-0.1.51.jar
 jsoup-1.8.1.jar:
 	$g https://search.maven.org/remotecontent?filepath=org/jsoup/jsoup/1.8.1/jsoup-1.8.1.jar
-dropbox-core-sdk-1.7.7.jar:
+
+# Dropbox dependencies.
+dropbox-core-sdk-1.7.7.jar: jackson-core-2.5.0-rc1.jar
 	$g https://search.maven.org/remotecontent?filepath=com/dropbox/core/dropbox-core-sdk/1.7.7/dropbox-core-sdk-1.7.7.jar
+jackson-core-2.5.0-rc1.jar:
+	$g https://search.maven.org/remotecontent?filepath=com/fasterxml/jackson/core/jackson-core/2.5.0-rc1/jackson-core-2.5.0-rc1.jar
 
 # JGlobus dependencies.
 gss-2.1.0.jar:

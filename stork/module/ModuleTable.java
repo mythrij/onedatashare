@@ -24,6 +24,7 @@ public class ModuleTable {
     register(new stork.module.ftp.FTPModule());
     register(new stork.module.irods.IRODSModule());
     register(new stork.module.http.HTTPModule());
+    register(new stork.module.dropbox.DbxModule());
 
     // FIXME: External modules disabled for now...
     //if (config.libexec != null)
