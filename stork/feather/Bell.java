@@ -535,7 +535,7 @@ public class Bell<T> implements Future<T> {
   public synchronized Bell<T> deadline(double deadline) {
     if (!isDone()) new Task() {
       public void run() { ring(new TimeoutException()); }
-    }.dispatch(deadline); 
+    }.dispatch(deadline);
     return this;
   }
 
@@ -562,8 +562,9 @@ public class Bell<T> implements Future<T> {
   }
 
   // Used in rungBell() and failedBell()...
-  private final static Bell rungBell   = new Bell().ring();
+  private final static Bell rungBell = new Bell().ring();
   private final static Bell failedBell = new Bell().ring((Throwable)null);
+  private final static Bell cancelledBell = new Bell().cancel();
 
   /**
    * A static {@code Bell} that has already been rung.
@@ -585,6 +586,16 @@ public class Bell<T> implements Future<T> {
   }
 
   /**
+   * A static {@code Bell} that has been cancelled.
+   *
+   * @return A {@code Bell} that has already failed with {@code
+   * CancellationException}.
+   */
+  public static Bell<?> cancelledBell() {
+    return (Bell<?>) cancelledBell;
+  }
+
+  /**
    * Create a {@code Bell} that will ring with {@code null} after {@code
    * deadline} seconds.
    *
@@ -595,7 +606,7 @@ public class Bell<T> implements Future<T> {
     return (Bell<?>) new Bell() {{
       new Task() {
         public void run() { ring(); }
-      }.dispatch(deadline); 
+      }.dispatch(deadline);
     }};
   }
 
@@ -792,9 +803,7 @@ public class Bell<T> implements Future<T> {
   /**
    * If a {@code Bell} is garbage collected before ringing, cancel it.
    */
-  protected void finalize() {
-    if (!isDone()) cancel();
-  }
+  protected void finalize() { cancel(); }
 
   /** Put some runnable task on the main dispatch queue. */
   public static void dispatch(Runnable runnable) {
