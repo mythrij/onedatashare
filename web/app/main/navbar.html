@@ -1,36 +1,56 @@
-<div class="sidebar dark" ng-controller="User" bs-collapse>
-  <div class="sidebar-content" bs-collapse-target>
-    <a class="large" href="#/">
-      StorkCloud
-    </a>
+<div class="navbar navbar-default navbar-fixed-top" bs-navbar>
+  <div class="container">
+    <div class="navbar-header">
+      <button data-target=".navbar-collapse" data-toggle="collapse" class="navbar-toggle collapsed text-muted">
+        <i class="collapsed fa fa-reorder"></i>
+      </button>
 
-    <a href="#/transfer">
-      <i class="fa fa-exchange"></i>
-      <span>Transfer</span>
-    </a>
+      <a class="navbar-brand" href="#/">
+        StorkCloud
+      </a>
 
-    <a href="#/queue">
-      <i class="fa fa-list-ol"></i>
-      <span>Queue</span>
-    </a>
+      <a id="user-button" class="btn btn-default navbar-toggle logged-in" href="#/user">
+        <i class="fa fa-user"></i>
+        <span ng-bind="$user.email">
+          <em class="text-muted">Loading...</em>
+        </span>
+      </a>
+    </div>
 
-    <a id="user-button" class="logged-in" href="#/user" ng-cloak>
-      <i class="fa fa-user"></i>
-      <span ng-bind="$user.email"></span>
-    </a>
+    <div class="navbar-collapse collapse">
+      <ul class="nav navbar-nav logged-in" ng-cloak>
+        <li bs-route="/transfer">
+          <a href="#/transfer">
+            <i class="fa fa-exchange"></i>
+            <span>Transfer</span>
+          </a>
+        </li>
+        <li bs-route="/queue">
+          <a href="#/queue">
+            <i class="fa fa-list-ol"></i>
+            <span>Queue</span>
+          </a>
+        </li>
+      </ul>
 
-    <a class="logged-out" href="#/" ng-click="login()">
-      <i class="fa fa-sign-in"></i>
-      <span>Log in</span>
-    </a>
-
-    <a class="logged-in" ng-click="logout()" href="#/" ng-cloak>
-      <i class="fa fa-sign-out"></i>
-      <span>Log out</span>
-    </a>
+      <ul ng-controller="User" class="nav navbar-nav navbar-right">
+        <li class="hidden-xs" bs-route="/user">
+          <a id="user-button" class="logged-in" href="#/user" ng-cloak>
+            <i class="fa fa-user"></i>
+            <span ng-bind="$user.email"></span>
+          </a>
+        </li>
+        <li>
+          <a class="logged-out" href="#/" ng-click="login()">
+            <i class="fa fa-sign-in"></i>
+            <span>Log in</span>
+          </a>
+          <a class="logged-in" ng-click="logout()" href="#/" ng-cloak>
+            <i class="fa fa-sign-out"></i>
+            <span>Log out</span>
+          </a>
+        </li>
+      </ul>
+    </div>
   </div>
-
-  <a class="toggle" bs-collapse-toggle>
-    <i class="fa fa-angle-right"></i>
-  </a>
 </div>

@@ -174,8 +174,8 @@ tr.min-cell {
 #wrapper {
   height: auto !important;
   min-height: 100%;
-  padding: 1em;
-  margin: 0 0 -3.1em 1em;
+  margin: 0 auto -3em;
+  padding: 70px 0 8em;
 }
 
 /* Dark background with light text. */
