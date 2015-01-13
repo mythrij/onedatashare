@@ -17,6 +17,9 @@ public class Bell<T> implements Future<T> {
   private transient Object object;  // May contain T or Throwable.
   private transient List<Bell<? super T>> promises = Collections.emptyList();
 
+  private static final Dispatcher dispatcher =
+    new Dispatcher("Bell Dispatcher");
+
   // State. 0 = unrung, 1 = thenned, 2 = done, 3 = failed
   private transient byte state = 0;
 
@@ -88,7 +91,11 @@ public class Bell<T> implements Future<T> {
   }
 
   private void dispatchHandlers() {
-    new Task() {
+    // The top-level bell class has no-op handlers, so don't bother dispatching
+    // anything.
+    if (getClass() == Bell.class)
+      return;
+    dispatch(new Runnable() {
       public void run() {
         // Call the handlers.
         if (isFailed()) try {
@@ -105,7 +112,7 @@ public class Bell<T> implements Future<T> {
           // Discard.
         }
       }
-    }.dispatch();
+    });
   }
 
   // Dispatcher task for thenning a bell with an object.
@@ -132,6 +139,8 @@ public class Bell<T> implements Future<T> {
     List<Bell<? super T>> list = (List) Collections.singletonList(bell);
     dispatchPromises(list);
   } private void dispatchPromises(List<Bell<? super T>> bells) {
+    if (bells.isEmpty())
+      return;
     if (isFailed())
       new DispatchFail((List) bells, error()).dispatch();
     else
@@ -603,11 +612,11 @@ public class Bell<T> implements Future<T> {
    * ring.
    */
   public static Bell<?> timerBell(final double deadline) {
-    return (Bell<?>) new Bell() {{
-      new Task() {
-        public void run() { ring(); }
-      }.dispatch(deadline);
-    }};
+    final Bell<?> bell = new Bell<Void>();
+    dispatch(new Runnable() {
+      public void run() { bell.ring(); }
+    }, deadline);
+    return bell;
   }
 
   /**
@@ -807,52 +816,21 @@ public class Bell<T> implements Future<T> {
 
   /** Put some runnable task on the main dispatch queue. */
   public static void dispatch(Runnable runnable) {
-    Dispatcher.dispatch(runnable);
-  }
-}
-
-/** A task for the dispatch loop. */
-abstract class Task implements Runnable {
-  final void dispatch() {
-    Dispatcher.dispatch(this);
-  } final void dispatch(double delay) {
-    Dispatcher.dispatch(this, delay);
-  }
-  public abstract void run();
-}
-
-/** A dispatch loop used internally. */
-final class Dispatcher {
-  // Keep the thread pool at size 1 for now until we can figure out how to
-  // better control ordering...
-  private static final ScheduledThreadPoolExecutor pool =
-    new ScheduledThreadPoolExecutor(1);
-
-  // Wrap a runnable for safety.
-  private static Runnable wrap(final Runnable r) {
-    return new Runnable() {
-      public void run() {
-        try {
-          r.run();
-        } catch (Exception e) {
-          System.out.print("Exception in bell loop:");
-          e.printStackTrace();
-        }
-      }
-    };
+    dispatcher.dispatch(runnable);
   }
 
-  /**
-   * Schedule {@code runnable} to be executed as soon as possible.
-   */
-  static synchronized void dispatch(final Runnable runnable) {
-    pool.schedule(wrap(runnable), 0, TimeUnit.MICROSECONDS);
+  /** Put some delayed runnable task on the main dispatch queue. */
+  public static void dispatch(Runnable runnable, double delay) {
+    dispatcher.dispatch(runnable, delay);
   }
 
-  /**
-   * Schedule {@code runnable} to be executed after a delay.
-   */
-  static synchronized void dispatch(Runnable runnable, double delay) {
-    pool.schedule(wrap(runnable), (long)(delay*1E6), TimeUnit.MICROSECONDS);
+  /** A task for the dispatch loop. */
+  private static abstract class Task implements Runnable {
+    final void dispatch() {
+      dispatcher.dispatch(this);
+    } final void dispatch(double delay) {
+      dispatcher.dispatch(this, delay);
+    }
+    public abstract void run();
   }
 }
