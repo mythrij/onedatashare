@@ -5,7 +5,7 @@ import stork.feather.*;
 /**
  * An asynchrounous network connection.
  */
-public abstract class Socket extends Codec<byte[],byte[]> {
+public abstract class Socket extends Coder<byte[],byte[]> {
   /** This will hold the result of doOpen(). */
   private Bell<?> doOpen;
 

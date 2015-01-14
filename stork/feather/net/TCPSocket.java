@@ -9,18 +9,13 @@ import stork.feather.*;
 
 class TCPSocket extends Socket {
   private Bell<SocketAddress> addr;
-  private Bell<SocketChannel> channel = new Bell<SocketChannel>() {
-    public void done() { expectRead(); }
-  };
+  private Bell<SocketChannel> channel = new Bell<SocketChannel>();
 
   /** Our selector. */
   private Selector<SocketChannel> selector;
 
   private ByteBuffer readBuffer;
   private List<ByteBuffer> writeBuffer = new LinkedList<ByteBuffer>();
-
-  /** This will be set if we're waiting to write. */
-  private Bell<?> expectWrite;
 
   public TCPSocket(String host, int port) {
     this(DNSResolver.resolve(host), port);
@@ -47,39 +42,34 @@ class TCPSocket extends Socket {
   }
 
   protected Bell<?> doOpen() {
-    addr.new Promise() {
-      public void done(SocketAddress addr) {
-        connect(addr);
-      } public void fail(Throwable t) {
-        channel.ring(t);
+    return addr.new AsBell<SocketChannel>() {
+      public Bell<SocketChannel> convert(SocketAddress addr) throws Exception {
+        SocketChannel ch = SocketChannel.open();
+        ch.configureBlocking(false);
+        selector = new Selector<SocketChannel>(ch);
+        Bell<SocketChannel> bell = selector.onConnectable().promise(channel);
+        ch.connect(addr);
+        return bell;
       }
-    };
-    return channel;
+    }.new As<SocketChannel>() {
+      public SocketChannel convert(SocketChannel ch) throws Exception {
+        ch.finishConnect();
+        return ch;
+      } public void done() {
+        allocateReadBuffer();
+        expectRead();
+      }
+    }.promise(channel);
   }
 
-  private void connect(SocketAddress addr) {
-    try {
-      SocketChannel ch = SocketChannel.open();
-      ch.configureBlocking(false);
-      selector = new Selector<SocketChannel>(ch);
-      selector.onConnect().new As<SocketChannel>() {
-        public SocketChannel convert(SocketChannel ch) throws Exception {
-          ch.finishConnect();
-          return ch;
-        }
-      }.promise(channel);
-      readBuffer = ByteBuffer.allocateDirect(2048);
-      ch.connect(addr);
-    } catch (Exception e) {
-      e.printStackTrace();
-      channel.ring(e);
-    }
+  /** Allocate a new read buffer. */
+  private synchronized void allocateReadBuffer() {
+    readBuffer = ByteBuffer.allocate(2048);
   }
 
   // Call when we're expecting to read.
   private void expectRead() {
-    Bell<?> b = selector.onRead();
-    selector.onRead().new Promise() {
+    selector.onReadable().new Promise() {
       public void done(SocketChannel ch) { doRead(ch); }
     };
   }
@@ -87,6 +77,7 @@ class TCPSocket extends Socket {
   // Read into the readBuffer.
   private synchronized void doRead(SocketChannel ch) {
     int size;
+    byte[] bytes;
 
     try {
       size = ch.read(readBuffer);
@@ -95,55 +86,62 @@ class TCPSocket extends Socket {
       return;
     }
 
+    // There was nothing to read after all...
     if (size == 0) {
       expectRead();
       return;
     }
 
-    byte[] bytes = new byte[size];
+    // If we used the whole read buffer, just emit it.
+    if (!readBuffer.hasRemaining()) {
+      bytes = readBuffer.array();
+      allocateReadBuffer();
+    } else {
+      bytes = new byte[size];
+      readBuffer.position(0);
+      readBuffer.get(bytes);
+      readBuffer.position(0);
+    }
 
-    readBuffer.position(0);
-    readBuffer.get(bytes);
-    readBuffer.position(0);
-
+    // Emit and don't try to read again until the pipeline is ready.
     emit(bytes).new Promise() {
       public void done() { expectRead(); }
     };
   }
 
-  protected void handle(final byte[] bytes) {
-    if (bytes.length == 0)
-      return;
-    channel.new Promise() {
-      public void done(SocketChannel ch) throws Exception {
-        System.out.println("Writing bytes: \""+new String(bytes)+"\"");
-        writeBuffer.add(ByteBuffer.wrap(bytes));
-        expectWrite();
+  private Bell<Void> lastWrite = Bell.rungBell();
+
+  protected synchronized void code(byte[] bytes) {
+    final ByteBuffer buffer = ByteBuffer.wrap(bytes);
+    if (bytes.length > 0)
+      lastWrite = lastWrite.new AsBell<Void>() {
+        public Bell<Void> convert(Void _) { return write(buffer); }
+      }.detach();
+  }
+
+  protected void code(Throwable error) {
+    close(error);
+  }
+
+  /**
+   * Write to the channel. Returns a bell that rings when all of the bytes have
+   * been written to the channel.
+   */
+  private Bell<Void> write(final ByteBuffer bytes) {
+    return channel.new AsBell<Void>() {
+      public Bell<Void> convert(SocketChannel ch) throws Exception {
+        ch.write(bytes);
+        if (!bytes.hasRemaining())
+          return Bell.rungBell();
+        Bell<Void> pause = selector.onWritable().new AsBell<Void>() {
+          public Bell<Void> convert(SocketChannel ch) { return write(bytes); }
+        };
+        pause(pause);
+        return pause;
+      } public void fail(Throwable t) {
+        close(t);
       }
     };
-  }
-
-  // Call when we're expecting to write.
-  private synchronized void expectWrite() {
-    if (expectWrite == null)
-      expectWrite = selector.onWrite().new Promise() {
-        public void done(SocketChannel ch) { doWrite(ch); }
-      };
-  }
-
-  private synchronized void doWrite(SocketChannel ch) {
-    while (writeBuffer.size() > 0) try {
-      ByteBuffer buf = writeBuffer.remove(0);
-      ch.write(buf);
-      if (buf.hasRemaining()) {
-        writeBuffer.add(0, buf);
-        expectWrite();
-        return;
-      }
-    } catch (Exception e) {
-      close(e);
-      return;
-    }
   }
 
   protected void doClose() throws Exception {
@@ -155,22 +153,8 @@ class TCPSocket extends Socket {
       channel.sync().close();
   }
 
-  public static void main(String[] args) {
-    final Socket s = new TCPSocket("stream3.gameowls.com", 8000);
-    //final Socket s = new TCPSocket("google.com", 8000);
-    //final Socket s = new TCPSocket("127.0.0.1", 12345);
-
-    //s.feed("GET /images/srpr/logo11w.png\r\n".getBytes());
-    s.feed("GET /chiptune.ogg HTTP/1.1\r\n\r\n".getBytes());
-
-    Codec<?,?> c = s.open().join(new Codec<byte[],String>("thing") {
-      public void handle(byte[] bytes) {
-        System.out.println("Got bytes: "+bytes.length);
-        System.out.println(new Slice(bytes));
-      } public void handle(Throwable t) {
-        System.out.println("Got error: "+t);
-      }
-    });
-    s.onClose().sync();
+  public static void main(String[] args) throws Exception {
+    Coder.loop(new TCPSocket("127.0.0.1", 12345).open());
+    System.in.read();
   }
 }

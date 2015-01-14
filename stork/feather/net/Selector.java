@@ -16,10 +16,10 @@ public class Selector<C extends SelectableChannel> {
   private static boolean inited;
   private static java.nio.channels.Selector nioSelector;
 
-  private Bell<?> onAccept = new Bell<Void>();
-  private Bell<?> onConnect = new Bell<Void>();
-  private Bell<?> onRead = new Bell<Void>();
-  private Bell<?> onWrite = new Bell<Void>();
+  private Bell<?> onAcceptable = new Bell<Void>();
+  private Bell<?> onConnectable = new Bell<Void>();
+  private Bell<?> onReadable = new Bell<Void>();
+  private Bell<?> onWritable = new Bell<Void>();
 
   private static Thread thread = new Thread("Selector") {
     public void run() { while (true) select(); }
@@ -50,27 +50,27 @@ public class Selector<C extends SelectableChannel> {
   }
 
   /** Rings when there are incoming connections. */
-  public final synchronized Bell<C> onAccept() {
+  public final synchronized Bell<C> onAcceptable() {
     setInterest(OP_ACCEPT, true);
-    return onAccept.as(channel);
+    return onAcceptable.as(channel);
   }
 
   /** Rings when the channel has finished connecting. */
-  public final synchronized Bell<C> onConnect() {
+  public final synchronized Bell<C> onConnectable() {
     setInterest(OP_CONNECT, true);
-    return onConnect.as(channel);
+    return onConnectable.as(channel);
   }
 
   /** Rings when there is data waiting to be read. */
-  public final synchronized Bell<C> onRead() {
+  public final synchronized Bell<C> onReadable() {
     setInterest(OP_READ, true);
-    return onRead.as(channel);
+    return onReadable.as(channel);
   }
 
   /** Rings when it's possible to write data. */
-  public final synchronized Bell<C> onWrite() {
+  public final synchronized Bell<C> onWritable() {
     setInterest(OP_WRITE, true);
-    return onWrite.as(channel);
+    return onWritable.as(channel);
   }
 
   private synchronized void setInterest(int op, boolean interest) {
@@ -109,25 +109,20 @@ public class Selector<C extends SelectableChannel> {
     }
   }
 
-  int i = 0;
   /** Called when some event has occurred. */
   private synchronized void handleEvents() {
     if (key.isAcceptable()) {
-      System.out.println("ACC");
-      onAccept.ring();
-      onAccept = new Bell<Void>();
+      onAcceptable.ring();
+      onAcceptable = new Bell<Void>();
     } if (key.isConnectable()) {
-      System.out.println("CONN");
-      onConnect.ring();
-      onConnect = new Bell<Void>();
+      onConnectable.ring();
+      onConnectable = new Bell<Void>();
     } if (key.isReadable()) {
-      System.out.println("READ "+i++);
-      onRead.ring();
-      onRead = new Bell<Void>();
+      onReadable.ring();
+      onReadable = new Bell<Void>();
     } if (key.isWritable()) {
-      System.out.println("WRIT");
-      onWrite.ring();
-      onWrite = new Bell<Void>();
+      onWritable.ring();
+      onWritable = new Bell<Void>();
     }
 
     // We're no longer interested in events that just triggered.

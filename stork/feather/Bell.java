@@ -571,8 +571,8 @@ public class Bell<T> implements Future<T> {
   }
 
   // Used in rungBell() and failedBell()...
-  private final static Bell rungBell = new Bell().ring();
-  private final static Bell failedBell = new Bell().ring((Throwable)null);
+  private final static Bell rungBell = new Bell((Object) null);
+  private final static Bell failedBell = new Bell((Throwable) null);
   private final static Bell cancelledBell = new Bell().cancel();
 
   /**
@@ -580,8 +580,8 @@ public class Bell<T> implements Future<T> {
    *
    * @return A {@code Bell} that has already been rung with {@code null}.
    */
-  public static Bell<?> rungBell() {
-    return (Bell<?>) rungBell;
+  public static <C> Bell<C> rungBell() {
+    return (Bell<C>) rungBell;
   }
 
   /**
@@ -590,8 +590,8 @@ public class Bell<T> implements Future<T> {
    * @return A {@code Bell} that has already failed with {@code
    * NullPointerException}.
    */
-  public static Bell<?> failedBell() {
-    return (Bell<?>) failedBell;
+  public static <C> Bell<C> failedBell() {
+    return (Bell<C>) failedBell;
   }
 
   /**
@@ -600,8 +600,8 @@ public class Bell<T> implements Future<T> {
    * @return A {@code Bell} that has already failed with {@code
    * CancellationException}.
    */
-  public static Bell<?> cancelledBell() {
-    return (Bell<?>) cancelledBell;
+  public static <C> Bell<C> cancelledBell() {
+    return (Bell<C>) cancelledBell;
   }
 
   /**
