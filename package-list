@@ -6,6 +6,7 @@ stork.core.net
 stork.core.server
 stork.cred
 stork.feather
+stork.feather.net
 stork.feather.util
 stork.module
 stork.module.dropbox
