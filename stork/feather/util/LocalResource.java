@@ -95,7 +95,7 @@ public class LocalResource extends Resource<LocalSession,LocalResource> {
         stat.size = file.length();
         stat.file = file.isFile();
         stat.dir = file.isDirectory();
-        
+
         File sym = resolveLink(file);
         if (sym != null)
           stat.link = file.toString();
@@ -142,7 +142,7 @@ public class LocalResource extends Resource<LocalSession,LocalResource> {
 
 class LocalTap extends Tap<LocalResource> {
   final File file = source().file();
-  private volatile Bell pause;
+  private volatile Bell<?> pause = Bell.rungBell();
   private RandomAccessFile raf;
   private FileChannel channel;
   private long offset = 0, remaining = 0;
@@ -164,13 +164,14 @@ class LocalTap extends Tap<LocalResource> {
     channel = raf.getChannel();
     remaining = file.length();
 
-    // When bell rings, start a loop to send all chunks.
-    new BellLoop(this) {
-      public Bell lock() {
-        return pause;
-      } public boolean condition() {
-        return remaining > 0;
-      } public void body() throws Exception {
+    return bell.new Promise() {
+      public void done() { doRead(); }
+    };
+  }
+
+  public void doRead() {
+    pause.new As<Void>() {
+      public Void convert(Object o) throws Exception {
         long len = remaining < chunkSize ? remaining : chunkSize;
         ByteBuffer buffer = ByteBuffer.allocate((int) len);
         len = channel.read(buffer);
@@ -184,12 +185,16 @@ class LocalTap extends Tap<LocalResource> {
         } else {
           remaining = 0;
         }
-      } public void always() {
-        finish();
-      }
-    }.start(bell);
 
-    return bell;
+        if (remaining > 0)
+          doRead();
+        else
+          finish();
+        return null;
+      } public void fail(Throwable t) {
+        finish(t);
+      }
+    };
   }
 
   protected void finish() {

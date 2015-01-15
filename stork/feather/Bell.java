@@ -270,42 +270,6 @@ public class Bell<T> implements Future<T> {
     } throw new RuntimeException(error());
   }
 
-  // Run then() handlers and discard any exceptions.
-  private synchronized void then(T object, Throwable error) {
-    if (state >= 1) return;
-
-    state = 1;  // Set to thenned state.
-
-    if (error == null) try {
-      then(object);
-    } catch (Throwable t) {
-      error = t;
-    } if (error != null) try {
-      then(error);
-    } catch (Throwable t) {
-      // Discard.
-    }
-  }
-
-  /**
-   * This is called when a {@code Bell} this {@code Bell} was promised to has
-   * rung. By default, it simply rings this {@code Bell} with {@code object}.
-   * Any {@code Throwable} thrown by this method will cause {@link
-   * #then(Throwable)} to be called with that {@code Throwable}.
-   *
-   * @param object the value of the parent {@code Bell}.
-   */
-  protected void then(T object) throws Throwable { ring(object); }
-
-  /**
-   * This is called when a {@code Bell} this {@code Bell} was promised to has
-   * failed. By default, it simply rings this {@code Bell} with {@code error}.
-   * Any {@code Throwable} thrown by this method will be discarded.
-   *
-   * @param error the error the parent {@code Bell} was failed with.
-   */
-  protected void then(Throwable error) throws Throwable { ring(error); }
-
   /**
    * This handler is called when this {@code Bell} has rung. Subclasses can
    * override this to do something when the {@code Bell} has been rung. Any
@@ -556,18 +520,39 @@ public class Bell<T> implements Future<T> {
   }
 
   /**
-   * Return a {@code Bell} which will ring with the value of this {@code Bell},
-   * if this {@code Bell} rings successfully, or else will ring with the value
-   * of {@code other} if this {@code Bell} fails.
-   *
-   * @param other the {@code Bell} to promise the returned {@code Bell} to if
-   * this {@code Bell} fails.
+   * @return A {@code Bell} which only rings if this {@code Bell} succeeds, and
+   * does not ring otherwise.
+   */
+  public Bell<T> onSuccess() {
+    final Bell<T> bell = new Bell<T>();
+    new Promise() {
+      public void done(T t) { bell.ring(t); }
+    };
+    return bell;
+  }
+
+  /**
+   * @return A {@code Bell} which only rings if this {@code Bell} fails, and
+   * does not ring otherwise.
+   */
+  public <T> Bell<T> onFail() {
+    final Bell<T> bell = new Bell<T>();
+    new Promise() {
+      public void fail(Throwable t) { bell.ring(t); }
+    };
+    return bell;
+  }
+
+  /**
+   * Return a {@code Bell} which will ring with either the value of this {@code
+   * Bell} or {@code other}. If both fail, the returned {@code Bell} will ring
+   * with the error of this {@code Bell}.
    */
   public Bell<T> or(final Bell<T> other) {
-    if (isDone())
-      return other;
-    return this.new Promise() {
-      public void then(Throwable err) { other.promise(this); }
+    return new AsBell<T>() {
+      { other.onSuccess().promise(this); }
+      public Bell<T> convert(T t) { return Bell.this; }
+      public Bell<T> convert(Throwable t) { return other; }
     };
   }
 
@@ -575,20 +560,24 @@ public class Bell<T> implements Future<T> {
    * Return a {@code Bell} which will ring with the value of {@code other} if
    * this {@code Bell} rings successfully, or else will fail if this {@code
    * Bell} fails.
-   *
-   * @param other the {@code Bell} to promise the returned {@code Bell} to if
-   * this {@code Bell} succeeds.
    */
   public <V> Bell<V> and(final Bell<V> other) {
-    if (other == null)
-      return this.as((V) null);
-    if (isFailed())
-      return (Bell<V>) this;
-    if (isDone())
-      return other;
-    return this.new AsBell<V>() {
-      public Bell<V> convert(T t) { return other; }
+    final Bell<V> bell = new Bell<V>();
+    new Promise() {
+      public void done(T t) {
+        other.promise(bell);
+      } public void fail(Throwable t) {
+        bell.ring(t);
+      }
     };
+    other.new Promise() {
+      public void done(V v) {
+        if (Bell.this.isDone()) bell.ring(v);
+      } public void fail(Throwable t) {
+        bell.ring(t);
+      }
+    };
+    return bell;
   }
 
   /**
@@ -609,21 +598,25 @@ public class Bell<T> implements Future<T> {
    * @return A {@code Bell} that will ring successfully if any of {@code bells}
    * rings successfully, or will fail otherwise.
    */
-  public static Bell<?> any(Collection<Bell<?>> bells) {
+  public static Bell<?> any(final Collection<Bell<?>> bells) {
     final int len = bells.size() - Collections.frequency(bells, null);
     if (len == 0)
       return Bell.rungBell();
     if (len == 1) for (Bell b : bells)
       if (b != null) return b;
-    Bell bell = new Bell() {
+    return new Bell() {
       int failed = 0;
-      public void then(Throwable t) {
-        if (++failed >= len) ring(t);
+      {
+        final Bell bell = this;
+        for (final Bell b : bells) if (b != null) b.new Promise() {
+          public void done() {
+            bell.ring();
+          } public void fail(Throwable t) {
+            if (++failed == len) bell.ring(t);
+          }
+        };
       }
     };
-    for (Bell b : bells)
-      if (b != null) b.promise(bell);
-    return bell;
   }
 
   /**
@@ -644,21 +637,25 @@ public class Bell<T> implements Future<T> {
    * @return A {@code Bell} that will ring successfully if all of {@code bells}
    * ring successfully, or will fail otherwise.
    */
-  public static Bell<?> all(Collection<Bell<?>> bells) {
+  public static Bell<?> all(final Collection<Bell<?>> bells) {
     final int len = bells.size() - Collections.frequency(bells, null);
     if (len == 0)
       return Bell.rungBell();
     if (len == 1) for (Bell b : bells)
       if (b != null) return b;
-    Bell bell = new Bell() {
+    return new Bell() {
       int succeeded = 0;
-      public void then(Object o) {
-        if (++succeeded >= len) ring();
+      {
+        final Bell bell = this;
+        for (final Bell b : bells) if (b != null) b.new Promise() {
+          public void done() {
+            if (++succeeded == len) bell.ring();
+          } public void fail(Throwable t) {
+            bell.ring(t);
+          }
+        };
       }
     };
-    for (Bell b : bells)
-      if (b != null) b.promise(bell);
-    return bell;
   }
 
   /**

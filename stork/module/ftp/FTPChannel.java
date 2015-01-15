@@ -917,11 +917,11 @@ public class FTPChannel {
      * range (inclusive), instead of ringing successfully with the reply.
      */
     public Bell<Reply> expect(final int lo, final int hi) {
-      return this.new Promise() {
-        public void then(Reply r) {
+      return this.new As<Reply>() {
+        public Reply convert(Reply r) throws Exception {
           if (r.code < lo || r.code > hi)
             throw r.asError();
-          ring(r);
+          return r;
         }
       };
     }
@@ -988,14 +988,22 @@ public class FTPChannel {
     }
 
     private Bell<SocketChannel> tryPassiveThenActive() {
-      return tryPassive().new Promise() {
-        public void then(Throwable t) { tryActive().promise(this); }
+      return tryPassive().new AsBell<SocketChannel>() {
+        public Bell<SocketChannel> convert(SocketChannel ch) {
+          return Bell.wrap(ch);
+        } public Bell<SocketChannel> convert(Throwable t) {
+          return tryActive();
+        }
       };
     }
 
     private Bell<SocketChannel> tryActiveThenPassive() {
-      return tryActive().new Promise() {
-        public void then(Throwable t) { tryPassive().promise(this); }
+      return tryActive().new AsBell<SocketChannel>() {
+        public Bell<SocketChannel> convert(SocketChannel ch) {
+          return Bell.wrap(ch);
+        } public Bell<SocketChannel> convert(Throwable t) {
+          return tryPassive();
+        }
       };
     }
 

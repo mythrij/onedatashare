@@ -26,9 +26,9 @@ public class Emitter<T> extends Bell {
     { pull(); }
     private void pull() {
       Emitter.this.get(new Bell<T>() {
-        public void then(T t) throws Throwable {
+        public T convert(T t) throws Throwable {
           each(t);
-          ring();
+          return t;
         } public void done() {
           pull();
         } public void fail(Throwable t) {
