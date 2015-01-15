@@ -19,14 +19,14 @@ import io.netty.handler.timeout.ReadTimeoutHandler;
 public class HTTPChannel extends NioSocketChannel {
 
   // Queue of resource taps 
-    protected Queue<HTTPTap> tapQueue = new ConcurrentLinkedQueue<HTTPTap>();
-    // Bell rung when the channel goes to inactive state
-    protected Bell<Void> onInactiveBell = new Bell<Void>();
-    protected HttpMethod testMethod = HttpMethod.HEAD;
-    // Current tap that is being considered
-    protected HTTPTap tap;
+  protected Queue<HTTPTap> tapQueue = new ConcurrentLinkedQueue<HTTPTap>();
+  // Bell rung when the channel goes to inactive state
+  protected Bell<Void> onInactiveBell = new Bell<Void>();
+  protected HttpMethod testMethod = HttpMethod.HEAD;
+  // Current tap that is being considered
+  protected HTTPTap tap;
   private boolean readable = true;
-  
+
   /* Constructors */
   public HTTPChannel(Channel parent, EventLoop eventLoop, SocketChannel socket) {
     super(parent, eventLoop, socket);
@@ -46,7 +46,7 @@ public class HTTPChannel extends NioSocketChannel {
   protected void addChannelTask(HTTPTap tap) {
     tapQueue.offer(tap);
   }
-  
+
   /**
    * Stops/starts receiving data.
    * 
@@ -56,7 +56,7 @@ public class HTTPChannel extends NioSocketChannel {
   protected void setReadable(boolean readable) {
     this.readable = readable;
   }
-  
+
   /** Clears all fields stored on this channel. */
   protected void clear() {
     for (HTTPTap tap : tapQueue) {
@@ -64,8 +64,7 @@ public class HTTPChannel extends NioSocketChannel {
     }
     tapQueue.clear();
   }
-  
-  @Override
+
   protected int doReadBytes(ByteBuf buf) throws Exception {
     if (readable) {
       return buf.writeBytes(javaChannel(), buf.writableBytes());
@@ -73,26 +72,26 @@ public class HTTPChannel extends NioSocketChannel {
       return 0;
     }
   }
-    
-    /**
-     * Installs test handler at the initial run of this {@code HTTPSession}.
-     * 
-     * @param builder {@link HTTPBuilder} for this {@link HTTPSession}
-     */
-    protected void testerPipeline(HTTPBuilder builder) {
+
+  /**
+   * Installs test handler at the initial run of this {@code HTTPSession}.
+   * 
+   * @param builder {@link HTTPBuilder} for this {@link HTTPSession}
+   */
+  protected void testerPipeline(HTTPBuilder builder) {
     pipeline().remove("Timer");
     pipeline().remove("Handler");
     pipeline().addLast("Tester", new HTTPTestHandler(builder));
-    }
-    
-    /**
-     * Installs message receiver handler back after {@code test} state.
-     * 
-     * @param builder {@link HTTPBuilder} for this {@link HTTPSession}
-     */
-    protected void restorePipeline(HTTPBuilder builder) {
+  }
+
+  /**
+   * Installs message receiver handler back after {@code test} state.
+   * 
+   * @param builder {@link HTTPBuilder} for this {@link HTTPSession}
+   */
+  protected void restorePipeline(HTTPBuilder builder) {
     pipeline().remove("Tester");
     pipeline().addFirst("Timer", new ReadTimeoutHandler(30));
     pipeline().addLast("Handler", new HTTPMessageHandler(builder));
-    }
+  }
 }

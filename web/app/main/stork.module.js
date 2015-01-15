@@ -15,6 +15,11 @@ angular.module('stork', [
       templateUrl: 'app/transfer/transfer.html',
       controller: 'Transfer',
       requireLogin: true
+    }).when('/queue', {
+      title: 'Queue',
+      templateUrl: 'app/queue/queue.html',
+      controller: 'Transfer',
+      requireLogin: true
     }).when('/user', {
       title: 'User Settings',
       templateUrl: 'app/user/user.html',
@@ -81,7 +86,7 @@ angular.module('stork', [
     },
     cancel: function (id) {
       return this.$post('cancel', {
-        range: id
+        job_id: id
       });
     },
     q: function (filter, range) {

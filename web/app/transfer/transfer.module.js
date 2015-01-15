@@ -64,9 +64,10 @@ angular.module('stork.transfer', [
   };
 
   $scope.transfer = function (src, dest, contents) {
-    var job = angular.copy($scope.job);
+    var job = $scope.job;
     job.src.uri  = _.keys(src.$selected)[0];
     job.dest.uri = _.keys(dest.$selected)[0];
+    console.log(job);
 
     var modal = $modal({
       title: 'Transfer',

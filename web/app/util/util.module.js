@@ -57,6 +57,11 @@ angular.module('stork.util', [
   return _.pairs;
 })
 
+/** Copy the passed object. */
+.filter('copy', function () {
+  return angular.copy;
+})
+
 /** Filter to make a time human-readable. */
 .filter('moment', function () {
   return function (input, format) {

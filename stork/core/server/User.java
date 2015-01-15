@@ -32,7 +32,7 @@ public abstract class User {
     public String hash;
     public String password;
     private transient Server server;
-    
+
     protected Cookie() { }
 
     public Cookie(Server server) { this.server = server; }

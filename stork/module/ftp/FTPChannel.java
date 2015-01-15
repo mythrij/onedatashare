@@ -18,6 +18,7 @@ import io.netty.util.*;
 import io.netty.util.concurrent.*;
 
 import org.ietf.jgss.*;
+import org.gridforum.jgss.*;
 
 import stork.feather.*;
 import stork.feather.URI;
@@ -61,7 +62,7 @@ public class FTPChannel {
   class FTPSharedChannelState {
     Protocol protocol;
     ChannelFuture future;
-    Bell<SecurityContext> security;
+    SecurityContext security;
     Deque<Command> handlers = new ArrayDeque<Command>();
 
     FTPChannel owner;  // The view that owns the underlying channel.
@@ -133,7 +134,6 @@ public class FTPChannel {
 
       ChannelPipeline p = ch.pipeline();
 
-      p.addLast("line_decoder", new LineBasedFrameDecoder(2048));
       p.addLast("reply_decoder", new ReplyDecoder());
       p.addLast("reply_handler", new ReplyHandler());
 
@@ -144,32 +144,23 @@ public class FTPChannel {
   // A reply from the server.
   public class Reply {
     public final int code;
-    private final ByteBuf[] lines;
+    private final List<String> lines;
 
-    private Reply(int code, ByteBuf[] lines) {
+    private Reply(int code, List<String> lines) {
       if (code < 100 || code >= 700)
         throw new RuntimeException("Bad reply code: "+code);
       this.code = code;
-      this.lines = lines;
+      this.lines = Collections.unmodifiableList(lines);
     }
 
     // Get the number of lines.
-    public int length() {
-      return lines.length;
-    }
+    public int length() { return lines.size(); }
 
     // Get a line by number.
-    public String line(int i) {
-      return lines[i].toString(data.encoding);
-    }
+    public String line(int i) { return lines.get(i); }
 
     // Get an array of all the lines as strings.
-    public String[] lines() {
-      String[] arr = new String[lines.length];
-      for (int i = 0; i < lines.length; i++)
-        arr[i] = line(i);
-      return arr;
-    }
+    public List<String> lines() { return lines; }
 
     // Return a description meaningful to a human based on a reply code.
     public String description() {
@@ -185,10 +176,10 @@ public class FTPChannel {
     // the first line. If it's multi-lined, the message is the part between the
     // first and last lines.
     public String message() {
-      if (lines.length <= 1)
+      if (length() <= 1)
         return line(0);
       StringBuilder sb = new StringBuilder();
-      for (int i = 1, z = lines.length-1; i < z; i++) {
+      for (int i = 1, z = length()-1; i < z; i++) {
         sb.append(line(i));
         if (i != z) sb.append('\n');
       }
@@ -197,7 +188,7 @@ public class FTPChannel {
 
     public String toString() {
       StringBuilder sb = new StringBuilder();
-      for (int i = 0, z = lines.length-1; i <= z; i++) if (i != z)
+      for (int i = 0, z = length()-1; i <= z; i++) if (i != z)
         sb.append(code).append('-').append(line(i)).append('\n');
       else
         sb.append(code).append(' ').append(line(i));
@@ -236,109 +227,132 @@ public class FTPChannel {
     }
   }
 
-  // Handles decoding replies from the server. This uses functionality from
-  // LineBasedFrameDecoder to split incoming bytes on a per-line basis, then
-  // parses each line as an FTP reply line, and buffers lines until a reply is
-  // fully formed. It supports decoding (arbitrarily-nested) protected replies
-  // when a security context is present.
-  class ReplyDecoder extends ByteToMessageDecoder {
-    List<ByteBuf> lines = new LinkedList<ByteBuf>();
+  /** Eats ASCII bytes, emits lines. */
+  abstract class LineCodec {
+    StringBuilder buffer = new StringBuilder();
+
+    public final void feed(byte[] bs) {
+      for (byte b : bs) switch (b) {
+        case '\n':
+          emit(buffer.toString());
+          buffer = new StringBuilder();
+        case '\r':
+          break;
+        default:
+          buffer.append((char) b);
+      }
+    }
+
+    public abstract void emit(String s);
+  }
+
+  /** A parser for FTP replies. */
+  abstract class ReplyCodec {
+    /** Reply lines are buffered in here. */
+    List<String> lines = new LinkedList<String>();
     String codestr;
     int code;
 
-    // This will receive whole lines as buffers.
-    protected void decode(final ChannelHandlerContext ctx, 
-                          ByteBuf buffer, final List out) {
-      if (buffer != null) {
-        Bell<Reply> r = asyncDecode(buffer);
-        if (r != null) r.new Promise() {
-          public void done(Reply r) {
-            ctx.fireChannelRead(r);
-          } public void fail(Throwable t) throws Exception {
-            exceptionCaught(ctx, t);
-          }
-        };
-      }
-    }
-
-    // Asynchronously decode and unprotect a buffer.
-    protected Bell<Reply> asyncDecode(ByteBuf buffer) {
-      if (buffer == null || buffer.readableBytes() <= 0)
-        return null;  // We haven't gotten a full line.
-      Reply r = decodeReplyLine(buffer);
-      if (r == null)
-        return null;  // We haven't gotten a full reply.
-      return decodeProtectedReply(r);
-    }
-
-    // Convenience method for parsing reply text in a self-contained byte
-    // buffer, used by decodeProtectedReply and anywhere else this might be
-    // needed. This works by simulating incoming data in a channel pipeline,
-    // though no channel context is present. This may be an issue if Netty ever
-    // changes to use the channel context in line splitting, in which case we
-    // will need to come up with another solution.
-    private Bell<Reply> decodeProtectedReply(final Reply reply) {
-      // Do nothing if the security context has not been initialized. Really
-      // this is an error on the part of the server, but there's a chance the
-      // client code will know what to do.
-      if (data.security == null || !reply.isProtected())
-        return new Bell<Reply>(reply);
-      return data.security.new AsBell<Reply>() {
-        public Bell<Reply> convert(SecurityContext sc) throws Exception {
-          for (ByteBuf eb : reply.lines) {
-            ByteBuf db = sc.unprotect(Base64.decode(eb));
-            Bell<Reply> r = asyncDecode(db);
-            if (r != null)
-              return r;
-          } throw new RuntimeException("Bad reply from server.");
-        }
-      };
-    }
-
-    // Decode a reply from a string. This should only be called if the input
-    // buffer is a properly framed line with the end-of-line character(s)
-    // stripped.
-    protected Reply decodeReplyLine(ByteBuf msg) {
+    /** Feed a line into the parser. */
+    public final void feed(String line) {
       try {
-        return innerDecodeReplyLine(msg);
+        Reply reply = decodeLine(line);
+        if (reply != null)
+          emit(reply);
       } catch (Exception e) {
-        // TODO: Replace this with a real exception.
-        throw new RuntimeException("Bad reply from server.", e);
+        throw new RuntimeException("Bad line from server: "+line, e);
       }
-    } protected Reply innerDecodeReplyLine(ByteBuf msg) throws Exception {
-      // Some implementation supposedly inserts null bytes, ugh.
-      if (msg.getByte(0) == 0)
-        msg.readByte();
+    }
 
+    /** This is called when a reply has been parsed. */
+    public abstract void emit(Reply r);
+
+    protected synchronized Reply decodeLine(String line) throws Exception {
       char sep = '-';
 
       // Extract the reply code and separator.
       if (lines.isEmpty()) {
-        codestr = msg.toString(0, 3, data.encoding);
+        codestr = line.substring(0, 3);
         code = Integer.parseInt(codestr);
-        msg.skipBytes(3);
-        sep = (char) msg.readByte();
-      } else if (msg.readableBytes() >= 4) {
-        String s = msg.toString(0, 4, data.encoding);
+        sep = line.charAt(3);
+        line = line.substring(4);
+      } else if (line.length() >= 4) {
+        // Some servers insert "xyz-" at the beginning of additional reply
+        // lines. This strips that.
+        String s = line.substring(0, 4);
         sep = s.charAt(3);
         if (s.startsWith(codestr) && (sep == '-' || sep == ' '))
-          msg.skipBytes(4);
+          line = line.substring(4);
         else
           sep = '-';
       }
 
       // Save the rest of the message.
-      lines.add(msg.copy());
-      msg.skipBytes(msg.readableBytes());
+      lines.add(line);
 
       // Act based on the separator.
-      switch (sep) {
-        case ' ':
-          ByteBuf[] la = lines.toArray(new ByteBuf[lines.size()]);
-          lines = new LinkedList<ByteBuf>();
-          return new Reply(code, la);
-        case '-': return null;
-        default : throw new RuntimeException("Unexpected: "+sep);
+      if (sep == ' ') {
+        Reply r = new Reply(code, lines);
+        lines = new LinkedList<String>();
+        return r;
+      } else if (sep == '-') {
+        return null;
+      } else {
+        throw new RuntimeException("Unexpected: "+sep);
+      }
+    }
+  }
+
+  // Handles decoding replies from the server.
+  class ReplyDecoder extends ByteToMessageDecoder {
+    ChannelHandlerContext ctx;
+    MyCodec codec = new MyCodec() {
+      public void emit(Reply reply) { handleReply(reply); }
+    };
+    MyCodec protCodec = new MyCodec() {
+      public void emit(Reply reply) { ctx.fireChannelRead(reply); }
+    };
+
+    // Combined LineCodec and ReplyCodec.
+    abstract class MyCodec {
+      public final void feed(byte[] bytes) {
+        lineCodec.feed(bytes);
+      }
+      LineCodec lineCodec = new LineCodec() {
+        public void emit(String line) { replyCodec.feed(line); }
+      };
+      ReplyCodec replyCodec = new ReplyCodec() {
+        public void emit(Reply reply) { MyCodec.this.emit(reply); }
+      };
+      public abstract void emit(Reply reply);
+    }
+
+    // Feed incoming bytes to the reply codec.
+    public void decode(ChannelHandlerContext ctx, ByteBuf buffer, List out) {
+      this.ctx = ctx;
+      codec.feed(new Slice(buffer).asBytes());
+      buffer.clear();
+    }
+
+    // Got a reply. Decode if necessary. Otherwise pass down.
+    private void handleReply(Reply reply) {
+      if (data.security != null)
+        decodeProtected(reply);
+      else
+        ctx.fireChannelRead(reply);
+    }
+
+    // Decode a protected payload and feed to the line parser.
+    private void decodeProtected(Reply reply) {
+      if (!reply.isProtected()) throw new
+        RuntimeException("Unprotected reply on protected channel.");
+
+      for (String s : reply.lines()) try {
+        ByteBuf eb = Unpooled.wrappedBuffer(s.getBytes(data.encoding));
+        ByteBuf db = data.security.unprotect(Base64.decode(eb));
+        protCodec.feed(new Slice(db).asBytes());
+      } catch (Exception e) {
+        throw new RuntimeException("Bad reply from server.", e);
       }
     }
   }
@@ -350,13 +364,14 @@ public class FTPChannel {
     }
 
     public void messageReceived(ChannelHandlerContext ctx, Reply reply) {
-      //Log.finer("Got: ", reply);
+      Log.finer("Got: ", reply);
       switch (reply.code) {
         case 220:
           if (data.welcome == null)
             data.welcome = reply;
           break;
         case 421:
+          Log.fine("Channel closing due to 421.");
           FTPChannel.this.close();
           break;
         default:
@@ -365,12 +380,15 @@ public class FTPChannel {
     }
 
     public void channelInactive(ChannelHandlerContext ctx) {
+      Log.fine("Channel closed by peer.");
       FTPChannel.this.close();
     }
 
     // TODO: How should we handle exceptions? Which exceptions can this thing
     // receive anyway?
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable t) {
+      Log.fine("Channel closed by exception.");
+      t.printStackTrace();
       FTPChannel.this.close();
     }
   }
@@ -399,7 +417,7 @@ public class FTPChannel {
     GSSContext context;
 
     public GSSSecurityContext(GSSCredential cred) throws GSSException {
-      GSSManager manager = GSSManager.getInstance();
+      GSSManager manager = ExtendedGSSManager.getInstance();
       Oid oid = new Oid("1.3.6.1.4.1.3536.1.1");
       GSSName peer = manager.createName(
         "host@"+host, GSSName.NT_HOSTBASED_SERVICE);
@@ -446,29 +464,27 @@ public class FTPChannel {
   // mechanism. We can assume every message is a single command with no
   // newlines.
   class CommandEncoder extends MessageToMessageEncoder<Object> {
-    protected void encode
-      (final ChannelHandlerContext ctx, Object msg, final List<Object> out)
+
+    protected void encode(ChannelHandlerContext ctx, Object msg, List out)
     throws Exception {
-      //Log.finer("Writing ",msg);
-      final ByteBuf raw =
+      ByteBuf ENC =
+        Unpooled.wrappedBuffer("ENC ".getBytes(data.encoding));
+      ByteBuf RN =
+        Unpooled.wrappedBuffer("\r\n".getBytes(data.encoding));
+
+      Log.finer("Sending command: ", msg);
+      ByteBuf raw =
         Unpooled.wrappedBuffer(msg.toString().getBytes(data.encoding));
 
-      if (data.security == null) {
-        out.add(raw);
-        out.add(Unpooled.wrappedBuffer("\r\n".getBytes(data.encoding)));
-      } else data.security.new As<ByteBuf>() {
-        public ByteBuf convert(SecurityContext sc) throws Exception {
-          return Unpooled.wrappedBuffer(
-            Unpooled.wrappedBuffer("ENC ".getBytes(data.encoding)),
-            Base64.encode(sc.protect(raw), false));
-        } public void done(ByteBuf encoded) {
-          out.add(encoded);
-        } public void fail() {
-          out.add(raw);
-        } public void always() {
-          out.add(Unpooled.wrappedBuffer("\r\n".getBytes(data.encoding)));
-        }
-      }; 
+      if (data.security != null) {
+        ByteBuf eb = Base64.encode(data.security.protect(raw), false);
+        ctx.write(ENC);
+        ctx.write(eb);
+      } else {
+        ctx.write(raw);
+      }
+
+      ctx.writeAndFlush(RN);
     }
   }
 
@@ -515,42 +531,44 @@ public class FTPChannel {
     };
   }
 
-  // Try to authenticate with a GSS credential.
-  public Bell<Reply> authenticate(final Bell<GSSCredential> cred) {
-    final Bell<Reply> rb = new Bell<Reply>();
-    cred.new Promise() {
-      public void done(GSSCredential cred) {
-        authenticate(cred).promise(rb);
+  /**
+   * Authenticate when the credential becomes available. This should be done
+   * from inside a locked view.
+   */
+  public Bell<Reply> authenticate(Bell<GSSCredential> cred) {
+    return cred.new AsBell<Reply>() {
+      public Bell<Reply> convert(GSSCredential cred) throws Exception {
+        Log.fine("Authenticating with: ", cred);
+        return authenticate(cred);
+      } public void done(Reply r) {
+        Log.fine("Authentication successful: ", r);
       } public void fail(Throwable t) {
-        rb.ring(t);
+        Log.fine("Authentication failed: ", t);
       }
     };
-    return rb;
   }
 
-  public Bell<Reply> authenticate(GSSCredential cred) {
+  /**
+   * Try to authenticate with a GSS credential. This should be done from inside
+   * a locked view.
+   */
+  public Bell<Reply> authenticate(GSSCredential cred) throws Exception {
     final GSSSecurityContext sec;
 
     if (data.security != null)
-      throw new RuntimeException("already authenticated");
+      throw new RuntimeException("Already authenticated");
 
-    data.security = new Bell<SecurityContext>();
+    sec = new GSSSecurityContext(cred);
 
-    try {
-      sec = new GSSSecurityContext(cred);
-    } catch (Exception e) {
-      return new Bell<Reply>().ring(e);
-    }
-
-    return new Command("AUTH GSSAPI").new Promise() {
-      public void then(Reply r) {
-        if (r.isNegative()) {
-          ring(r.asError());
-        } else if (r.isIncomplete()) {
-          handshake(sec, Unpooled.EMPTY_BUFFER).promise(this);
-        } else {
-          data.security.ring(sec); ring(r);
-        }
+    return new Command("AUTH GSSAPI").new AsBell<Reply>() {
+      public Bell<Reply> convert(Reply r) throws Exception {
+        if (r.isNegative())
+          throw r.asError();
+        if (r.isIncomplete())
+          return handshake(sec, Unpooled.EMPTY_BUFFER);
+        return Bell.wrap(r);
+      } public void done() {
+        data.security = sec;
       }
     };
   }
@@ -563,20 +581,23 @@ public class FTPChannel {
     try {
       ByteBuf ot = Base64.encode(sec.handshake(it), false);
 
+      Log.finer("Sending ADAT: ", ot);
       new Command("ADAT", ot.toString(data.encoding)) {
         public void done(Reply r) throws Exception {
-          switch (r.code/100) {
-            case 3:
-              ByteBuf token = Base64.decode(r.lines[0].skipBytes(5));
-              handshake(sec, token).promise(bell);
-            case 2:
-              promise(bell); return;
-            default:
-              throw r.asError();
+          if (r.isIncomplete()) {
+            String line = r.message().substring(5);
+            ByteBuf bb = Unpooled.wrappedBuffer(line.getBytes(data.encoding));
+            ByteBuf token = Base64.decode(bb);
+            handshake(sec, token).promise(bell);
+          } else if (r.isComplete()) {
+            promise(bell);
+          } else {
+            throw r.asError();
           }
         }
       };
     } catch (Exception e) {
+      Log.fine("ADAT failed: ", e);
       bell.ring(e);
     }
 
@@ -671,18 +692,18 @@ public class FTPChannel {
 
   // Append the given command to the handler queue. If the command is a sync
   // command and there is nothing else in the queue, just fulfill it
-  // immediately and don't put it in the queue. This will return whether the
-  // command handler was appended or not (currently, it is always true).
-  private boolean appendHandler(Command c) {
+  // immediately and don't put it in the queue.
+  private void addHandler(Command c) {
     synchronized (data.handlers) {
-      if (!c.isSync() || !data.handlers.isEmpty())
-        return data.handlers.add(c);
+      if (!c.isSync() || !data.handlers.isEmpty()) {
+        data.handlers.add(c);
+        return;
+      }
     }
 
     // If we didn't return, it's a sync. Handling a sync is fast, but we should
     // release handlers as soon as possible.
     c.ring();
-    return true;
   }
 
   // "Feed" the topmost handler a reply. If the reply is a preliminary reply,
@@ -716,6 +737,8 @@ public class FTPChannel {
         }
       }
     }
+
+    Log.finer("Feeding handler: ", handler);
 
     // Now we can call the handlers.
     if (reply.isPreliminary())
@@ -767,13 +790,21 @@ public class FTPChannel {
       FTPChannel.this.new Command(null) {
         public void done() { Lock.this.assumeControl(); }
       };
-    } public Bell<FTPChannel> lock() {
-      throw new IllegalStateException("cannot lock from a view");
-    } public void unlock() {
+    }
+
+    /** The channel may not be locked through a locked view. */
+    public Bell<FTPChannel> lock() {
+      throw new IllegalStateException("Cannot lock from a view");
+    }
+
+    /** Give control back to the parent channel. */
+    public void unlock() {
       new Command(null) {
         public void done() { FTPChannel.this.assumeControl(); }
       };
-    } protected void finalize() {
+    }
+
+    protected void finalize() {
       if (data.owner == this)
         FTPChannel.this.assumeControl();
     }
@@ -783,7 +814,7 @@ public class FTPChannel {
   // owner.
   protected synchronized void assumeControl() {
     synchronized (data) {
-      //Log.finer(data.owner.hashCode()+" -> "+hashCode());
+      Log.finer(data.owner.hashCode()+" -> "+hashCode());
       data.owner = this;
       if (!deferred.isEmpty()) {
         Deque<Deferred> realDeferred = deferred;
@@ -818,13 +849,15 @@ public class FTPChannel {
       // If we're not the owner, defer the command. Otherwise, send it.
       if (data.owner != FTPChannel.this) {
         deferred.add(this);
-        //Log.finer(FTPChannel.this.hashCode()+": Deferring "+this);
+        Log.finer(FTPChannel.this.hashCode()+": Deferring "+this);
       } else {
-        appendHandler(cmd);
+        addHandler(cmd);
         if (verb != null) channel().writeAndFlush(this);
-        //Log.finer(FTPChannel.this.hashCode()+": Sending "+this);
+        Log.finer(FTPChannel.this.hashCode()+": Sending "+this);
       }
-    } public String toString() {
+    }
+
+    public String toString() {
       if (verb == null)
         return "(sync)";
       StringBuilder sb = new StringBuilder(verb.toString());
@@ -855,6 +888,7 @@ public class FTPChannel {
    */
   public class Command extends Bell<Reply> {
     private final boolean isSync;
+    private String debugString;
 
     /**
      * Constructing this will automatically cause the given command to be
@@ -867,9 +901,13 @@ public class FTPChannel {
     public Command(Object verb, Object... args) {
       synchronized (data) {
         isSync = (verb == null);
+        if (isSync)
+          debugString = "(sync)";
+        else
+          debugString = verb.toString();
         new Deferred(this, verb, args).send();
       }
-    } 
+    }
 
     /** An optional handler for intermediate replies. */
     public void handle(Reply r) { }
@@ -879,11 +917,11 @@ public class FTPChannel {
      * range (inclusive), instead of ringing successfully with the reply.
      */
     public Bell<Reply> expect(final int lo, final int hi) {
-      return this.new Promise() {
-        public void then(Reply r) {
+      return this.new As<Reply>() {
+        public Reply convert(Reply r) throws Exception {
           if (r.code < lo || r.code > hi)
             throw r.asError();
-          ring(r);
+          return r;
         }
       };
     }
@@ -901,6 +939,12 @@ public class FTPChannel {
     public Bell<Reply> expectNegative()   { return expect(400, 599); }
 
     public synchronized final boolean isSync() { return isSync; }
+
+    public String toString() {
+      if (debugString != null)
+        return debugString;
+      return super.toString();
+    }
   }
 
   /**
@@ -944,14 +988,22 @@ public class FTPChannel {
     }
 
     private Bell<SocketChannel> tryPassiveThenActive() {
-      return tryPassive().new Promise() {
-        public void then(Throwable t) { tryActive().promise(this); }
+      return tryPassive().new AsBell<SocketChannel>() {
+        public Bell<SocketChannel> convert(SocketChannel ch) {
+          return Bell.wrap(ch);
+        } public Bell<SocketChannel> convert(Throwable t) {
+          return tryActive();
+        }
       };
     }
 
     private Bell<SocketChannel> tryActiveThenPassive() {
-      return tryActive().new Promise() {
-        public void then(Throwable t) { tryPassive().promise(this); }
+      return tryActive().new AsBell<SocketChannel>() {
+        public Bell<SocketChannel> convert(SocketChannel ch) {
+          return Bell.wrap(ch);
+        } public Bell<SocketChannel> convert(Throwable t) {
+          return tryPassive();
+        }
       };
     }
 
@@ -1042,7 +1094,7 @@ public class FTPChannel {
     public synchronized DataChannel startWhen(Bell bell) {
       bell.new Promise() {
         public void done() { start(); }
-        public void fail() { close(); }
+        public void fail(Throwable t) { close(t); }
       };
       return this;
     }

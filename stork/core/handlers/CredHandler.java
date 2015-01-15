@@ -6,8 +6,8 @@ import stork.core.server.*;
 import stork.cred.*;
 
 /** Handles creating credentials. */
-public class CredHandler extends Handler<CredRequest> {
-  public void handle(CredRequest req) {
+public class CredHandler extends Handler<ActionCredRequest> {
+  public void handle(ActionCredRequest req) {
     req.assertLoggedIn();
 
     if (req.action == null) {
@@ -17,23 +17,19 @@ public class CredHandler extends Handler<CredRequest> {
         req.ring(Collections.emptySet());
       else
         req.ring(req.user().credentials.keySet());
-    } if (req.action.equals("create")) {
+    } else if (req.action.equals("create")) {
       req.assertMayChangeState();
       StorkCred<?> cred = req.resolve();
       String uuid = UUID.randomUUID().toString();
       req.user().credentials.put(uuid, cred);
       req.ring(new stork.ad.Ad("uuid", uuid));
-    } throw new RuntimeException("Invalid action.");
+    } else {
+      throw new RuntimeException("Invalid action.");
+    }
   }
 }
 
-class CredRequest extends Request {
+/** A CredRequest with an extra action field. */
+class ActionCredRequest extends CredRequest {
   String action;
-  String type;
-
-  public StorkCred resolve() {
-    StorkCred cred = StorkCred.newFromType(type);
-    asAd().unmarshal(cred);
-    return cred;
-  }
 }

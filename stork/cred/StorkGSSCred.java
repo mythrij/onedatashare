@@ -16,7 +16,7 @@ import stork.util.*;
 /** A wrapper for a GSS credential. */
 public class StorkGSSCred extends StorkCred<Bell<GSSCredential>> {
   private String proxy_string;
-  private int proxy_life   = 3600;
+  private int proxy_life = 3600;
   private String myproxy_user;
   private String myproxy_pass;
   private String myproxy_host;

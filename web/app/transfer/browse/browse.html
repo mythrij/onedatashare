@@ -57,7 +57,8 @@
         </button>
       </div>
       <div class="btn-group">
-        <button class="btn btn-default" title="Authenticate" ng-click="selectCredentialModal()">
+        <button class="btn btn-default" title="Authenticate"
+                ng-class="end.credential && 'btn-info'" ng-click="credModal()">
           <i class="fa fa-key"></i>
         </button>
       </div>
@@ -78,112 +79,3 @@
     </div>
   </div>
 </div>
-
-<!-- A node in the file browser tree. -->
-<script type="text/ng-template" id="browse-node.html">
-  <li bindonce="root" ng-repeat="root in files | orderBy:['-dir','name']"
-      bo-class="{ dir: root.dir, file: !root.dir, loading: loading,
-                  dot: root.name && root.name.charAt(0) == '.' }"
-      ng-class="{open:open}">
-    <i class="fa text-muted toggle" ng-mousedown="root.dir && toggle()"
-       ng-class="{'fa-minus-square-o': open, 'fa-plus-square-o': !open}"></i>
-    <div ng-class="{'alert-info': selected, 'alert-warning': !!error}"
-         ng-dblclick="toggle()" ng-mousedown="select($event)">
-      <i class="fa" bo-class="{'fa-file': !root.dir}" ng-class="{'fa-folder': (root.dir && !open), 'fa-folder-open': (root.dir && open)}"></i>
-      <span bo-bind="root.name"></span>
-      <span class="small text-muted" bo-if="!root.dir"
-            bo-bind="(root.size | size)+'B'"></span>
-      <span class="fade fa fa-refresh text-muted" ng-class="loading && 'in fa-spin'"></span>
-      <div class="small text-muted" style="padding-left:1em">
-        <span bo-if="root.time" bo-bind="root.time*1000 | date:'medium'"></span>
-        <span bo-bind="root.perm"></span>
-      </div>
-    </div>
-    <ul ng-if="root.files" ng-init="files = root.files; selected = false; open = false"
-        class="stork-list" ng-include="'browse-node.html'">
-    </ul>
-    <ul ng-if="error" class="alert-danger" style="overflow-x: auto">
-      <li>
-        <strong>Error:</strong> <span ng-bind="error"></span>
-      </li>
-    </ul>
-  </li>
-  <li ng-if="!files.length">
-    <em ng-show="loading" class="text-muted">Loading...</em>
-    <em ng-hide="loading" class="text-muted">(empty)</em>
-  </li>
-</script>
-
-<!-- Modal dialog to create a new folder. -->
-<script type="text/ng-template" id="new-folder.html">
-  <div class="modal-header" ng-init="parent = selectedUris()[0]||uri().href()">
-    <button type="button" class="close" ng-click="$dismiss()" aria-hidden="true">
-      &times;
-    </button>
-    <h4 class="modal-title">
-      <i class="fa fa-folder-open"></i>
-      <i class="fa fa-plus"></i>
-      Create a New Folder
-    </h4>
-  </div>
-  <div class="modal-body">
-    <div class="form-group col-sm-push-3 col-sm-6">
-      <label>Name</label>
-      <input type="text" class="form-control" ng-model="name" focus-me required>
-    </div>
-  </div>
-  <div class="clearfix"></div>
-  <div class="text-center modal-footer">
-    <button type="submit" class="btn btn-primary">
-      OK
-    </button>
-    <button ng-click="$dismiss()" type="button" class="btn btn-default">
-      Cancel
-    </button>
-  </div>
-</script>
-
-<!-- Modal dialog to select a credential. -->
-<script type="text/ng-template" id="select-credential.html">
-  <div class="modal-header" ng-init="parent = selectedUris()[0]||uri().href()">
-    <button type="button" class="close" ng-click="$dismiss()" aria-hidden="true">
-      &times;
-    </button>
-    <h4 class="modal-title">
-      <i class="fa fa-folder-open"></i>
-      <i class="fa fa-plus"></i>
-      Create a New Folder
-    </h4>
-  </div>
-  <div class="modal-body">
-    <div class="form-group col-sm-push-3 col-sm-6">
-      <label>Name</label>
-      <input type="text" class="form-control" ng-model="name" focus-me required>
-    </div>
-  </div>
-  <div class="clearfix"></div>
-  <div class="text-center modal-footer">
-    <button type="submit" class="btn btn-primary">
-      OK
-    </button>
-    <button ng-click="$dismiss()" type="button" class="btn btn-default">
-      Cancel
-    </button>
-  </div>
-
-  <div class="col-md-4" ng-controller="CredCtrl">
-    <select ng-change="credChanged()" ng-model="end.cred"
-            class="form-control dropdown-toggle" title="Select credential">
-      <option value="">No credential</option>
-      <optgroup label="Saved credentials">
-        <option disabled ng-if="creds.length == 0">(none)</option>
-        <option value="{{c.uuid}}" ng-repeat="c in creds">
-          {{c.name || 'Unnamed ('+c.type+')'}}
-        </option>
-      </optgroup>
-      <optgroup class="new-credential" label="New credential">
-        <option value="new-myproxy">MyProxy</option>
-      </optgroup>
-    </select>
-  </div>
-</script>

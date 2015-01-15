@@ -203,8 +203,6 @@ public class HTTPServer {
     }
 
     public void channelRead(final ChannelHandlerContext ctx, HttpObject msg) {
-      boolean done = false;
-
       // Handle routing and wrapping request headers.
       if (msg instanceof HttpRequest) {
         HttpRequest head = (HttpRequest) msg;
@@ -222,10 +220,15 @@ public class HTTPServer {
             return pauseBell;
           } public void read() {
             ctx.read();
+          } public void finishResponse() {
+            ctx.writeAndFlush(new DefaultLastHttpContent());
+            // TODO: Also handle "Connection: close"...
+            if (request.version() == HTTP_1_0)
+              ctx.close();
+            request.close();
+            request = null;
           }
         });
-
-        done = (request.size() <= 0);
       }
 
       // If there was a problem, anything up to the next request should be
@@ -238,16 +241,8 @@ public class HTTPServer {
         HttpContent c = (HttpContent) msg;
         request.translate(c.content());
 
-        done = done || (msg instanceof LastHttpContent);
-      }
-
-      // Finalize the request and prepare for next request.
-      if (done) {
-        if (request.version() == HTTP_1_0)
-          ctx.close();
-        request.close();
-        request = null;
-        ctx.writeAndFlush(new DefaultLastHttpContent());
+        if (msg instanceof LastHttpContent)
+          request.finishRequest();
       }
     }
 

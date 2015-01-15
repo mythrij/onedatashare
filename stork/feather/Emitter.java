@@ -26,9 +26,9 @@ public class Emitter<T> extends Bell {
     { pull(); }
     private void pull() {
       Emitter.this.get(new Bell<T>() {
-        public void then(T t) throws Throwable {
+        public T convert(T t) throws Throwable {
           each(t);
-          ring();
+          return t;
         } public void done() {
           pull();
         } public void fail(Throwable t) {
@@ -111,6 +111,14 @@ public class Emitter<T> extends Bell {
 
   protected void finalize() {
     finalizeRemaining(null);
+  }
+
+  /** Consume the contents of the emitter into a list. */
+  public Bell<List<T>> asList() {
+    final List<T> list = new LinkedList<T>();
+    return new ForEach() {
+      public void each(T t) { list.add(t); }
+    }.as(list);
   }
 
   /** Create an emitter from an array. */

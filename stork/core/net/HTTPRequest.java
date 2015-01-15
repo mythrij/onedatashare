@@ -31,7 +31,8 @@ public abstract class HTTPRequest extends Session<HTTPRequest,HTTPBody> {
 
   /** Take care of sending data through the right {@code HTTPBody}. */
   public void translate(ByteBuf buffer) {
-    tap.drain(new Slice(buffer));
+    if (tap != null)
+      tap.drain(new Slice(buffer));
   }
 
   public boolean isMultipart() {
@@ -50,6 +51,14 @@ public abstract class HTTPRequest extends Session<HTTPRequest,HTTPBody> {
   /** Force a read on the underlying socket. */
   public abstract void read();
 
+  /** Called when the response is finished. */
+  public abstract void finishResponse();
+
+  /** Called when the request is finished. */
+  public void finishRequest() {
+    if (tap != null)
+      tap.finish();
+  }
 
   /** Send an error to the requestor. */
   public void sendError(int code) {

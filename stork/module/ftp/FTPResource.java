@@ -211,13 +211,12 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
         String path = makePath();
         return session.channel.new Command("MKD", path);
       }
-    }.new Promise() {
-      public void then(FTPChannel.Reply r) {
+    }.new As<FTPChannel.Reply>() {
+      public FTPChannel.Reply convert(FTPChannel.Reply r) {
         // Warning, REALLY unfortunate hack ahead.
         if (r.isComplete() || r.toString().indexOf("exists") >= 0)
-          ring();
-        else
-          ring(new RuntimeException("Could not create directory."));
+          return r;
+        throw new RuntimeException("Could not create directory.");
       }
     }.as(this);
   }

@@ -6,8 +6,13 @@ import stork.feather.*;
 /** Request common to many commands that operate on endpoints. */
 public class EndpointRequest extends Request {
   public String uri;
-  public String credential;
+  public InnerCredRequest credential;
   public String module;
+
+  // Hack to get around marshalling badness.
+  private class InnerCredRequest extends CredRequest {
+    public User user() { return EndpointRequest.this.user(); }
+  }
 
   /** Get the {@code Resource} identified by this request. */
   public Resource resolve() { return resolveAs(null); }
@@ -41,10 +46,10 @@ public class EndpointRequest extends Request {
       throw new RuntimeException("No URI provided for "+name+"endpoint.");
     if (result.uri.scheme() == null)
       throw new RuntimeException("No URI scheme for "+name+"endpoint.");
-    if (user() != null && credential != null)
-      result.credential = user().credentials.get(credential);
-    if (credential != null && result.credential == null) throw new
-      RuntimeException("Invalid credential for "+name+"endpoint.");
+    if (credential != null)
+      result.credential = credential.resolve();
+    if (credential != null && result.credential == null)
+      throw new RuntimeException("Invalid credential for "+name+"endpoint.");
     if (module != null)
       result.module = server().modules.byHandle(module);
     else

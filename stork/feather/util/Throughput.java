@@ -21,7 +21,7 @@ public class Throughput {
     q = (quantum <= 0) ? 0 : quantum;
   }
 
-  /** Create a {@code Throughput} from {@code time} and {@code progress}. */
+  /** Create a {@code Throughput} from {@code bytes} and {@code time}. */
   public Throughput(double bytes, double time) {
     q = 0;
     th = bytes/time;

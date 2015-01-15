@@ -14,8 +14,17 @@ import stork.feather.util.*;
  * @param <T> the supertype of objects that can ring this {@code Bell}.
  */
 public class Bell<T> implements Future<T> {
-  private transient Object object;  // May contain T or Throwable.
+  // Statically allocated pre-rung bells.
+  private final static Bell rungBell = new Bell((Object) null);
+  private final static Bell failedBell = new Bell((Throwable) null);
+  private final static Bell cancelledBell = new Bell().cancel();
+
+  /** The object held by this bell, once rung. May contain T or Throwable. */
+  private transient Object object;
   private transient List<Bell<? super T>> promises = Collections.emptyList();
+
+  private static final Dispatcher dispatcher =
+    new Dispatcher("Bell Dispatcher");
 
   // State. 0 = unrung, 1 = thenned, 2 = done, 3 = failed
   private transient byte state = 0;
@@ -40,12 +49,41 @@ public class Bell<T> implements Future<T> {
   }
 
   /**
+   * A static {@code Bell} that has already been rung.
+   *
+   * @return A {@code Bell} that has already been rung with {@code null}.
+   */
+  public static <C> Bell<C> rungBell() {
+    return (Bell<C>) rungBell;
+  }
+
+  /**
+   * A static {@code Bell} that has already failed.
+   *
+   * @return A {@code Bell} that has already failed with {@code
+   * NullPointerException}.
+   */
+  public static <C> Bell<C> failedBell() {
+    return (Bell<C>) failedBell;
+  }
+
+  /**
+   * A static {@code Bell} that has been cancelled.
+   *
+   * @return A {@code Bell} that has already failed with {@code
+   * CancellationException}.
+   */
+  public static <C> Bell<C> cancelledBell() {
+    return (Bell<C>) cancelledBell;
+  }
+
+  /**
    * Ring the {@code Bell} with {@code object}.
    *
    * @param object The {@code T} to ring the {@code Bell} with.
    * @return This {@code Bell}.
    */
-  public final Bell<T> ring(T object) {
+  public final synchronized Bell<T> ring(T object) {
     return ring(object, null);
   }
 
@@ -54,7 +92,7 @@ public class Bell<T> implements Future<T> {
    *
    * @return This {@code Bell}.
    */
-  public final Bell<T> ring() {
+  public final synchronized Bell<T> ring() {
     return ring(null, null);
   }
 
@@ -64,7 +102,7 @@ public class Bell<T> implements Future<T> {
    * @param error The {@code Throwable} to ring the {@code Bell} with.
    * @return This {@code Bell}.
    */
-  public final Bell<T> ring(Throwable error) {
+  public final synchronized Bell<T> ring(Throwable error) {
     return ring(null, (error != null) ? error : new NullPointerException());
   }
 
@@ -87,8 +125,12 @@ public class Bell<T> implements Future<T> {
     } return this;
   }
 
+  /**
+   * Dispatch this Bell's handlers. The top-level Bell class has no-op
+   * handlers, so only dispatch if this is a subclass of Bell.
+   */
   private void dispatchHandlers() {
-    new Task() {
+    if (getClass() != Bell.class) dispatch(new Runnable() {
       public void run() {
         // Call the handlers.
         if (isFailed()) try {
@@ -105,45 +147,31 @@ public class Bell<T> implements Future<T> {
           // Discard.
         }
       }
-    }.dispatch();
+    });
   }
 
-  // Dispatcher task for thenning a bell with an object.
-  private static class DispatchDone<V> extends Task {
-    final V object;
-    final List<Bell> bells;
-    DispatchDone(List<Bell> bells, V object) {
-      this.bells = bells;
-      this.object = object;
-    } public void run() {
-      for (Bell b : bells) then(b);
-    } public void then(Bell b) {
-      b.then(object, null);
-    }
-  } private static class DispatchFail extends DispatchDone<Throwable> {
-    DispatchFail(List<Bell> bells, Throwable error) {
-      super(bells, error);
-    } public void then(Bell b) {
-      b.then(null, object);
-    }
-  }
-
-  private void dispatchPromise(Bell<? super T> bell) {
-    List<Bell<? super T>> list = (List) Collections.singletonList(bell);
-    dispatchPromises(list);
-  } private void dispatchPromises(List<Bell<? super T>> bells) {
+  /** Dispatch a promise to all promised bells. */
+  private <B extends Bell<? super T>> void dispatchPromises(List<B> bells) {
+    if (bells.isEmpty())
+      return;
     if (isFailed())
-      new DispatchFail((List) bells, error()).dispatch();
+      dispatch(new DispatchFail<B>(bells, error()));
     else
-      new DispatchDone((List) bells, object()).dispatch();
+      dispatch(new DispatchDone<B,T>(bells, object()));
+  }
+
+  /** Dispatch a promise to a single bell. */
+  private <B extends Bell<? super T>> void dispatchPromise(B bell) {
+    List<B> bells = Collections.singletonList(bell);
+    dispatchPromises(bells);
   }
 
   /**
-   * Cancel the {@code Bell}, resolving it with a cancellation error. This is
-   * here to satisfy the requirements of the {@code Future} interface.
+   * Cancel the {@code Bell}, resolving it with a {@code
+   * CancellationException}.
    *
-   * @param mayInterruptIfRunning Ignored in this implementation.
-   * @return {@code true} if the {@code Bell} was cancelled as a result of this call,
+   * @param mayInterruptIfRunning Ignored in this implementation. @return
+   * {@code true} if the {@code Bell} was cancelled as a result of this call,
    * {@code false} otherwise.
    * @see Future#cancel(boolean)
    */
@@ -242,56 +270,19 @@ public class Bell<T> implements Future<T> {
     } throw new RuntimeException(error());
   }
 
-  // Run then() handlers and discard any exceptions.
-  private synchronized void then(T object, Throwable error) {
-    if (state >= 1) return;
-
-    state = 1;  // Set to thenned state.
-
-    if (error == null) try {
-      then(object);
-    } catch (Throwable t) {
-      error = t;
-    } if (error != null) try {
-      then(error);
-    } catch (Throwable t) {
-      // Discard.
-    }
-  }
-
-  /**
-   * This is called when a {@code Bell} this {@code Bell} was promised to has
-   * rung. By default, it simply rings this {@code Bell} with {@code object}.
-   * Any {@code Throwable} thrown by this method will cause {@link
-   * #then(Throwable)} to be called with that {@code Throwable}.
-   *
-   * @param object the value of the parent {@code Bell}.
-   */
-  protected void then(T object) throws Throwable { ring(object); }
-
-  /**
-   * This is called when a {@code Bell} this {@code Bell} was promised to has
-   * failed. By default, it simply rings this {@code Bell} with {@code error}.
-   * Any {@code Throwable} thrown by this method will be discarded.
-   *
-   * @param error the error the parent {@code Bell} was failed with.
-   */
-  protected void then(Throwable error) throws Throwable { ring(error); }
-
   /**
    * This handler is called when this {@code Bell} has rung. Subclasses can
-   * override this to do something when the {@code Bell} has been rung. These
-   * will be run before waiting threads are notified. Any exceptions thrown
-   * will be discarded.  Implement this if you don't care about the value.
+   * override this to do something when the {@code Bell} has been rung. Any
+   * exceptions thrown will be discarded. Implement this if you don't care
+   * about the value.
    */
   protected void done() throws Throwable { }
 
   /**
    * This handler is called when this {@code Bell} has rung and is passed the
    * rung value. Subclasses can override this to do something when the {@code
-   * Bell} has been rung. These will be run before waiting threads are
-   * notified. Any exceptions thrown will be discarded. Implement this if you
-   * want to see the value.
+   * Bell} has been rung. Any exceptions thrown will be discarded. Implement
+   * this if you want to see the value.
    *
    * @param object the resolution value of this {@code Bell}.
    */
@@ -300,18 +291,16 @@ public class Bell<T> implements Future<T> {
   /**
    * This handler is called when the {@code Bell} has rung with an exception.
    * Subclasses can override this to do something when the {@code Bell} has
-   * been rung.  These will be run before waiting threads are notified. Any
-   * exceptions thrown will be discarded. Implement this if you don't care
-   * about the error.
+   * been rung. Any exceptions thrown will be discarded. Implement this if you
+   * don't care about the error.
    */
   protected void fail() throws Throwable { }
 
   /**
    * This handler is called when the {@code Bell} has rung with an exception,
    * and is passed the exception. Subclasses can override this to do something
-   * when the {@code Bell} has been rung. These will be run before waiting
-   * threads are notified. Any exceptions thrown will be discarded. Implement
-   * this if you want to see the error.
+   * when the {@code Bell} has been rung. Any exceptions thrown will be
+   * discarded. Implement this if you want to see the error.
    *
    * @param error the {@code Throwable} this {@code Bell} failed with.
    */
@@ -319,9 +308,9 @@ public class Bell<T> implements Future<T> {
 
   /**
    * Subclasses can override this to do something when the {@code Bell} has
-   * been rung.  These will be run before waiting threads are notified. Any
-   * {@code Exception}s thrown will be discarded. This will always be run after
-   * either {@link #done(Object)} or {@link #fail(Throwable)}.
+   * been rung. Any {@code Exception}s thrown will be discarded. This will
+   * always be run after either {@link #done(Object)} or {@link
+   * #fail(Throwable)}.
    */
   protected void always() throws Throwable { }
 
@@ -336,8 +325,6 @@ public class Bell<T> implements Future<T> {
   public synchronized <V extends Bell<? super T>> V promise(V bell) {
     if (bell.isDone()) {
       return bell;  // Don't be silly...
-    } if (isDone()) {
-      dispatchPromise(bell);  // We've already rung, dispatch.
     } else switch (promises.size()) {
       case 0:  // This is an immutable empty list. Change to singleton.
         promises = (List) Collections.singletonList(bell);
@@ -346,36 +333,15 @@ public class Bell<T> implements Future<T> {
         promises = new LinkedList<Bell<? super T>>(promises);
       default:
         promises.add(bell);
+    } if (isDone()) {
+      dispatchPromise(bell);  // We've already rung, dispatch.
     } return bell;
   }
 
   /**
-   * Return a {@code Bell} promised to this {@code Bell} which will run the
-   * given handler on success.
-   */
-  public synchronized Bell<T> promise(BellHandler.Done done) {
-    return (Bell<T>) fromHandler(done);
-  }
-
-  /**
-   * Return a {@code Bell} promised to this {@code Bell} which will run the
-   * given handler on failure.
-   */
-  public synchronized Bell<T> promise(BellHandler.Fail fail) {
-    return (Bell<T>) promise(fromHandler(fail));
-  }
-
-  /**
-   * Return a {@code Bell} promised to this {@code Bell} which will run the
-   * given handler on ring.
-   */
-  public synchronized Bell<T> promise(BellHandler.Always always) {
-    return (Bell<T>) promise(fromHandler(always));
-  }
-
-  /**
-   * Return a new {@code Bell} promised to this {@code Bell}. This can be used
-   * to avoid leaking references to {@code Bell}s.
+   * Return a new {@code Bell} promised to this {@code Bell}. This has a number
+   * of uses, including preventing callers from ringing shared {@code Bell}s
+   * and preventing memory leaks.
    */
   public Bell<T> detach() {
     return (Bell<T>) promise(new Bell<T>());
@@ -386,8 +352,7 @@ public class Bell<T> implements Future<T> {
    * instantiation.
    */
   public class Promise extends Bell<T> {
-    /** Create a promise which does not delegate to any other bell. */
-    public Promise() { Bell.this.promise(this); }
+    { Bell.this.promise(this); }
   }
 
   /**
@@ -398,7 +363,7 @@ public class Bell<T> implements Future<T> {
    * @param <V> the supertype of objects this {@code Bell} converts.
    */
   public abstract class As<V> extends Bell<V> {
-    public As() {
+    {
       Bell.this.new Promise() {
         public void done(T t) {
           try {
@@ -446,7 +411,7 @@ public class Bell<T> implements Future<T> {
    * @param <V> the supertype of objects this {@code Bell} converts.
    */
   public abstract class AsBell<V> extends Bell<V> {
-    public AsBell() {
+    {
       Bell.this.new Promise() {
         public void done(T t) {
           try {
@@ -535,53 +500,8 @@ public class Bell<T> implements Future<T> {
   public synchronized Bell<T> deadline(double deadline) {
     if (!isDone()) new Task() {
       public void run() { ring(new TimeoutException()); }
-    }.dispatch(deadline); 
+    }.dispatch(deadline);
     return this;
-  }
-
-  /**
-   * Check if this {@code Bell} has at least one promise and all promises have
-   * completed. This can be used by subclasses to implement backward-flowing
-   * cancellations, for example for requests that are cancelled by its
-   * requestor(s) and whose operation may thus be cancelled, or for "whichever
-   * responds first" patterns.
-   * <p/>
-   * If this {@code Bell} is in the process of ringing or has already rung,
-   * this method returns {@code false} regardless of the state of its promises
-   * during its lifetime.
-   *
-   * @return {@code true} if there are one or more promised {@code Bell}s and they have
-   * all completed; {@code false} otherwise.
-   */
-  public synchronized boolean promisesCompleted() {
-    if (promises == null || promises.size() == 0)
-      return false;
-    for (Bell b : promises)
-      if (!b.isDone()) return false;
-    return true;
-  }
-
-  // Used in rungBell() and failedBell()...
-  private final static Bell rungBell   = new Bell().ring();
-  private final static Bell failedBell = new Bell().ring((Throwable)null);
-
-  /**
-   * A static {@code Bell} that has already been rung.
-   *
-   * @return A {@code Bell} that has already been rung with {@code null}.
-   */
-  public static Bell<?> rungBell() {
-    return (Bell<?>) rungBell;
-  }
-
-  /**
-   * A static {@code Bell} that has already failed.
-   *
-   * @return A {@code Bell} that has already failed with {@code
-   * NullPointerException}.
-   */
-  public static Bell<?> failedBell() {
-    return (Bell<?>) failedBell;
   }
 
   /**
@@ -591,48 +511,73 @@ public class Bell<T> implements Future<T> {
    * @param deadline the time in seconds after this call that {@code Bell} will
    * ring.
    */
-  public static Bell<?> timerBell(final double deadline) {
-    return (Bell<?>) new Bell() {{
-      new Task() {
-        public void run() { ring(); }
-      }.dispatch(deadline); 
-    }};
+  public static Bell<?> timerBell(double deadline) {
+    final Bell<?> bell = new Bell<Void>();
+    dispatch(new Runnable() {
+      public void run() { bell.ring(); }
+    }, deadline);
+    return bell;
   }
 
   /**
-   * Return a {@code Bell} which will ring with the value of this {@code Bell},
-   * if this {@code Bell} rings successfully, or else will be promised to
-   * {@code other} if this {@code Bell} fails.
-   *
-   * @param other the {@code Bell} to promise the returned {@code Bell} to if
-   * this {@code Bell} fails.
+   * @return A {@code Bell} which only rings if this {@code Bell} succeeds, and
+   * does not ring otherwise.
+   */
+  public Bell<T> onSuccess() {
+    final Bell<T> bell = new Bell<T>();
+    new Promise() {
+      public void done(T t) { bell.ring(t); }
+    };
+    return bell;
+  }
+
+  /**
+   * @return A {@code Bell} which only rings if this {@code Bell} fails, and
+   * does not ring otherwise.
+   */
+  public <T> Bell<T> onFail() {
+    final Bell<T> bell = new Bell<T>();
+    new Promise() {
+      public void fail(Throwable t) { bell.ring(t); }
+    };
+    return bell;
+  }
+
+  /**
+   * Return a {@code Bell} which will ring with either the value of this {@code
+   * Bell} or {@code other}. If both fail, the returned {@code Bell} will ring
+   * with the error of this {@code Bell}.
    */
   public Bell<T> or(final Bell<T> other) {
-    if (isDone())
-      return other;
-    return this.new Promise() {
-      public void then(Throwable err) { other.promise(this); }
+    return new AsBell<T>() {
+      { other.onSuccess().promise(this); }
+      public Bell<T> convert(T t) { return Bell.this; }
+      public Bell<T> convert(Throwable t) { return other; }
     };
   }
 
   /**
-   * Return a {@code Bell} which will be promised to {@code other} if this
-   * {@code Bell} rings successfully, or else will fail if this {@code Bell}
-   * fails.
-   *
-   * @param other the {@code Bell} to promise the returned {@code Bell} to if
-   * this {@code Bell} succeeds.
+   * Return a {@code Bell} which will ring with the value of {@code other} if
+   * this {@code Bell} rings successfully, or else will fail if this {@code
+   * Bell} fails.
    */
   public <V> Bell<V> and(final Bell<V> other) {
-    if (other == null)
-      return this.as((V) null);
-    if (isFailed())
-      return (Bell<V>) this;
-    if (isDone())
-      return other;
-    return this.new AsBell<V>() {
-      public Bell<V> convert(T t) { return other; }
+    final Bell<V> bell = new Bell<V>();
+    new Promise() {
+      public void done(T t) {
+        other.promise(bell);
+      } public void fail(Throwable t) {
+        bell.ring(t);
+      }
     };
+    other.new Promise() {
+      public void done(V v) {
+        if (Bell.this.isDone()) bell.ring(v);
+      } public void fail(Throwable t) {
+        bell.ring(t);
+      }
+    };
+    return bell;
   }
 
   /**
@@ -642,7 +587,7 @@ public class Bell<T> implements Future<T> {
    * @return A {@code Bell} that will ring successfully if any of {@code bells}
    * rings successfully, or will fail otherwise.
    */
-  public static Bell any(Bell... bells) {
+  public static Bell<?> any(Bell<?>... bells) {
     return any(Arrays.asList(bells));
   }
 
@@ -653,21 +598,25 @@ public class Bell<T> implements Future<T> {
    * @return A {@code Bell} that will ring successfully if any of {@code bells}
    * rings successfully, or will fail otherwise.
    */
-  public static Bell any(Collection<Bell> bells) {
+  public static Bell<?> any(final Collection<Bell<?>> bells) {
     final int len = bells.size() - Collections.frequency(bells, null);
     if (len == 0)
       return Bell.rungBell();
     if (len == 1) for (Bell b : bells)
       if (b != null) return b;
-    Bell bell = new Bell() {
+    return new Bell() {
       int failed = 0;
-      public void then(Throwable t) {
-        if (++failed >= len) ring(t);
+      {
+        final Bell bell = this;
+        for (final Bell b : bells) if (b != null) b.new Promise() {
+          public void done() {
+            bell.ring();
+          } public void fail(Throwable t) {
+            if (++failed == len) bell.ring(t);
+          }
+        };
       }
     };
-    for (Bell b : bells)
-      if (b != null) b.promise(bell);
-    return bell;
   }
 
   /**
@@ -677,7 +626,7 @@ public class Bell<T> implements Future<T> {
    * @return A {@code Bell} that will ring successfully if all of {@code bells}
    * ring successfully, or will fail otherwise.
    */
-  public static Bell all(Bell... bells) {
+  public static Bell<?> all(Bell<?>... bells) {
     return all(Arrays.asList(bells));
   }
 
@@ -688,21 +637,25 @@ public class Bell<T> implements Future<T> {
    * @return A {@code Bell} that will ring successfully if all of {@code bells}
    * ring successfully, or will fail otherwise.
    */
-  public static Bell all(Collection<Bell> bells) {
+  public static Bell<?> all(final Collection<Bell<?>> bells) {
     final int len = bells.size() - Collections.frequency(bells, null);
     if (len == 0)
       return Bell.rungBell();
     if (len == 1) for (Bell b : bells)
       if (b != null) return b;
-    Bell bell = new Bell() {
+    return new Bell() {
       int succeeded = 0;
-      public void then(Object o) {
-        if (++succeeded >= len) ring();
+      {
+        final Bell bell = this;
+        for (final Bell b : bells) if (b != null) b.new Promise() {
+          public void done() {
+            if (++succeeded == len) bell.ring();
+          } public void fail(Throwable t) {
+            bell.ring(t);
+          }
+        };
       }
     };
-    for (Bell b : bells)
-      if (b != null) b.promise(bell);
-    return bell;
   }
 
   /**
@@ -712,7 +665,7 @@ public class Bell<T> implements Future<T> {
    * @return A {@code Bell} that will ring successfully if all of {@code bells}
    * ring successfully, or will fail otherwise.
    */
-  public static Bell wait(Bell... bells) {
+  public static Bell<?> wait(Bell<?>... bells) {
     return wait(Arrays.asList(bells));
   }
 
@@ -723,7 +676,7 @@ public class Bell<T> implements Future<T> {
    * @return A {@code Bell} that will ring successfully if all of {@code bells}
    * ring successfully, or will fail otherwise.
    */
-  public static Bell wait(Collection<Bell> bells) {
+  public static Bell<?> wait(Collection<Bell<?>> bells) {
     final int len = bells.size() - Collections.frequency(bells, null);
     if (len == 0)
       return Bell.rungBell();
@@ -738,27 +691,6 @@ public class Bell<T> implements Future<T> {
     for (Bell b : bells)
       if (b != null) b.promise(bell);
     return bell;
-  }
-
-  /** Return a {@code Bell} that will run the given handler on success. */
-  public static <V> Bell<V> fromHandler(final BellHandler.Done done) {
-    return new Bell<V>() {
-      public void done(V v) throws Throwable { done.done(v); }
-    };
-  }
-
-  /** Return a {@code Bell} that will run the given handler on failure. */
-  public static <V> Bell<V> fromHandler(final BellHandler.Fail fail) {
-    return new Bell<V>() {
-      public void fail(Throwable t) throws Throwable { fail.fail(t); }
-    };
-  }
-
-  /** Return a {@code Bell} that will run the given handler on ring. */
-  public static <V> Bell<V> fromHandler(final BellHandler.Always always) {
-    return new Bell<V>() {
-      public void always() throws Throwable { always.always(); }
-    };
   }
 
   /** Return a {@code Bell} rung with {@code value}. */
@@ -789,61 +721,51 @@ public class Bell<T> implements Future<T> {
     });
   }
 
-  /**
-   * If a {@code Bell} is garbage collected before ringing, cancel it.
-   */
-  protected void finalize() {
-    if (!isDone()) cancel();
-  }
+  /** If a {@code Bell} is garbage collected before ringing, cancel it. */
+  protected void finalize() { cancel(); }
 
   /** Put some runnable task on the main dispatch queue. */
   public static void dispatch(Runnable runnable) {
-    Dispatcher.dispatch(runnable);
+    dispatcher.dispatch(runnable);
+  }
+
+  /** Put some delayed runnable task on the main dispatch queue. */
+  public static void dispatch(Runnable runnable, double delay) {
+    dispatcher.dispatch(runnable, delay);
+  }
+
+  /** A task for the dispatch loop. */
+  private static abstract class Task implements Runnable {
+    final void dispatch() {
+      dispatcher.dispatch(this);
+    } final void dispatch(double delay) {
+      dispatcher.dispatch(this, delay);
+    }
+    public abstract void run();
   }
 }
 
-/** A task for the dispatch loop. */
-abstract class Task implements Runnable {
-  final void dispatch() {
-    Dispatcher.dispatch(this);
-  } final void dispatch(double delay) {
-    Dispatcher.dispatch(this, delay);
-  }
-  public abstract void run();
-}
-
-/** A dispatch loop used internally. */
-final class Dispatcher {
-  // Keep the thread pool at size 1 for now until we can figure out how to
-  // better control ordering...
-  private static final ScheduledThreadPoolExecutor pool =
-    new ScheduledThreadPoolExecutor(1);
-
-  // Wrap a runnable for safety.
-  private static Runnable wrap(final Runnable r) {
-    return new Runnable() {
-      public void run() {
-        try {
-          r.run();
-        } catch (Exception e) {
-          System.out.print("Exception in bell loop:");
-          e.printStackTrace();
-        }
-      }
-    };
-  }
-
-  /**
-   * Schedule {@code runnable} to be executed as soon as possible.
-   */
-  static synchronized void dispatch(final Runnable runnable) {
-    pool.schedule(wrap(runnable), 0, TimeUnit.MICROSECONDS);
-  }
-
-  /**
-   * Schedule {@code runnable} to be executed after a delay.
-   */
-  static synchronized void dispatch(Runnable runnable, double delay) {
-    pool.schedule(wrap(runnable), (long)(delay*1E6), TimeUnit.MICROSECONDS);
+/** Dispatch a successful value to the given bells. */
+final class DispatchDone<B extends Bell<? super C>,C> implements Runnable {
+  final C object;
+  final List<B> bells;
+  DispatchDone(List<B> bells, C object) {
+    this.bells = bells;
+    this.object = object;
+  } public void run() {
+    for (B b : bells) b.ring(object);
   }
 }
+
+/** Dispatch a failure value to the given bells. */
+final class DispatchFail<B extends Bell<?>> implements Runnable {
+  final Throwable error;
+  final List<B> bells;
+  DispatchFail(List<B> bells, Throwable error) {
+    this.bells = bells;
+    this.error = error;
+  } public void run() {
+    for (B b : bells) b.ring(error);
+  }
+}
+

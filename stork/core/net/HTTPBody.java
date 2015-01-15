@@ -98,7 +98,7 @@ public class HTTPBody extends Resource<HTTPRequest,HTTPBody> {
     }
 
     public void finish() {
-      session.toNetty(new DefaultLastHttpContent());
+      session.finishResponse();
     }
   };
 
@@ -158,7 +158,7 @@ public class HTTPBody extends Resource<HTTPRequest,HTTPBody> {
   public boolean ready() {
     return session.ready;
   }
-  
+
   /**
    * Get the length from the Content-Length header.
    */

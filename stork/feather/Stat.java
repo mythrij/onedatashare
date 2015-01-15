@@ -102,6 +102,13 @@ public class Stat {
   /**
    * Set the files underneath this tree and reset cached values.
    */
+  public Stat setFileNames(Collection<String> fs) {
+    return setFiles(fs.toArray(new String[fs.size()]));
+  }
+
+  /**
+   * Set the files underneath this tree and reset cached values.
+   */
   public Stat setFiles(Stat[] fs) {
     files = fs;
     total_size = -1;
