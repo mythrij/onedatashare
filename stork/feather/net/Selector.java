@@ -26,6 +26,11 @@ public class Selector<C extends SelectableChannel> {
   };
 
   public Selector(C channel) {
+    try {
+      channel.configureBlocking(false);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
     synchronized (Selector.class) {
       init();
       try {
