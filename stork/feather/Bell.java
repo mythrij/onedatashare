@@ -721,9 +721,6 @@ public class Bell<T> implements Future<T> {
     });
   }
 
-  /** If a {@code Bell} is garbage collected before ringing, cancel it. */
-  protected void finalize() { cancel(); }
-
   /** Put some runnable task on the main dispatch queue. */
   public static void dispatch(Runnable runnable) {
     dispatcher.dispatch(runnable);
