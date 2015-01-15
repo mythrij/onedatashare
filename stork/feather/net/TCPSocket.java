@@ -24,6 +24,18 @@ class TCPSocket extends Socket {
   private ByteBuffer readBuffer;
   private List<ByteBuffer> writeBuffer = new LinkedList<ByteBuffer>();
 
+  public TCPSocket() {
+    this(0);
+  }
+
+  public TCPSocket(int port) {
+    this(DNSResolver.resolve(null), port);
+  }
+
+  public TCPSocket(String host) {
+    this(DNSResolver.resolve(host), 0);
+  }
+
   public TCPSocket(String host, int port) {
     this(DNSResolver.resolve(host), port);
   }
@@ -125,18 +137,11 @@ class TCPSocket extends Socket {
         return new TCPSocket(sc);
       } public void done(Socket socket) {
         try {
-          Bell<?> bell = accept(socket);
-          if (bell == null || bell.isDone()) {
-            expectAccept();
-          } else bell.new Promise() {
-            public void done() {
-              expectAccept();
-            } public void fail(Throwable t) {
-              close(t);
-            }
-          };
+          accept(socket);
         } catch (Exception e) {
           socket.close(e);
+        } finally {
+          expectAccept();
         }
       } public void always() {
         expectAccept();
@@ -242,13 +247,9 @@ class TCPSocket extends Socket {
   }
 
   public static void main(String[] args) throws Exception {
-    new TCPSocket("127.0.0.1", 12345) {
-      public Bell<?> accept(Socket socket) {
-        Coder.loop(socket);
-        socket.onClose().new Promise() {
-          public void done() { System.out.println("Closed!"); }
-        };
-        return null;
+    new TCPSocket(12345) {
+      public void accept(Socket socket) {
+        socket.join(socket);
       }
     }.listen().onClose().sync();
   }

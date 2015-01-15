@@ -88,10 +88,8 @@ public abstract class Socket extends Coder<byte[],byte[]> {
    * exception here will cause the socket to be closed.
    *
    * @param socket a {@code Socket} which has just been accepted.
-   * @return A {@code Bell} which rings when the next connection should be
-   * accepted.
    */
-  protected Bell<?> accept(Socket socket) {
+  protected void accept(Socket socket) {
     throw new RuntimeException();
   }
 
