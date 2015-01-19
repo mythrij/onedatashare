@@ -18,11 +18,13 @@
 
         <div class="large input-group-lg text-center panel panel-heading transfer-controls">
           <button class="fa fa-arrow-left btn btn-lg btn-default" title="Transfer"
-                  ng-disabled="!canTransfer(left, right, false)" ng-click="transfer(left, right, false)">
-          </button><button class="fa fa-refresh btn btn-lg btn-default ph" title="Synchronize"
-                  ng-disabled="!canSync(left, right)" ng-click="sync(left, right)">
-          </button><button class="btn fa fa-arrow-right btn-lg btn-default" title="Transfer"
                   ng-disabled="!canTransfer(right, left, false)" ng-click="transfer(right, left, false)">
+          </button>
+          <button class="fa fa-refresh btn btn-lg btn-default ph" title="Synchronize"
+                  ng-disabled="!canSync(left, right)" ng-click="sync(left, right)">
+          </button>
+          <button class="btn fa fa-arrow-right btn-lg btn-default" title="Transfer"
+                  ng-disabled="!canTransfer(left, right, false)" ng-click="transfer(left, right, false)">
           </button>
         </div>
 
@@ -99,7 +101,7 @@
       ng-class="{open:open}">
     <i class="fa text-muted toggle" ng-mousedown="root.dir && toggle()"
        ng-class="{'fa-minus-square-o': open, 'fa-plus-square-o': !open}"></i>
-    <div ng-class="{'alert-info': selected, 'alert-warning': !!error}"
+    <div ng-class="{'alert-info': root.selected, 'alert-warning': !!error}"
          ng-dblclick="toggle()" ng-mousedown="select($event)">
       <i class="fa" bo-class="{'fa-file': !root.dir}" ng-class="{'fa-folder': (root.dir && !open), 'fa-folder-open': (root.dir && open)}"></i>
       <span bo-bind="root.name"></span>
@@ -111,12 +113,12 @@
         <span bo-bind="root.perm"></span>
       </div>
     </div>
-    <ul ng-if="root.files" ng-init="files = root.files; selected = false; open = false"
-        class="stork-list" ng-include="'browse-node.html'">
+    <ul ng-if="root.files" class="stork-list" ng-include="'browse-node.html'"
+        ng-init="files = root.files; root.selected = false; open = false">
     </ul>
     <ul ng-if="error" class="alert-danger" style="overflow-x: auto">
       <li>
-        <strong>Error:</strong> <span ng-bind="error"></span>
+        <strong>Error:</strong> <span ng-bind="error.error"></span>
       </li>
     </ul>
   </li>
@@ -147,36 +149,41 @@
 
 <!-- Modal dialog to select a credential. -->
 <script type="text/ng-template" id="select-credential.html">
-  <form ng-init="new = { credential: (end.credential | copy) }"
-        ng-submit="end.credential = new.credential; $hide()">
-    <div class="form-group" ng-class="modal-body" ng-controller="CredCtrl">
-      <select ng-model="new.credential.type" class="form-control nullable">
+  <form ng-controller="SelectCredential" ng-submit="saveCredential(cred)">
+    <div class="form-group" ng-class="modal-body">
+      <select ng-model="selected" ng-change="changeSelection(selected)"
+              class="form-control nullable">
         <option value="">No credential</option>
-        <optgroup label="Saved credentials">
+        <optgroup label="Saved credentials" ng-controller="Credentials">
           <option disabled ng-if="creds.length == 0">(none)</option>
-          <option value="{{c.uuid}}" ng-repeat="c in creds">
+          <option value="{{uuid}}" ng-repeat="(uuid,c) in creds"
+                  ng-selected="selected == uuid">
             {{c.name || 'Unnamed ('+c.type+')'}}
           </option>
         </optgroup>
         <optgroup class="new-credential" label="New credential">
+          <option value="userpass">Username/Password</option>
           <option value="gss">MyProxy</option>
         </optgroup>
       </select>
 
-      <div class="modal-body" ng-switch="new.credential.type">
+      <div class="modal-body" ng-switch="selected">
+        <div ng-switch-when="userpass">
+          <div ng-include="'new-userpass-cred.html'"></div>
+        </div>
         <div ng-switch-when="gss">
           <div ng-include="'new-myproxy-cred.html'"></div>
-        </div>
-        <div ng-switch-default>
-          <div ng-init="new.credential = undefined"></div>
         </div>
       </div>
     </div>
 
+    <pre ng-if="debugMode">{{cred|json}}</pre>
+
     <div class="clearfix"></div>
 
     <div class="text-center modal-footer">
-      <button type="submit" class="btn btn-primary">
+      <button type="submit" class="btn btn-primary"
+              ng-disabled="cred.$agreed === false">
         OK
       </button>
       <button ng-click="$hide()" type="button" class="btn btn-default">
@@ -186,22 +193,56 @@
   </form>
 </script>
 
+<!-- Create new credential username/password credential. -->
+<script type="text/ng-template" id="new-userpass-cred.html">
+  <div class="form-group col-md-6">
+    <label>Username</label>
+    <input type="text" class="form-control" ng-model="cred.username" required>
+  </div>
+
+  <div class="form-group col-md-6">
+    <label>Password</label>
+    <input type="password" class="form-control" ng-model="cred.password">
+  </div>
+
+  <div ng-include="'password-warning.html'"></div>
+</script>
+
 <!-- Create new credential MyProxy credential. -->
 <script type="text/ng-template" id="new-myproxy-cred.html">
   <div class="form-group col-md-12">
     <label>MyProxy server</label>
-    <input type="text" class="form-control" ng-model="new.credential.myproxy_host"
+    <input type="text" class="form-control" ng-model="cred.myproxy_host"
            placeholder="e.g., myproxy.example.com" required>
   </div>
 
   <div class="form-group col-md-6">
     <label>MyProxy username</label>
-    <input type="text" class="form-control" ng-model="new.credential.myproxy_user" required>
+    <input type="text" class="form-control" ng-model="cred.myproxy_user" required>
   </div>
 
   <div class="form-group col-md-6">
     <label>MyProxy password</label>
-    <input type="password" class="form-control" ng-model="new.credential.myproxy_pass" required>
+    <input type="password" class="form-control" ng-model="cred.myproxy_pass" required>
   </div>
+
+  <div ng-include="'password-warning.html'"></div>
 </script>
 
+<!-- Show this message for password-based credential types. -->
+<script type="text/ng-template" id="password-warning.html">
+  <span class="text-muted">
+    Note: We will receive the above username and password pair as cleartext.
+    You authorize us to store this information and use to log in to endpoints
+    on your behalf, strictly at your request. Though we do our best to keep
+    this information confidential, this authentication method is inherently
+    insecure. If possible, you should use another method.
+  </span>
+
+  <div class="checkbox text-center" ng-init="cred.$agreed = false">
+    <label>
+      <input type="checkbox" ng-model="cred.$agreed">
+      Click here to verify having read the above statement.
+    </label>
+  </div>
+</script>

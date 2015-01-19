@@ -16,11 +16,11 @@ import stork.util.*;
 import static stork.core.handlers.UserHandler.*;
 
 /**
- * The internal state of a Stork server. It should be possible to serialize
- * this a {@code Server} object and, in restoring it, recover the entire state
- * of the system. In other words, a {@code Server} object is the root of the
- * state file. This is how the Stork server maintains persistence across
- * restarts and system migrations.
+ * The internal state of a Stork server. It should be possible to serialize a
+ * {@code Server} object and, in restoring it, recover the entire state of the
+ * system. In other words, a {@code Server} object is the root of the state
+ * file. This is how the Stork server maintains persistence across restarts and
+ * system migrations.
  */
 public class Server {
   /** Configuration for the server. */
@@ -171,13 +171,12 @@ public class Server {
     handlers.put("user", UserHandler.class);
     handlers.put("cred", CredHandler.class);
     handlers.put("get", GetHandler.class);
+    handlers.put("oauth", OAuthHandler.class);
 
     modules.populate();
     scheduler.start();
 
     dumpStateThread = new DumpStateThread(config, this);
     dumpState();
-
-    Log.info("Server state: "+Ad.marshal(this));
   }
 }

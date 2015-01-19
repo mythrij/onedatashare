@@ -25,6 +25,7 @@ import stork.feather.*;
 import stork.feather.util.*;
 import stork.feather.URI;
 import stork.feather.Path;
+import stork.feather.errors.*;
 import stork.core.server.*;
 
 /**
@@ -75,8 +76,16 @@ public class HTTPInterface extends StorkInterface {
         if (o != null)
           sendJSON(Pipes.tapFromString(Ad.marshal(o)));
       } public void fail(Throwable t) {
-        body.status = INTERNAL_SERVER_ERROR;
-        sendJSON(Pipes.tapFromString(errorToAd(t)));
+        // If it's a special redirect error, send a redirect.
+        if (t instanceof Redirect) {
+          Redirect redirect = (Redirect) t;
+          body.location = redirect.url;
+          body.status = FOUND;
+          sendJSON(Pipes.tapFromString(errorToAd(t)));
+        } else {
+          body.status = INTERNAL_SERVER_ERROR;
+          sendJSON(Pipes.tapFromString(errorToAd(t)));
+        }
       } private void sendJSON(Tap tap) {
         body.contentType = "application/json; charset=UTF-8";
         tap.attach(body.sink()).tap().start();
@@ -152,6 +161,16 @@ public class HTTPInterface extends StorkInterface {
     Ad ad = new Ad();
     QueryStringDecoder qsd = new QueryStringDecoder(query, false);
     Map<String, List<String>> map = qsd.parameters();
+
+    // XXX: This is a really terrible hack, but we need it since the web
+    // interface relies on it for some very specific things.
+    if (map.size() == 1 && map.containsKey("$json")) {
+      ad = Ad.parse(map.get("$json").get(0));
+      if (ad == null)
+        throw new RuntimeException("Bad $json field.");
+      return ad;
+    }
+
     for (String k : map.keySet())
       ad.put(k, map.get(k).get(0));
     return ad;

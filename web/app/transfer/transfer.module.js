@@ -2,7 +2,7 @@
 
 /** Module for controlling and monitoring transfers. */
 angular.module('stork.transfer', [
-  'stork.transfer.browse', 'stork.transfer.queue'
+  'stork.transfer.browse', 'stork.transfer.queue', 'stork.credentials'
 ])
 
 .controller('Transfer', function ($scope, user, stork, $modal) {
@@ -65,9 +65,15 @@ angular.module('stork.transfer', [
 
   $scope.transfer = function (src, dest, contents) {
     var job = $scope.job;
-    job.src.uri  = _.keys(src.$selected)[0];
-    job.dest.uri = _.keys(dest.$selected)[0];
-    console.log(job);
+    var su = job.src.uri  = _.keys(src.$selected)[0];
+    var du = job.dest.uri = _.keys(dest.$selected)[0];
+    console.log(src.$selected[su]);
+
+    // If src is a file and dest a directory, add file name.
+    if (src.$selected[su].file && dest.$selected[du].dir) {
+      var n = new URI(su).segment(-1);
+      job.dest.uri = du = new URI(du).segment(n).toString();
+    }
 
     var modal = $modal({
       title: 'Transfer',

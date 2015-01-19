@@ -16,13 +16,13 @@ public class CredHandler extends Handler<ActionCredRequest> {
       if (req.user().credentials == null)
         req.ring(Collections.emptySet());
       else
-        req.ring(req.user().credentials.keySet());
+        req.ring(req.user().credentialList());
     } else if (req.action.equals("create")) {
       req.assertMayChangeState();
       StorkCred<?> cred = req.resolve();
-      String uuid = UUID.randomUUID().toString();
-      req.user().credentials.put(uuid, cred);
-      req.ring(new stork.ad.Ad("uuid", uuid));
+      final String _uuid = req.user().addCredential(cred);
+      req.ring(new Object() { String uuid = _uuid; });
+      server.dumpState();
     } else {
       throw new RuntimeException("Invalid action.");
     }

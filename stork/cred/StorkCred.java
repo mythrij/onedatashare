@@ -1,5 +1,8 @@
 package stork.cred;
 
+import java.util.*;
+
+import stork.ad.*;
 import stork.feather.*;
 import stork.scheduler.*;
 import stork.util.*;
@@ -9,6 +12,8 @@ import stork.util.*;
 public abstract class StorkCred<O> extends Credential<O> {
   public String type;
   public String name = "(unnamed)";
+  /** Cached hash code. */
+  private transient int hashCode = -1;
 
   public StorkCred(String type) { this.type = type; }
 
@@ -17,6 +22,8 @@ public abstract class StorkCred<O> extends Credential<O> {
       return new StorkUserinfo();
     if (type.equals("gss"))
       return new StorkGSSCred();
+    if (type.equals("oauth"))
+      return new StorkOAuthCred(null);
     throw new RuntimeException("Unknown credential type.");
   }
 
@@ -27,5 +34,25 @@ public abstract class StorkCred<O> extends Credential<O> {
       String name = StorkCred.this.name;
       String type = StorkCred.this.type;
     };
+  }
+
+  /** Return an array of objects that make up this credential's identity. */
+  protected abstract Object[] hashables();
+
+  /** Check if two credentials' "hashables" are array-equal. */
+  public boolean equals(Object o) {
+    if (o == null)
+      return false;
+    if (o.getClass() != getClass())
+      return false;
+    StorkCred cred = ((StorkCred) o);
+    return Arrays.equals(hashables(), cred.hashables());
+  }
+
+  /** Return the hash code of credential's "hashables". */
+  public int hashCode() {
+    if (hashCode == -1)
+      hashCode = Arrays.hashCode(hashables());
+    return hashCode;
   }
 }

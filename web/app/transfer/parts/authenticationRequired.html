@@ -1,0 +1,30 @@
+<!-- Ask a user to click through to an OAuth page. -->
+<div class="text-center">
+  <h3>This endpoint requires authentication</h3>
+
+  <!-- Show buttons for whatever authentication options are allowed. -->
+  <div ng-repeat="o in error.options" ng-switch="o">
+    <a ng-switch-when="oauth" class="btn btn-lg btn-info"
+       ng-click="openOAuth('/api/stork/oauth?type=dropbox')">
+      <i class="large fa fa-dropbox"></i>
+      Authenticate with Dropbox
+    </a>
+    <a ng-switch-when="gss" class="btn btn-lg btn-info"
+       ng-click="end.credential = {type: 'gss'}; credModal()">
+      <i class="large fa fa-key"></i>
+      Authenticate with MyProxy
+    </a>
+    <a ng-switch-when="userinfo" class="btn btn-lg btn-warning"
+       ng-click="end.credential = {type: 'userinfo'}; credModal()">
+      <i class="large fa fa-key"></i>
+      Authenticate with password
+    </a>
+  </div>
+
+  <!-- Default to show if no options are given. -->
+  <div ng-if="!error.options || error.options.length == 0">
+    <a class="btn btn-lg btn-info" ng-click="credModal()">
+      <i class="large fa fa-key"></i> Select credential
+    </a>
+  </div>
+</div>

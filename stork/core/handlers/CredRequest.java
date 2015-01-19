@@ -8,6 +8,7 @@ import stork.cred.*;
 /**
  * Create or retrieve a credential. Used to by CredHandler and EndpointRequest.
  */
+// TODO: This whole thing is messy. Fix this at some point.
 public class CredRequest extends Request {
   /** An optional name for the credential. */
   String name;
@@ -17,10 +18,11 @@ public class CredRequest extends Request {
   UUID uuid;
 
   // Sigh, this is here as a terrible hack. Please FIXME.
-  String myproxy_host;
-  int myproxy_port;
-  String myproxy_user;
-  String myproxy_pass;
+  String username, password;  // For StorkUserinfo.
+  String myproxy_host;  // For StorkGSSCred.
+  Integer myproxy_port;  // For StorkGSSCred.
+  String myproxy_user;  // For StorkGSSCred.
+  String myproxy_pass;  // For StorkGSSCred.
 
   public StorkCred resolve() {
     if (uuid != null) {

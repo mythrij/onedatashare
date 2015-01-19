@@ -15,7 +15,7 @@ public class ProxyTransfer<S extends Resource<?,S>, D extends Resource<?,D>>
 extends Transfer<S,D> {
   private LinkedList<Pending> queue = new LinkedList<Pending>();
   private Throwable error = null;
-  
+
   // A pending transfer and a bell to ring when it starts.
   private static class Pending {
     final Bell bell;

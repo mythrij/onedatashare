@@ -36,6 +36,7 @@ public class HTTPBody extends Resource<HTTPRequest,HTTPBody> {
   protected URI uri;
   protected HttpResponseStatus status;  // The status we're going to report.
   public String contentType;
+  public String location;
 
   /** Create an HTTPBody from the given HTTP request. */
   public HTTPBody(HTTPRequest req) {
@@ -129,6 +130,10 @@ public class HTTPBody extends Resource<HTTPRequest,HTTPBody> {
           r.headers().set(CONTENT_LENGTH, stat.size);
         r.headers().set(CONTENT_TYPE, contentType);
 
+        if (location != null) {
+          r.headers().set(LOCATION, location);
+        }
+
         if (stat.name != null) {
           String s = "inline; filename=\""+stat.name+"\"";
           r.headers().set("Content-Disposition", s);
@@ -141,11 +146,8 @@ public class HTTPBody extends Resource<HTTPRequest,HTTPBody> {
     };
   }
 
-  /**
-   * Create an HTTP response for a throwable.
-   */
+  /** Create an HTTP response for a throwable. */
   private HttpResponse errorToHttpMessage(Throwable t) {
-    t.printStackTrace();
     String message = StorkInterface.errorToAd(t).get("message");
     ByteBuf b = Unpooled.copiedBuffer(message.getBytes());
     FullHttpResponse r = new DefaultFullHttpResponse(

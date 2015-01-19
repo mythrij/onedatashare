@@ -196,7 +196,7 @@ public class Job {
       return new Bell<Job>(e);
     }
   }
-  
+
   // Handle the actual starting the transfer. This method can throw any
   // exception it wants.
   private synchronized Bell<Job> start0() throws Exception {

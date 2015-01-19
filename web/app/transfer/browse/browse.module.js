@@ -47,7 +47,7 @@ angular.module('stork.transfer.browse', [
   });
 })
 
-.controller('Browse', function ($scope, stork, $q, $modal, user, history) {
+.controller('Browse', function ($scope, stork, $q, $modal, $window, user, history) {
   // Reset (or initialize) the browse pane.
   $scope.reset = function () {
     $scope.uri = {};
@@ -91,6 +91,7 @@ angular.module('stork.transfer.browse', [
   $scope.fetch = function (uri) {
     var scope = this;
     scope.loading = true;
+    delete scope.error;
 
     var ep = angular.copy($scope.end);
     ep.uri = uri.href();
@@ -160,13 +161,16 @@ angular.module('stork.transfer.browse', [
 
   // Download the selected file.
   $scope.download = function (uris) {
-    console.log(uris);
     if (uris == undefined || uris.length == 0)
-      alert('You must select a file.')
+      return alert('You must select a file.')
     else if (uris.length > 1)
-      alert('You can only download one file at a time.');
-    else
-      stork.get(uris[0]);
+      return alert('You can only download one file at a time.');
+
+    var end = {
+      uri: uris[0],
+      credential: $scope.end.credential
+    };
+    stork.get(end);
   };
 
   // Return the scope corresponding to the parent directory.
@@ -206,29 +210,38 @@ angular.module('stork.transfer.browse', [
     if (!this.selected) {
       if (!e.ctrlKey)
         $scope.unselectAll();
-      $scope.end.$selected[u] = new function () {
-        this.unselect = function () {
-          delete scope.selected;
-        };
-      };
-      this.selected = true;
+      $scope.end.$selected[u] = this.root;
+      this.root.selected = true;
     } else {
       if (!e.ctrlKey)
         $scope.unselectAll();
       delete $scope.end.$selected[u];
-      delete this.selected;
+      delete this.root.selected;
     }
+
+    console.log($scope.end.$selected);
+    console.log(this);
   };
 
   $scope.unselectAll = function () {
     var s = $scope.end.$selected;
     if (s) _.each(s, function (f) {
-      f.unselect();
+      f.selected = false;
     })
     $scope.end.$selected = { };
   };
 
   $scope.selectedUris = function () {
     return _.keys($scope.end.$selected);
+  };
+
+  $scope.openOAuth = function (url) {
+    $window.oAuthCallback = function (uuid) {
+      $scope.end.credential = {uuid: uuid};
+      $scope.go($scope.uri.text);
+      $scope.$apply();
+    };
+    var child = $window.open(url, 'oAuthWindow');
+    return false;
   };
 });

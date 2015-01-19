@@ -28,7 +28,7 @@ public abstract class Transfer<S extends Resource, D extends Resource> {
   private final Bell onStart = new Bell() {
     public void done() {
       if (!Transfer.this.isDone())
-        timer = new Time(); 
+        timer = new Time();
     } public void fail(Throwable t) {
       onStop.ring(t);
     }
@@ -76,7 +76,7 @@ public abstract class Transfer<S extends Resource, D extends Resource> {
   /**
    * Start this transfer when {@code bell} rings.
    *
-   * @param bell a {@code Bell} whoses ringing indicates the transfer should
+   * @param bell a {@code Bell} whose ringing indicates the transfer should
    * start. If {@code Bell} fails, the transfer fails with the same {@code
    * Throwable}.
    * @return This {@code Transfer}.

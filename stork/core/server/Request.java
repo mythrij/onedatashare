@@ -5,6 +5,7 @@ import java.util.*;
 import stork.ad.*;
 import stork.core.handlers.*;
 import stork.feather.*;
+import stork.feather.errors.*;
 
 /**
  * A request made to the scheduler. Handlers should provide an instance of a
@@ -103,11 +104,11 @@ public abstract class Request extends Bell<Object> implements Runnable {
     if (!server.config.registration)
       return;
     if (user() == null || user().isAnonymous())
-      throw new RuntimeException("Permission denied.");
+      throw new PermissionDenied();
   }
 
   public void assertMayChangeState() {
     if (!mayChangeState)
-      throw new RuntimeException("Permission denied.");
+      throw new PermissionDenied();
   }
 }

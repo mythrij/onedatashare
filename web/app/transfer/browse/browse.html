@@ -43,7 +43,8 @@
           <i class="fa fa-folder-open"></i>
           <i class="fa fa-plus"></i>
         </button>
-        <button class="fa fa-trash btn btn-default ph" title="Delete" ng-click="rm(selectedUris())"></button>
+        <button class="fa fa-trash btn btn-default ph" title="Delete"
+                ng-click="rm(selectedUris())"></button>
       </div>
       <div class="btn-group">
         <button class="btn btn-default" ng-class="{active:showHidden}" title="Toggle hidden"
@@ -71,11 +72,13 @@
       <ul class="stork-list" ng-if="root && !error" ng-init="files = [root]"
           ng-include="'browse-node.html'">
       </ul>
-      <ul class="stork-list" ng-if="error" class="alert-danger" style="overflow-x: auto">
-        <li>
-          <strong>Error:</strong> <span ng-bind="error"></span>
-        </li>
-      </ul>
+      <div ng-if="error && error.type != 'AuthenticationRequired'"
+           class="alert-danger" style="overflow-x: auto">
+        <strong>Error:</strong> <span ng-bind="error.error"></span>
+      </div>
+      <div ng-if="error.type == 'AuthenticationRequired'"
+           ng-include="'/app/transfer/parts/authenticationRequired.html'">
+      </div>
     </div>
   </div>
 </div>

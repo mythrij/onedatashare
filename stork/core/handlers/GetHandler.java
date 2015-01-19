@@ -12,9 +12,12 @@ public class GetHandler extends Handler<EndpointRequest> {
     Transfer t = resource.transferTo(req.resource);
     t.start();
     t.onStop().new Promise() {
-      public void always() {
-        server.sessions.put(resource.session);
+      public void done() {
         req.ring();
+      } public void fail(Throwable t) {
+        req.ring(t);
+      } public void always() {
+        server.sessions.put(resource.session);
       }
     };
   }
