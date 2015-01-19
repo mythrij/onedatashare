@@ -2,9 +2,10 @@ package stork.ad;
 
 import java.util.*;
 
-// Sort ads by their fields. Prepending a minus sign to the beginning of
-// a key name causes that key to be sorted in reverse.
-
+/**
+ * Sort ads by their fields. Prepending a minus sign to the beginning of a key
+ * name causes that key to be sorted in reverse.
+ */
 public class AdSorter {
   TreeSet<Ad> set;
   Comparator<Ad> comparator;

@@ -5,8 +5,10 @@ import java.io.*;
 import java.lang.ref.*;
 import java.lang.reflect.*;
 
-// TODO: Generic serialization stuff.
-
+/**
+ * This class implements a JSON-like data structure. Objects can be marshalled
+ * into Ads, and Ads can likewise be unmarshalled back into objects.
+ */
 public class Ad implements Serializable {
   static final long serialVersionUID = 5988172454007663702L;
 
@@ -530,6 +532,7 @@ public class Ad implements Serializable {
       } try {
         return out.cast(m.invoke(this, o));
       } catch (RuntimeException e) {
+        e.printStackTrace();
         throw (e.getCause() == defer) ? defer : e;
       }
     }
@@ -540,7 +543,7 @@ public class Ad implements Serializable {
      * more specific version of {@code unmarshal(...)} is not defined. By
      * default, this defers to a more general handler.
      *
-     * @param object the {@code AdObject} to create a new {@code T} from
+     * @param object the {@code Object} to create a new {@code T} from
      * @return An unmarshalled instance of {@code T}.
      */
     public T unmarshal(Object object) { throw defer(); }
@@ -589,10 +592,12 @@ public class Ad implements Serializable {
       AdType vt = t.generics()[1];
       kt.outer(t.outer);
       vt.outer(t.outer);
-      System.out.println(t+"<"+kt.outer+","+vt.outer+">");
       Map<String,AdObject> map = map(false);
-      if (map != null) for (Map.Entry<String, AdObject> e : map.entrySet())
-        ((Map)o).put(e.getKey(), e.getValue().as(vt));
+      if (map != null) for (Map.Entry<String, AdObject> e : map.entrySet()) {
+        Object key = AdObject.wrap(e.getKey()).as(kt);
+        Object value = e.getValue().as(vt);
+        ((Map)o).put(key, value);
+      }
     } else if (o instanceof Collection) {
       AdType vt = t.generics()[0];
       vt.outer(t.outer);

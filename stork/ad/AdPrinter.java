@@ -2,8 +2,7 @@ package stork.ad;
 
 import java.util.*;
 
-// Class for rendering ads in different ways.
-
+/** Class for rendering ads in different ways. */
 public class AdPrinter {
   // Options
   protected int indent = 2;  // Indentation size.

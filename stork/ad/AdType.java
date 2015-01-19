@@ -3,9 +3,7 @@ package stork.ad;
 import java.lang.reflect.*;
 import java.util.*;
 
-// A betterized wrapper around Java reflection types that makes it feel
-// just a bit more classlier.
-
+/** A wrapper around Java reflection types. */
 public class AdType {
   final transient Type type;
   private transient Class clazz;
