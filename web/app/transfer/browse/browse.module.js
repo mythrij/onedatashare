@@ -74,6 +74,9 @@ angular.module('stork.transfer.browse', [
       $scope.uri.state = {};
     $scope.end.uri = uri.toString();
 
+    // Clean up after previous calls.
+    if ($scope.history)
+      $scope.history.show = false;
     delete $scope.root;
     delete $scope.state.disconnected;
     $scope.state.loading = true;
