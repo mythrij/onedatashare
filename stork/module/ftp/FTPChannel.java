@@ -501,7 +501,11 @@ public class FTPChannel {
 
   // Used internally to extract the channel from the future.
   private Channel channel() {
-    return data.future.syncUninterruptibly().channel();
+    try {
+      return data.future.syncUninterruptibly().channel();
+    } catch (java.nio.channels.UnresolvedAddressException e) {
+      throw new RuntimeException("Host could not be resolved.");
+    }
   }
 
   // Close the channel and run the onClose handler.

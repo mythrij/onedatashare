@@ -43,8 +43,16 @@ angular.module('stork', [
 
 /** Provides easy access to Stork API resources. */
 .factory('stork', function ($window, $http, $q) {
-  var gr = function (r) { return r.data };
-  var ge = function (r) { return $q.reject(r.data) };
+  var gr = function (r) {
+    return r.data;
+  };
+  var ge = function (r) {
+    var data = r.data ? r.data : {
+      type: "ConnectionRefused",
+      error: "Could not connect to Stork."
+    };
+    return $q.reject(data);
+  };
   return {
     $uri: function (path, query) {
       var uri = new URI('/api/stork/'+path);
@@ -55,10 +63,19 @@ angular.module('stork', [
       return uri.readable();
     },
     $post: function (name, data) {
-      return $http.post(this.$uri(name), data).then(gr, ge);
+      return $http({
+        method: 'POST',
+        url: this.$uri(name),
+        data: data,
+        timeout: 5000
+      }).then(gr, ge);
     },
     $get: function (name, data) {
-      return $http.get(this.$uri(name, data)).then(gr, ge);
+      return $http({
+        method: 'GET',
+        url: this.$uri(name, data),
+        timeout: 5000
+      }).then(gr, ge);
     },
     $download: function (ep) {
       var form = document.createElement('form');

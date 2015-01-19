@@ -51,7 +51,8 @@ angular.module('stork.transfer.browse', [
   // Reset (or initialize) the browse pane.
   $scope.reset = function () {
     $scope.uri = {};
-    $scope.state = {};
+    $scope.state = {disconnected: true};
+    delete $scope.error;
     delete $scope.root;
   };
 
@@ -67,18 +68,27 @@ angular.module('stork.transfer.browse', [
       uri = uri.clone().normalize();
     $scope.uri.parsed = uri;
     $scope.uri.text = uri.readable();
-    $scope.uri.state.changed = false;
+    if ($scope.uri.state)
+      $scope.uri.state.changed = false;
+    else
+      $scope.uri.state = {};
     $scope.end.uri = uri.toString();
 
     delete $scope.root;
+    delete $scope.state.disconnected;
+    $scope.state.loading = true;
 
     history.fetch(uri.toString());
 
     $scope.fetch(uri).then(function (list) {
+      delete $scope.state.loading;
       $scope.root = list;
       $scope.root.name = uri.readable();
       $scope.open = true;
       $scope.unselectAll();
+    }, function (error) {
+      delete $scope.state.loading;
+      $scope.error = error;
     });
   };
 

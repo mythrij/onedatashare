@@ -27,7 +27,5 @@ public class StorkUserinfo extends StorkCred<String[]> {
     } return new String[] { u, p };
   }
 
-  protected Object[] hashables() {
-    return data();
-  }
+  protected Object[] hashables() { return data(); }
 }

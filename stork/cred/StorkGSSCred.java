@@ -35,6 +35,7 @@ public class StorkGSSCred extends StorkCred<Bell<GSSCredential>> {
    * information. Can be called again to refresh the credential as well.
    */
   private Bell<GSSCredential> initialize() {
+    System.out.println("MYPROXT!!!!!!!!!!!");
     // TODO: Don't use a thread here.
     return new ThreadBell<GSSCredential>() {
       public GSSCredential run() throws Exception {
@@ -68,6 +69,7 @@ public class StorkGSSCred extends StorkCred<Bell<GSSCredential>> {
   }
 
   protected Object[] hashables() {
+    System.out.println("EQUALLING");
     return new Object[] {
       proxy_string, myproxy_user, myproxy_pass, myproxy_host, myproxy_port
     };

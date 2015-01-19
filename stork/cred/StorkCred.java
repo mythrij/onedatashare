@@ -7,10 +7,11 @@ import stork.feather.*;
 import stork.scheduler.*;
 import stork.util.*;
 
-// An extended Feather credential with additional metadata.
-
+/** An extended Feather credential with additional metadata. */
 public abstract class StorkCred<O> extends Credential<O> {
+  /** The human-readable type of the credential. */
   public String type;
+  /** A user-given name for this credential. */
   public String name = "(unnamed)";
   /** Cached hash code. */
   private transient int hashCode = -1;
@@ -41,11 +42,18 @@ public abstract class StorkCred<O> extends Credential<O> {
 
   /** Check if two credentials' "hashables" are array-equal. */
   public boolean equals(Object o) {
+    if (this == o)
+      return true;
     if (o == null)
       return false;
     if (o.getClass() != getClass())
       return false;
     StorkCred cred = ((StorkCred) o);
+    if (!type.equals(cred.type))
+      return false;
+    System.out.println("Equals: "+
+      Arrays.toString(hashables())+" = "+
+      Arrays.toString(cred.hashables()));
     return Arrays.equals(hashables(), cred.hashables());
   }
 
