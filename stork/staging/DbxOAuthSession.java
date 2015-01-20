@@ -10,17 +10,24 @@ import stork.cred.*;
 /** OAuth wrapper for Dropbox. */
 public class DbxOAuthSession extends OAuthSession {
   /** The URI to go to to finish authentication. */
-  final static String finishURI = "http://127.0.0.1:8080/api/stork/oauth";
+  final static String finishURI;
   /** Dropbox secret keys. Set from config entries. */
   final static DbxAppInfo secrets;
 
+  public static class DropboxConfig {
+    public String key, secret, redirect;
+  };
+
   // Get Dropbox secrets from global config.
   static {
-    Config cfg = Config.global;
-    if (cfg.dropbox_key != null && cfg.dropbox_secret != null)
-      secrets = new DbxAppInfo(cfg.dropbox_key, cfg.dropbox_secret);
-    else
+    DropboxConfig c = Config.global.dropbox;
+    if (c != null && c.key != null && c.secret != null && c.redirect != null) {
+      secrets = new DbxAppInfo(c.key, c.secret);
+      finishURI = c.redirect;
+    } else {
       secrets = null;
+      finishURI = null;
+    }
   }
 
   /** Created after start() is called. */
