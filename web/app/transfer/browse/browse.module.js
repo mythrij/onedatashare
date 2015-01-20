@@ -2,17 +2,8 @@
 
 /** Module for browsing transfer endpoints. */
 angular.module('stork.transfer.browse', [
-  'mgcrea.ngStrap.typeahead'
+  'ngCookies'
 ])
-
-.config(function ($typeaheadProvider) {
-  angular.extend($typeaheadProvider.defaults, {
-    animation: false,
-    minLength: 1,
-    limit: 10,
-    position: 'bottom'
-  });
-})
 
 .service('history', function (stork) {
   var history = [];
@@ -39,6 +30,16 @@ angular.module('stork.transfer.browse', [
   };
 })
 
+/** A place to store browse URIs to persist across pages. */
+.service('endpoints', function ($cookieStore) {
+  var ends = {};
+
+  /** Get an endpoint by name. */
+  this.get = function (name) {
+    return ends[name] || (ends[name] = {});
+  };
+})
+
 .controller('History', function (history) {
   var me = this;
   this.list = [];
@@ -47,7 +48,13 @@ angular.module('stork.transfer.browse', [
   });
 })
 
-.controller('Browse', function ($scope, stork, $q, $modal, $window, user, history) {
+.controller('Browse', function (
+  $scope, $q, $modal, $window, $attrs,
+  stork, user, history, endpoints)
+{
+  // Restore a saved endpoint. side should already be in scope.
+  $scope.end = endpoints.get($attrs.side);
+
   // Reset (or initialize) the browse pane.
   $scope.reset = function () {
     $scope.uri = {};
@@ -220,28 +227,34 @@ angular.module('stork.transfer.browse', [
     else if (window.getSelection)
       window.getSelection().removeAllRanges();
 
-    if (!this.selected) {
-      if (!e.ctrlKey)
-        $scope.unselectAll();
-      $scope.end.$selected[u] = this.root;
+    if (e.ctrlKey) {
+      this.root.selected = !this.root.selected;
+      if (this.root.selected)
+        $scope.end.$selected[u] = this.root;
+      else
+        delete $scope.end.$selected[u];
+    } else if ($scope.selectedUris().length != 1) {
+      // Either nothing is selected, or multiple things are selected.
+      $scope.unselectAll();
       this.root.selected = true;
+      $scope.end.$selected[u] = this.root;
     } else {
-      if (!e.ctrlKey)
-        $scope.unselectAll();
-      delete $scope.end.$selected[u];
-      delete this.root.selected;
+      // Only one thing is selected.
+      var selected = this.root.selected;
+      $scope.unselectAll();
+      if (!selected) {
+        this.root.selected = true;
+        $scope.end.$selected[u] = this.root;
+      }
     }
-
-    console.log($scope.end.$selected);
-    console.log(this);
   };
 
   $scope.unselectAll = function () {
     var s = $scope.end.$selected;
     if (s) _.each(s, function (f) {
-      f.selected = false;
-    })
-    $scope.end.$selected = { };
+      delete f.selected;
+    });
+    $scope.end.$selected = {};
   };
 
   $scope.selectedUris = function () {
@@ -251,10 +264,13 @@ angular.module('stork.transfer.browse', [
   $scope.openOAuth = function (url) {
     $window.oAuthCallback = function (uuid) {
       $scope.end.credential = {uuid: uuid};
-      $scope.go($scope.uri.text);
+      $scope.refresh();
       $scope.$apply();
     };
     var child = $window.open(url, 'oAuthWindow');
     return false;
   };
+
+  if ($scope.end.uri)
+    $scope.go($scope.end.uri);
 });

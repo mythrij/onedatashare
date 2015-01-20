@@ -9,22 +9,25 @@
     <div id="stork-ls" class="panel-collapse text-center" bs-collapse-target>
       <div class="panel-body">
         <!-- Left and right browsing widgets -->
-        <div class="col-xs-6" ng-controller="Browse" ng-init="end = left"
+        <div class="col-xs-6" side="left" ng-controller="Browse"
              ng-include="'/app/transfer/browse/browse.html'"></div>
-        <div class="col-xs-6" ng-controller="Browse" ng-init="end = right"
+        <div class="col-xs-6" side="right" ng-controller="Browse"
              ng-include="'/app/transfer/browse/browse.html'"></div>
 
         <div class="clearfix"></div>
 
         <div class="large input-group-lg text-center panel panel-heading transfer-controls">
           <button class="fa fa-arrow-left btn btn-lg btn-default" title="Transfer"
-                  ng-disabled="!canTransfer(right, left, false)" ng-click="transfer(right, left, false)">
+                  ng-disabled="!canTransfer('right', 'left', false)"
+                  ng-click="transfer('right', 'left', false)">
           </button>
           <button class="fa fa-refresh btn btn-lg btn-default ph" title="Synchronize"
-                  ng-disabled="!canSync(left, right)" ng-click="sync(left, right)">
+                  ng-disabled="!canSync('left', 'right')"
+                  ng-click="sync('left', 'right')">
           </button>
           <button class="btn fa fa-arrow-right btn-lg btn-default" title="Transfer"
-                  ng-disabled="!canTransfer(left, right, false)" ng-click="transfer(left, right, false)">
+                  ng-disabled="!canTransfer('left', 'right', false)"
+                  ng-click="transfer('left', 'right', false)">
           </button>
         </div>
 
