@@ -221,12 +221,6 @@ angular.module('stork.transfer.browse', [
     var scope = this;
     var u = this.path();
 
-    // Unselect text.
-    if (document.selection && document.selection.empty)
-      document.selection.empty();
-    else if (window.getSelection)
-      window.getSelection().removeAllRanges();
-
     if (e.ctrlKey) {
       this.root.selected = !this.root.selected;
       if (this.root.selected)
@@ -247,6 +241,12 @@ angular.module('stork.transfer.browse', [
         $scope.end.$selected[u] = this.root;
       }
     }
+
+    // Unselect text.
+    if (document.selection && document.selection.empty)
+      document.selection.empty();
+    else if (window.getSelection)
+      window.getSelection().removeAllRanges();
   };
 
   $scope.unselectAll = function () {
