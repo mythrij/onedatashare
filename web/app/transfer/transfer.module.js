@@ -69,12 +69,11 @@ angular.module('stork.transfer', [
 
   $scope.transfer = function (srcName, destName, contents) {
     var src = endpoints.get(srcName);
-    var dest = endpoints.get(srcName);
+    var dest = endpoints.get(destName);
 
-    var job = $scope.job;
+    var job = angular.copy($scope.job);
     var su = job.src.uri  = _.keys(src.$selected)[0];
     var du = job.dest.uri = _.keys(dest.$selected)[0];
-    console.log($scope.job);
 
     // If src is a file and dest a directory, add file name.
     if (src.$selected[su].file && dest.$selected[du].dir) {

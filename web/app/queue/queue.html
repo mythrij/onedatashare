@@ -119,10 +119,11 @@
       <!-- Auto-refresh controls. -->
       <div class="btn-group input-group col-xs-4 text-left pull-left">
         <button ng-click="refresh()" title="Refresh" class="btn btn-default" ng-disabled="auto">
-          <i class="fa fa-repeat"></i>
+          <i class="fa fa-refresh" ng-class="auto && 'fa-spin'"></i>
         </button>
-        <button ng-click="toggleAuto()" title="Auto-refresh" class="btn btn-default">
-          <i ng-class="{'fa fa-check': auto, 'fa fa-check-empty': !auto}"></i>
+        <button ng-click="toggleAuto()" title="Auto-refresh"
+                class="btn btn-default">
+          <i class="fa" ng-class="auto && 'fa-check-square-o' || 'fa-square-o'"></i>
         </button>
       </div>
 
@@ -138,16 +139,11 @@
         </ul>
       </div>
 
-      <!-- Hidden job hint. -->
-      <div ng-if="jobs" class="text-muted text-center pull-left"
-           ng-pluralize count="(jobs | keys).length - filteredJobs.length"
-           when="{'0':   'No jobs hidden by filter.',
-                  one:   '{} job hidden by filter.',
-                  other: '{} jobs hidden by filter.'}">
-      </div>
-        
       <!-- Filter menu. -->
       <div ng-init="filterMenu = {show:false}" class="btn-group dropup pull-left">
+        <i class="fa fa-info-circle text-info" bs-tooltip
+           ng-show="(jobs | keys).length - filteredJobs.length"
+           title="Hidden jobs: {{(jobs | keys).length - filteredJobs.length}}"></i>
         <label ng-class="{open:filterMenu.show}">
           Filter:
           <button class="btn btn-default dropdown-toggle"
@@ -156,7 +152,8 @@
             <span ng-bind="filter | inflector"></span>
           </button>
           <ul class="dropdown-menu" role="menu">
-            <li bindonce ng-repeat="f in filterList" role="presentation" ng-class="{divider: !f}">
+            <li bindonce ng-repeat="f in filterList" role="presentation"
+                ng-class="{divider: !f}">
               <a href ng-if="f" class="show" tabindex="-1"
                  ng-click="set_filter(f); filterMenu.show = false">
                 <i class="fa fa-ok" ng-class="{invisible: f != filter}"></i>
