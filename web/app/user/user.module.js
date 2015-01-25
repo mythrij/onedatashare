@@ -73,4 +73,26 @@ angular.module('stork.user', [
       show: true
     });
   };
+})
+
+.controller('Register', function ($scope, stork, $location, user, $modal) {
+  $scope.register = function (u) {
+    return stork.register(u).then(function (d) {
+      user.saveLogin(d);
+      $modal({
+        title: "Welcome!",
+        content: "Thank for you registering with StorkCloud! "+
+                 "You have been logged in automatically.",
+        show: true
+      });
+      $location.path('/');
+      delete $scope.user;
+    }, function (e) {
+      $modal({
+        title: "There was a problem registering",
+        content: e.error,
+        show: true
+      });
+    })
+  }
 });

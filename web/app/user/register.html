@@ -1,14 +1,20 @@
-<form role="form" class="signup-form ajax-form" ng-submit="register(user)" ng-controller="RegisterCtrl">
+<form role="form" class="signup-form ajax-form" ng-submit="register(user)"
+      ng-controller="Register">
   <div class="form-group">
     <label for="signup-email" class="sr-only">Email</label>
-    <input id="signup-email" ng-model="user.email" type="email" class="form-control" placeholder="Email" required>
-    <span class="small help-block">Your email address will serve as your login name.</span>
+    <input id="signup-email" ng-model="user.email" type="email"
+           class="form-control" placeholder="Email" required>
+    <span class="small help-block">
+      Your email address will serve as your login name.
+    </span>
   </div>
   <div class="form-group">
     <label for="signup-password" class="sr-only">Password</label>
     <input id="signup-password" ng-model="user.password" type="password"
            class="form-control" minlength="6" placeholder="Password" required>
-    <span class="small help-block">Password must be at least six characters.</span>
+    <span class="small help-block">
+      Password must be at least six characters.
+    </span>
   </div>
 
   <div class="text-center">

@@ -177,16 +177,4 @@ angular.module('stork', [
       $document[0].title = 'StorkCloud - '+current.$$route.title;
     }
   );
-})
-
-.controller('RegisterCtrl', function ($scope, stork, $location, user, $modal) {
-  $scope.register = function (u) {
-    return stork.register(u).then(function (d) {
-      user.saveLogin(d);
-      $location.path('/');
-      delete $scope.user;
-    }, function (e) {
-      alert(e);
-    })
-  }
 });
