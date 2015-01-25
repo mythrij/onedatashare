@@ -265,15 +265,17 @@ public class HTTPServer {
     public void encode(ChannelHandlerContext ctx, Ad ad, List<Object> out) {
       String error = ad.get("error");
       FullHttpResponse r;
+
       if (error == null) {
         ByteBuf b = Unpooled.copiedBuffer(ad.toJSON().getBytes());
         r = new DefaultFullHttpResponse(HTTP_1_1, OK, b);
-        r.headers().set(CONTENT_TYPE, "application/json; charset=UTF-8");
       } else {
         ByteBuf b = Unpooled.copiedBuffer(error.getBytes());
         r = new DefaultFullHttpResponse(HTTP_1_1, INTERNAL_SERVER_ERROR, b);
-        r.headers().set(CONTENT_TYPE, "text/plain");
-      } out.add(r);
+      }
+
+      r.headers().set(CONTENT_TYPE, "application/json; charset=UTF-8");
+      out.add(r);
     }
   }
 

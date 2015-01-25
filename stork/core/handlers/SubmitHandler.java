@@ -14,8 +14,8 @@ public class SubmitHandler extends Handler<JobRequest> {
     req.validate();
 
     Job job = req.createJob();
-    req.server.schedule(job);
     req.user().saveJob(job);
+    req.server.schedule(job);
 
     server.dumpState();
 
@@ -41,6 +41,7 @@ class JobRequest extends Request {
 
   /** Create a {@code Job} from this request. */
   public Job createJob() {
-    return Ad.marshal(this).unmarshal(new Job());
+    Job job = Ad.marshal(this).unmarshal(new Job());
+    return job;
   }
 }

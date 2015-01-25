@@ -6,6 +6,7 @@ import stork.ad.*;
 import stork.core.server.*;
 import stork.feather.*;
 import stork.feather.URI;
+import stork.feather.errors.*;
 
 /**
  * An interface which awaits incoming client requests and passes them on to the
@@ -78,6 +79,10 @@ public abstract class StorkInterface {
     } return Ad.marshal(new Object() {
       String type = throwable.getClass().getSimpleName();
       String error = message(throwable);
+
+      // This is a quick hack to deal with authentication options.
+      String[] options = (throwable instanceof AuthenticationRequired) ?
+        ((AuthenticationRequired) throwable).options : null;
 
       String message(Throwable t) {
         if (t == null) return "(no reason given)";

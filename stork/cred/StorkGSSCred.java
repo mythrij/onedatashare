@@ -66,4 +66,11 @@ public class StorkGSSCred extends StorkCred<Bell<GSSCredential>> {
     cred.proxy_string = StorkUtil.readFile(cred_file);
     return cred;
   }
+
+  protected Object[] hashables() {
+    System.out.println("EQUALLING");
+    return new Object[] {
+      proxy_string, myproxy_user, myproxy_pass, myproxy_host, myproxy_port
+    };
+  }
 }

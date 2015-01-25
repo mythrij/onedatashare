@@ -3,37 +3,31 @@ package stork.feather.net;
 import stork.feather.*;
 
 /**
- * An asynchrounous network connection.
+ * An asynchrounous network connection. For connection-oriented sockets, this
+ * can be used either to make an outgoing connection, or to accept incoming
+ * connections (using the {@link #accept(Socket)} method). For connectionless
+ * sockets, this can be used to either send data or receive incoming data.
  */
 public abstract class Socket extends Coder<byte[],byte[]> {
-  /** This will hold the result of doOpen(). */
-  private Bell<?> doOpen;
+  private Bell<?> connectBell, listenBell;
 
-  /** Ring this to start the opening process. */
-  private final Bell<Void> startOpening = new Bell<Void>() {
-    public void done() {
-      try {
-        doOpen = doOpen();
-        doOpen.as((Void) null).promise(onOpen);
-      } catch (Exception e) {
-        fail(e);
-      }
-    } public void fail(Throwable t) {
-      onOpen.ring(t);
-    }
+  /** Will ring after the socket is connected. */
+  private final Bell<Void> onConnect = new Bell<Void>() {
+    public void fail(Throwable t) { doClose.ring(t); }
   };
 
-  /** Will ring after the connection has been established. */
-  private final Bell<Void> onOpen = new Bell<Void>() {
+  /** Will ring after the socket is listening. */
+  private final Bell<Void> onListen = new Bell<Void>() {
     public void fail(Throwable t) { doClose.ring(t); }
   };
 
   /** Ring this to start the closing process. */
   private final Bell<Void> doClose = new Bell<Void>() {
     public void always() {
-      if (doOpen != null)
-        doOpen.cancel();
-      startOpening.cancel();
+      if (connectBell != null)
+        connectBell.cancel();
+      if (listenBell != null)
+        listenBell.cancel();
       try {
         doClose();
       } catch (Exception e) {
@@ -42,23 +36,62 @@ public abstract class Socket extends Coder<byte[],byte[]> {
     }
   };
 
-  /** Start the connection process. */
-  public final synchronized Socket open() {
-    startOpening.ring();
-    return this;
+  /** Start an outgoing connection. */
+  public final synchronized Socket connect() {
+    if (connectBell == null) try {
+      connectBell = doConnect();
+      connectBell.as((Void) null).promise(onConnect);
+    } catch (Exception e) {
+      connectBell = Bell.wrap(e);
+    } return this;
   }
 
   /** Start the connection process when {@code bell} rings. */
-  public final Socket openOn(Bell<?> bell) {
-    bell.as((Void) null).promise(startOpening);
+  public final Socket connectOn(Bell<?> bell) {
+    bell.new Promise() {
+      public void done() { connect(); }
+    };
     return this;
   }
 
   /** Return a bell that rings when the socket is opened. */
-  public final Bell<Socket> onOpen() { return onOpen.as(this); }
+  public final Bell<Socket> onConnect() {
+    return onConnect.as(this);
+  }
 
-  /** Check if the channel is opened. */
-  public final boolean isOpened() { return onOpen.isDone(); }
+  /** Listen for incoming connections or data. */
+  public final synchronized Socket listen() {
+    if (listenBell == null) try {
+      listenBell = doListen();
+      listenBell.as((Void) null).promise(onListen);
+    } catch (Exception e) {
+      listenBell = Bell.wrap(e);
+    } return this;
+  }
+
+  /** Start listening when {@code bell} rings. */
+  public final Socket listenOn(Bell<?> bell) {
+    bell.new Promise() {
+      public void done() { listen(); }
+    };
+    return this;
+  }
+
+  /** Return a bell that rings when the socket is opened. */
+  public final Bell<Socket> onListen() {
+    return onListen.as(this);
+  }
+
+  /**
+   * Handle an incoming connection. This will only be called on
+   * connection-oriented sockets after listening has begun. Throwing an
+   * exception here will cause the socket to be closed.
+   *
+   * @param socket a {@code Socket} which has just been accepted.
+   */
+  protected void accept(Socket socket) {
+    throw new RuntimeException();
+  }
 
   /** Close the socket. */
   public final Socket close() {
@@ -85,32 +118,28 @@ public abstract class Socket extends Coder<byte[],byte[]> {
   public final boolean isClosed() { return doClose.isDone(); }
 
   /**
-   * Start a connection timeout timer for this channel. The returned bell can
-   * be cancelled to stop the timeout timer.
-   */
-  public final Bell<?> timeout(double time) {
-    Bell<?> bell = Bell.timerBell(time);
-    bell.new Promise() {
-      public void done() {
-        if (!isOpened()) close();
-      }
-    };
-    return bell;
-  }
-
-  /**
-   * Handle asynchronously opening this socket's channel. This will be called
-   * at most once.
+   * Handle asynchronously connecting the socket. This will be called at most
+   * once.
    *
    * @return A bell which should ring when the connection has been established
    * or has failed to be established. If cancelled, the connection process
    * should be halted.
-   * @throws Exception Any exception thrown will be ignored.
+   * @throws Exception If a problem happens immediately.
    */
-  protected abstract Bell<?> doOpen() throws Exception;
+  protected abstract Bell<?> doConnect() throws Exception;
 
   /**
-   * Handle closing this socket's channel. This will be called at most once.
+   * Handle starting listening on the socket. This will be called at most once.
+   *
+   * @return A bell which should ring when the socket has begun listening or
+   * has failed to start listening. If cancelled, the connection process should
+   * be halted.
+   * @throws Exception If a problem happens immediately.
+   */
+  protected abstract Bell<?> doListen() throws Exception;
+
+  /**
+   * Handle closing this socket. This will be called at most once.
    *
    * @throws Exception Any exception thrown will be ignored.
    */

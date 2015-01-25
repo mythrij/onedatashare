@@ -73,8 +73,8 @@ public class FTPSession extends Session<FTPSession, FTPResource> {
         pass = cred.password;
         channel.authorize(user, pass).promise(this);
       } else {
-        // Unsupported credential...
-        ring(new IllegalArgumentException("credential"));
+        // Unsupported credential. Try anonymous auth.
+        channel.authorize(user, pass).promise(this);
       }
     }}.as(FTPSession.this).new Promise() {
       public void done() { channel.new Command("DCAU N"); }

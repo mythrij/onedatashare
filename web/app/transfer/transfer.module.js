@@ -2,10 +2,12 @@
 
 /** Module for controlling and monitoring transfers. */
 angular.module('stork.transfer', [
-  'stork.transfer.browse', 'stork.transfer.queue'
+  'stork.transfer.browse', 'stork.transfer.queue', 'stork.credentials'
 ])
 
-.controller('Transfer', function ($scope, user, stork, $modal) {
+.controller('Transfer', function (
+  $rootScope, $scope, user, stork, $modal, endpoints)
+{
   // Hardcoded options.
   $scope.optSet = [{
       'title': 'Use transfer optimization',
@@ -44,8 +46,8 @@ angular.module('stork.transfer', [
   ];
 
   $scope.job = {
-    src:  $scope.left  = { },
-    dest: $scope.right = { },
+    src:  endpoints.get('left'),
+    dest: endpoints.get('right'),
     options: {
       'optimizer': null,
       'overwrite': true,
@@ -55,7 +57,9 @@ angular.module('stork.transfer', [
     }
   };
 
-  $scope.canTransfer = function (src, dest, contents) {
+  $scope.canTransfer = function (srcName, destName, contents) {
+    var src = endpoints.get(srcName);
+    var dest = endpoints.get(srcName);
     if (!src || !dest || !src.uri || !dest.uri)
       return false;
     if (_.size(src.$selected) < 1 || _.size(dest.$selected) != 1)
@@ -63,11 +67,20 @@ angular.module('stork.transfer', [
     return true;
   };
 
-  $scope.transfer = function (src, dest, contents) {
+  $scope.transfer = function (srcName, destName, contents) {
+    var src = endpoints.get(srcName);
+    var dest = endpoints.get(srcName);
+
     var job = $scope.job;
-    job.src.uri  = _.keys(src.$selected)[0];
-    job.dest.uri = _.keys(dest.$selected)[0];
-    console.log(job);
+    var su = job.src.uri  = _.keys(src.$selected)[0];
+    var du = job.dest.uri = _.keys(dest.$selected)[0];
+    console.log($scope.job);
+
+    // If src is a file and dest a directory, add file name.
+    if (src.$selected[su].file && dest.$selected[du].dir) {
+      var n = new URI(su).segment(-1);
+      job.dest.uri = du = new URI(du).segment(n).toString();
+    }
 
     var modal = $modal({
       title: 'Transfer',

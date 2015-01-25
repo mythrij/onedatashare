@@ -22,7 +22,7 @@ public abstract class User {
   public boolean validated = true;
 
   public LinkedList<URI> history = new LinkedList<URI>();
-  public Map<String,StorkCred> credentials = new HashMap<String,StorkCred>();
+  public Map<UUID,StorkCred> credentials = new HashMap<UUID,StorkCred>();
 
   private ArrayList<UUID> jobs = new ArrayList<UUID>();
 
@@ -193,5 +193,20 @@ public abstract class User {
     } catch (Exception e) {
       throw new RuntimeException("Couldn't hash password.");
     }
+  }
+
+  /** Add a credential for this user, returning a UUID. */
+  public synchronized String addCredential(StorkCred cred) {
+    UUID uuid = UUID.randomUUID();
+    credentials.put(uuid, cred);
+    return uuid.toString();
+  }
+
+  /** Get a simplified list of this user's credentials. */
+  public synchronized Map<UUID,Object> credentialList() {
+    Map<UUID,Object> map = new HashMap<UUID,Object>();
+    for (Map.Entry<UUID,StorkCred> e : credentials.entrySet())
+      map.put(e.getKey(), e.getValue().getInfo());
+    return map;
   }
 }

@@ -4,7 +4,7 @@
 angular.module('stork', [
   'ngRoute', 'ngResource', 'ui', 'cgBusy', 'pasvaz.bindonce',
   'mgcrea.ngStrap', 'mgcrea.ngStrap.collapse', 'mgcrea.ngStrap.tooltip',
-  'stork.util', 'stork.user', 'stork.transfer'
+  'stork.util', 'stork.user', 'stork.transfer', 'stork.credentials'
   ], function ($provide, $routeProvider) {
     /* This is where you can add routes and change page titles. */
     $routeProvider.when('/', {
@@ -24,6 +24,11 @@ angular.module('stork', [
       title: 'User Settings',
       templateUrl: 'app/user/user.html',
       requireLogin: true
+    }).when('/oauth/:uuid', {
+      title: 'OAuth Redirect',
+      controller: 'OAuth',
+      templateUrl: 'app/credentials/oauth.html',
+      requireLogin: true
     }).when('/terms', {
       title: 'Terms of Service',
       templateUrl: 'app/legal/terms.html'
@@ -38,8 +43,16 @@ angular.module('stork', [
 
 /** Provides easy access to Stork API resources. */
 .factory('stork', function ($window, $http, $q) {
-  var gr = function (r) { return r.data };
-  var ge = function (r) { return $q.reject(r.data.error) };
+  var gr = function (r) {
+    return r.data;
+  };
+  var ge = function (r) {
+    var data = r.data ? r.data : {
+      type: "ConnectionRefused",
+      error: "Could not connect to Stork."
+    };
+    return $q.reject(data);
+  };
   return {
     $uri: function (path, query) {
       var uri = new URI('/api/stork/'+path);
@@ -50,15 +63,34 @@ angular.module('stork', [
       return uri.readable();
     },
     $post: function (name, data) {
-      return $http.post(this.$uri(name), data).then(gr, ge);
+      return $http({
+        method: 'POST',
+        url: this.$uri(name),
+        data: data,
+        timeout: 5000
+      }).then(gr, ge);
     },
     $get: function (name, data) {
-      return $http.get(this.$uri(name, data)).then(gr, ge);
+      return $http({
+        method: 'GET',
+        url: this.$uri(name, data),
+        timeout: 5000
+      }).then(gr, ge);
     },
-    $download: function (uri) {
-      uri = this.$uri('get', {uri: uri});
-      console.log(uri);
-      $window.open(uri);
+    $download: function (ep) {
+      var form = document.createElement('form');
+      form.action = this.$uri('get');
+      form.method = 'POST';
+      form.target = '_blank';
+
+      var input = document.createElement('textarea');
+      input.name = '$json';
+      input.value = JSON.stringify(ep);
+      form.appendChild(input);
+
+      form.style.display = 'none';
+      document.body.appendChild(form);
+      form.submit();
     },
     login: function (info) {
       return this.$post('user', angular.extend({
@@ -110,6 +142,11 @@ angular.module('stork', [
     },
     get: function (uri) {
       this.$download(uri);
+    },
+    cred: function () {
+      return this.$get('cred', {
+        action: 'list'
+      });
     }
   };
 })
@@ -152,15 +189,4 @@ angular.module('stork', [
       alert(e);
     })
   }
-})
-
-.controller('CredCtrl', function ($scope, $modal) {
-  $scope.creds = [ ];
-  /* Open a modal, return a future credential. */
-  $scope.newCredential = function (type) {
-    return $modal.open({
-      templateUrl: 'add-cred-modal.html',
-      scope: $scope
-    }).result;
-  };
 });

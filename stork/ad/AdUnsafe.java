@@ -62,7 +62,6 @@ final class AdUnsafe {
    * unconstructed instantiation could not be performed.
    */
   public static synchronized <T> T create(Class<T> c) {
-    System.out.println("Unsafely making: "+c);
     return (allocator == null) ? null : c.cast(allocator.create(c));
   }
 }

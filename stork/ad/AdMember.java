@@ -2,12 +2,13 @@ package stork.ad;
 
 import java.lang.reflect.*;
 
-// A wrapper around class members (fields and methods) that encapsulates extra
-// type information and provides methods for setting and resetting access
-// permissions for getting, setting, or invoking members. This class is not
-// threadsafe, and assumes nothing else is messing with the access permissions
-// of the member, so keep that in mind.
-
+/**
+ * A wrapper around class members (fields and methods) that encapsulates extra
+ * type information and provides methods for setting and resetting access
+ * permissions for getting, setting, or invoking members. This class is not
+ * threadsafe, and assumes nothing else is messing with the access permissions
+ * of the member, so keep that in mind.
+ */
 class AdMember extends AdType {
   private Member member;
   transient int locks = 0;

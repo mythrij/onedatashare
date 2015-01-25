@@ -21,6 +21,7 @@ import org.ietf.jgss.*;
 import org.gridforum.jgss.*;
 
 import stork.feather.*;
+import stork.feather.errors.*;
 import stork.feather.URI;
 import stork.util.*;
 
@@ -53,6 +54,16 @@ public class FTPChannel {
     int port;
 
     Protocol(int def_port) { port = def_port; }
+
+    public boolean isGSI() {
+      switch (this) {
+        case gridftp:
+        case gsiftp:
+          return true;
+        default:
+          return false;
+      }
+    }
   }
 
   // Doing this allows state to more easily be shared between views of the same
@@ -490,7 +501,11 @@ public class FTPChannel {
 
   // Used internally to extract the channel from the future.
   private Channel channel() {
-    return data.future.syncUninterruptibly().channel();
+    try {
+      return data.future.syncUninterruptibly().channel();
+    } catch (java.nio.channels.UnresolvedAddressException e) {
+      throw new RuntimeException("Host could not be resolved.");
+    }
   }
 
   // Close the channel and run the onClose handler.
@@ -515,18 +530,40 @@ public class FTPChannel {
   // Try to authenticate using a username and password.
   public Bell<Reply> authorize() {
     return authorize("anonymous", "");
-  } public Bell<Reply> authorize(String user) {
+  }
+
+  // Try a passwordless login with a username.
+  public Bell<Reply> authorize(String user) {
     return authorize(user, "");
-  } public Bell<Reply> authorize(final String user, final String pass) {
+  }
+
+  // Try to authenticate using a username and password.
+  public Bell<Reply> authorize(final String user, final String pass) {
     return new Command("USER", user).new AsBell<Reply>() {
+      // Handle the USER command reply.
       public Bell<Reply> convert(Reply r) {
         if (r.code == 331)
           return new Command("PASS", pass);
-        else if (r.isComplete())
-          ring(r);
+        if (r.isComplete())
+          return Bell.wrap(r);
+        throw r.asError();
+      }
+    }.new As<Reply>() {
+      // Handle the PASS command reply (or 2xx reply to USER).
+      public Reply convert(Reply r) {
+        if (r.isComplete())
+          return r;
+        throw r.asError();
+      }
+    }.new As<Reply>() {
+      // Handle whatever error occurred by asking for login.
+      public Reply convert(Throwable r) {
+        if (data.protocol.isGSI())
+          throw new AuthenticationRequired("gss");
         else
-          ring(r.asError());
-        return null;
+          throw new AuthenticationRequired("userinfo");
+      } public Reply convert(Reply r) {
+        return r;
       }
     };
   }

@@ -5,6 +5,7 @@ import java.util.*;
 import com.dropbox.core.*;
 
 import stork.feather.*;
+import stork.feather.errors.*;
 import stork.feather.util.*;
 
 public class DbxResource extends Resource<DbxSession, DbxResource> {
@@ -30,15 +31,15 @@ public class DbxResource extends Resource<DbxSession, DbxResource> {
     return new ThreadBell<Stat>() {
       public Stat run() throws Exception {
         DbxEntry dbe = session.client.getMetadata(path.toString());
-        System.out.println("Doing dbx stat: "+dbe);
 
         if (dbe == null)
-          throw new RuntimeException("File does not exist");
+          throw new NotFound();
 
         Stat st = entryToStat(dbe);
 
         if (st.dir) {
-          DbxEntry.WithChildren dbd = session.client.getMetadataWithChildren(path.toString());
+          DbxEntry.WithChildren dbd =
+            session.client.getMetadataWithChildren(path.toString());
           List<Stat> sub = new LinkedList<Stat>();
           for (DbxEntry child : dbd.children)
             sub.add(entryToStat(child));
@@ -62,5 +63,80 @@ public class DbxResource extends Resource<DbxSession, DbxResource> {
     }
 
     return stat;
+  }
+
+  public Tap<DbxResource> tap() {
+    return new DbxTap();
+  }
+
+  public Sink<DbxResource> sink() {
+    return new DbxSink();
+  }
+
+  private class DbxTap extends Tap<DbxResource> {
+    protected DbxTap() { super(DbxResource.this); }
+
+    protected Bell start(Bell bell) {
+      return new ThreadBell() {
+        public Object run() throws Exception {
+          session.client.getFile(
+            source().path.toString(), null, new Drainer());
+          finish();
+          return null;
+        } public void fail(Throwable t) {
+          finish();
+        }
+      }.startOn(initialize().and(bell));
+    }
+
+    private class Drainer extends java.io.OutputStream {
+      public void write(int b) {
+        write(new byte[] {(byte)b});
+      } public void write(byte[] bytes) {
+        write(bytes, 0, bytes.length);
+      } public void write(byte[] bytes, int off, int len) {
+        if (off != 0 || len != bytes.length)
+          bytes = Arrays.copyOfRange(bytes, off, len-off);
+        drain(new Slice(bytes));
+      }
+    }
+  }
+
+  private class DbxSink extends Sink<DbxResource> {
+    private DbxClient.Uploader upload;
+
+    protected DbxSink() { super(DbxResource.this); }
+
+    protected Bell<?> start() {
+      return initialize().and((Bell<Stat>)source().stat()).new As<Void>() {
+        public Void convert(Stat stat) throws Exception {
+          upload = session.client.startUploadFile(
+            destination().path.toString(),
+            DbxWriteMode.force(), stat.size);
+          return null;
+        } public void fail(Throwable t) {
+          finish(t);
+        }
+      };
+    }
+
+    protected Bell drain(final Slice slice) {
+      return new ThreadBell<Void>() {
+        public Void run() throws Exception {
+          upload.getBody().write(slice.asBytes());
+          return null;
+        }
+      }.start();
+    }
+
+    protected void finish() {
+      try {
+        upload.finish();
+      } catch (Exception e) {
+        // Ignore...?
+      } finally {
+        upload.close();
+      }
+    }
   }
 }

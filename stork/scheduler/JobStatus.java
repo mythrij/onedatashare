@@ -39,7 +39,7 @@ public enum JobStatus {
   public static EnumSet<JobStatus> filter(String s) {
     return byName(s).filter();
   }
-  
+
   /** Get an {@code EnumSet} filter for this status. */
   public EnumSet<JobStatus> filter() {
     if (filter != null) {

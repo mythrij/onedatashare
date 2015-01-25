@@ -35,6 +35,17 @@ public class Main extends Command {
         return UUID.fromString(uuid);
       }
     };
+
+    // Register a handler to unmarshal StorkCreds.
+    new Ad.Marshaller<stork.cred.StorkCred>(stork.cred.StorkCred.class) {
+      public stork.cred.StorkCred unmarshal(Object o) {
+        Ad ad = Ad.marshal(o);
+        stork.cred.StorkCred cred =
+          stork.cred.StorkCred.newFromType(ad.get("type"));
+        ad.unmarshal(cred);
+        return cred;
+      }
+    };
   }
 
   /** Try to get the version and build time from the build tag. */

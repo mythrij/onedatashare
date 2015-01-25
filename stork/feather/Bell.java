@@ -325,6 +325,8 @@ public class Bell<T> implements Future<T> {
   public synchronized <V extends Bell<? super T>> V promise(V bell) {
     if (bell.isDone()) {
       return bell;  // Don't be silly...
+    } if (isDone()) {
+      dispatchPromise(bell);  // We've already rung, dispatch.
     } else switch (promises.size()) {
       case 0:  // This is an immutable empty list. Change to singleton.
         promises = (List) Collections.singletonList(bell);
@@ -333,8 +335,6 @@ public class Bell<T> implements Future<T> {
         promises = new LinkedList<Bell<? super T>>(promises);
       default:
         promises.add(bell);
-    } if (isDone()) {
-      dispatchPromise(bell);  // We've already rung, dispatch.
     } return bell;
   }
 
@@ -720,9 +720,6 @@ public class Bell<T> implements Future<T> {
       }
     });
   }
-
-  /** If a {@code Bell} is garbage collected before ringing, cancel it. */
-  protected void finalize() { cancel(); }
 
   /** Put some runnable task on the main dispatch queue. */
   public static void dispatch(Runnable runnable) {

@@ -38,6 +38,9 @@ public class Config {
 
   public double request_timeout = 5.0;
 
+  /** Dropbox configuration. */
+  public stork.staging.DbxOAuthSession.DropboxConfig dropbox;
+
   // Check default paths until we find a readable file. Null if none found.
   private static String defaultConfig() {
     for (String path : defaultPaths)

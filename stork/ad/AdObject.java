@@ -4,14 +4,14 @@ import java.util.*;
 import java.math.*;
 import java.lang.reflect.*;
 
-// Beware all ye who enter, for here there be dragons.
-// TODO: This should be combined back into Ad.
-
+/**
+ * This class represents a value held as a field in an Ad.
+ */
 public class AdObject implements Comparable<AdObject> {
   Object object;
 
   // A map of types to methods for converting to that type.
-  private static Map<Class<?>, Method> conversionMap = 
+  private static Map<Class<?>, Method> conversionMap =
     new HashMap<Class<?>, Method>();
 
   // Add a method to the conversion map.

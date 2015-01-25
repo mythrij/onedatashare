@@ -26,4 +26,6 @@ public class StorkUserinfo extends StorkCred<String[]> {
       p = (i < 0) ? "" : ui.substring(i+1);
     } return new String[] { u, p };
   }
+
+  protected Object[] hashables() { return data(); }
 }
