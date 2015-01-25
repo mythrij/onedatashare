@@ -31,7 +31,7 @@ public class IRODSResource extends Resource<IRODSSession,IRODSResource>{
 
     return emitter;
   }
-  
+
   public Bell<Stat> stat() {
     return new ThreadBell<Stat>(session.executor) {
       public Stat run() throws Exception {
@@ -49,7 +49,6 @@ public class IRODSResource extends Resource<IRODSSession,IRODSResource>{
           fileInfo.name = entry.getNodeLabelDisplayValue();
           fileInfo.size = entry.getDataSize();
           fileInfo.time = entry.getModifiedAt().getTime();
-          System.out.println(fileInfo.size);
           List<UserFilePermission> permissionList = entry.getUserFilePermission();
           fileInfo.perm = permissionList.toString();
         }
@@ -62,7 +61,7 @@ public class IRODSResource extends Resource<IRODSSession,IRODSResource>{
         rootStat.dir  = !rootStat.file;
         return rootStat;
       }
-    }.startOn(initialize());        
+    }.startOn(initialize());
   }
 
   public Bell mkdir() {
@@ -74,8 +73,8 @@ public class IRODSResource extends Resource<IRODSSession,IRODSResource>{
     // Send delete.
     return null;
   }
-  
+
   public IRODSTap tap() { return new IRODSTap(this); }
 
-  public IRODSSink sink() { return new IRODSSink(this); }  
+  public IRODSSink sink() { return new IRODSSink(this); }
 }

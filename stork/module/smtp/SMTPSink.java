@@ -20,8 +20,6 @@ public class SMTPSink extends Sink<SMTPResource>{
 
   protected Bell start() {
     Bell bell = destination().initialize();
-    System.out.println("Initialting start() in SMTPSink");
-    System.out.println(channel());
     channel().send("--separate");
     String fileName = source().path.name();
     String mimeType = MimeTypeMap.forFile(fileName);
@@ -36,15 +34,12 @@ public class SMTPSink extends Sink<SMTPResource>{
 
   //drain message body
   protected Bell drain(final Slice slice) {
-    //System.out.println("Initialting drain() in SMTPSink:"+slice);
     channel().send(slice.asByteBuf());
     return null;
   }
 
   //footers
   protected void finish() {
-    System.out.println("Initialting finish() in SMTPSink");
-    System.out.println("Finished Transfering");
     channel().disableBase64();
     channel().send("\n--separate--");
   }

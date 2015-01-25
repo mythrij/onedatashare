@@ -15,7 +15,7 @@ public class IRODSSession extends Session<IRODSSession,IRODSResource> {
   IRODSAccount irodsAccount;
   org.irods.jargon.core.connection.IRODSSession irodsSession;
   IRODSFileSystem irodsFileSystem;
-  IRODSFileFactory irodsFileFactory;  
+  IRODSFileFactory irodsFileFactory;
   CollectionAndDataObjectListAndSearchAO actualCollection;
 
   // Per-session thread pool to work around issues with threads in Jargon.
@@ -31,8 +31,6 @@ public class IRODSSession extends Session<IRODSSession,IRODSResource> {
     final String user = uri.user();
     final String pass = uri.password();
     final String zone = uri.path().explode()[0];
-
-    //"irods://user:pass@didclab-ws2/UniversityAtBuffaloZone/home/didclab?resource=didclab-ws2Resc"
 
     return new ThreadBell<IRODSSession>() {
       public IRODSSession run() throws Exception {
@@ -55,16 +53,5 @@ public class IRODSSession extends Session<IRODSSession,IRODSResource> {
 
   public IRODSResource select(Path path) {
     return new IRODSResource(this, path);
-  }
-
-  public static void main(String[] args) throws Exception {
-    Resource src = new IRODSModule().select(URI.create(
-      "irods://didclab:didclab@didclab-ws2.cse.buffalo.edu:1247//UniversityAtBuffaloZone/home/public/small6.txt"
-    ));
-    Resource dest = new IRODSModule().select(URI.create(
-      "irods://didclab:didclab@didclab-ws2.cse.buffalo.edu:1247//UniversityAtBuffaloZone/home/public/small6.txt"
-    ));
-    System.out.println(src.stat().sync());
-    //src.transferTo(dest).starter.ring();
   }
 }

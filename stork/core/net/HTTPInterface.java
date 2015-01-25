@@ -106,8 +106,6 @@ public class HTTPInterface extends StorkInterface {
       request.mayChangeState = false;
     if (hr.cookie() != null)
       request.cookie(cookiesToMap(hr.cookie()));
-    if (hr.cookie() != null)
-      System.out.println(Ad.marshal(request));
     if (hr.uri.query() != null)
       request.unmarshalFrom(queryToAd(hr.uri.query()));
     if (!hr.hasBody())

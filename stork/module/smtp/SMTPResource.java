@@ -24,10 +24,6 @@ public class SMTPResource extends Resource<SMTPSession, SMTPResource>{
   }
 
   public Bell onTransferComplete() {
-    if (isRoot()) {
-      System.out.println("hjfskdhfksdj");
-      session.channel.sendCommand(".");
-    }
     return null;
   }
 }

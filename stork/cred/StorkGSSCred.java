@@ -68,7 +68,6 @@ public class StorkGSSCred extends StorkCred<Bell<GSSCredential>> {
   }
 
   protected Object[] hashables() {
-    System.out.println("EQUALLING");
     return new Object[] {
       proxy_string, myproxy_user, myproxy_pass, myproxy_host, myproxy_port
     };

@@ -412,7 +412,7 @@ public abstract class Path {
   public static String globToRegex(String glob) {
     StringBuffer sb = new StringBuffer();
     String[] sa = glob.split("*", -1);
-    
+
     if (sa.length != 0) {
       sb.append(Pattern.quote(sa[0]));
       for (int i = 1; i < sa.length; i++)
@@ -479,10 +479,6 @@ public abstract class Path {
     if (up.isAbsolute())
       return "/"+name(false);
     return up+"/"+name(false);
-  }
-
-  public static void main(String args[]) throws Exception {
-    System.out.println(Path.create(args[0]));
   }
 }
 
