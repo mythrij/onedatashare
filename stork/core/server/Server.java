@@ -57,9 +57,6 @@ public class Server {
 
   public ServerUser anonymous = new ServerUser();
 
-  /** Map of idle sessions, for session reuse. */
-  public transient SessionCache sessions = new SessionCache();
-
   /** Get the handler for a command. */
   public Handler handlerFor(String command) {
     Class<? extends Handler> hc = handlers.get(command);
@@ -114,17 +111,16 @@ public class Server {
     return scheduler.get(uuid);
   }
 
-  /** Create a {@link User} and add it to the {@code users} map. */
-  public ServerUser createAndInsertUser(UserRegistration request) {
-    ServerUser user = createUser(request);
-    users.put(user.email, user);
-    return user;
-  }
-
-  private ServerUser createUser(UserRegistration request) {
+  /** Create a new {@link User}. */
+  public ServerUser createUser(UserRegistration request) {
     ServerUser user = new ServerUser(request.email, request.password);
     Ad.marshal(request).unmarshal(user);
     return user;
+  }
+
+  /** Add a {@code User} to the {@code users} map. */
+  public void saveUser(User user) {
+    users.put(user.email, (ServerUser) user);
   }
 
   /** Load server state from a file. */

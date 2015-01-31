@@ -25,6 +25,11 @@ public class Job {
   private int attempts = 0, max_attempts = 10;
   private String message;
 
+  /** Byte progress of the transfer. */
+  public TransferInfo bytes;
+  /** File progress of the transfer. Currently unused. */
+  public TransferInfo files;
+
   /** An ID meaningful to the user who owns the job. */
   public int job_id;
 
@@ -184,8 +189,8 @@ public class Job {
 
   /**
    * Start the transfer between the specified resources. This returns a {@code
-   * Bell} whose ringing indicates the completion of the job (or some
-   * other problem encountered when starting the job).
+   * Bell} whose ringing indicates the completion of the job (or some other
+   * problem encountered when starting the job).
    */
   public synchronized Bell<Job> start() {
     try {
@@ -211,6 +216,8 @@ public class Job {
       src.resolveAs("source").transferTo(dest.resolveAs("destination"));
 
     this.transfer = transfer;
+
+    bytes = transfer.info;
 
     transfer.onStop().new Promise() {
       public void done() {

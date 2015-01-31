@@ -34,9 +34,12 @@ public class Config {
   public URI[] listen;
   public URI web_service_url;
 
-  public boolean registration = false;
+  public boolean registration = true;
 
   public double request_timeout = 5.0;
+
+  public String email = "StorkCloud <noreply@storkcloud.org>";
+  public String smtp_server = "localhost";
 
   /** Dropbox configuration. */
   public stork.staging.DbxOAuthSession.DropboxConfig dropbox;

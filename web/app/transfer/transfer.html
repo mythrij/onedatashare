@@ -44,7 +44,7 @@
     </div>
   </div>
 
-  <div class="panel panel-default" bs-collapse data-start-collapsed="true">
+  <div ng-if="false" class="panel panel-default" bs-collapse data-start-collapsed="true">
     <div class="panel-heading">
       <h4 class="panel-title">
         <a bs-collapse-toggle>Transfer Options</a>
@@ -211,7 +211,7 @@
     <input type="password" class="form-control" ng-model="cred.password">
   </div>
 
-  <div ng-include="'password-warning.html'"></div>
+  <div ng-if="false" ng-include="'password-warning.html'"></div>
 </script>
 
 <!-- Create new credential MyProxy credential. -->
@@ -232,7 +232,7 @@
     <input type="password" class="form-control" ng-model="cred.myproxy_pass" required>
   </div>
 
-  <div ng-include="'password-warning.html'"></div>
+  <div ng-if="false" ng-include="'password-warning.html'"></div>
 </script>
 
 <!-- Show this message for password-based credential types. -->

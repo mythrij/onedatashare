@@ -149,7 +149,7 @@ angular.module('stork.transfer.browse', [
         function (m) {
           $scope.refresh();
         }, function (e) {
-          alert('Could not create folder.');
+          alert('Could not create folder: '+e.error);
         }
       );
     });
@@ -172,7 +172,7 @@ angular.module('stork.transfer.browse', [
           function () {
             $scope.refresh();
           }, function (e) {
-            alert('Could not delete file: '+e);
+            alert('Could not delete file: '+e.error);
           }
         );
       }
@@ -260,6 +260,12 @@ angular.module('stork.transfer.browse', [
   $scope.selectedUris = function () {
     return _.keys($scope.end.$selected);
   };
+
+  /* Get a list of things to show in the dropdown box. */
+  $scope.dropdownList = [
+    ["fa-dropbox", "Dropbox", "dropbox:///"],
+    ["fa-globe", "Mozilla FTP", "ftp://ftp.mozilla.org/"]
+  ];
 
   $scope.openOAuth = function (url) {
     $window.oAuthCallback = function (uuid) {

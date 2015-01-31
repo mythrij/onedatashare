@@ -59,10 +59,12 @@ angular.module('stork.transfer', [
 
   $scope.canTransfer = function (srcName, destName, contents) {
     var src = endpoints.get(srcName);
-    var dest = endpoints.get(srcName);
+    var dest = endpoints.get(destName);
     if (!src || !dest || !src.uri || !dest.uri)
       return false;
     if (_.size(src.$selected) < 1 || _.size(dest.$selected) != 1)
+      return false;
+    if (_.values(src.$selected)[0].dir && !_.values(dest.$selected)[0].dir)
       return false;
     return true;
   };
@@ -72,6 +74,8 @@ angular.module('stork.transfer', [
     var dest = endpoints.get(destName);
 
     var job = angular.copy($scope.job);
+    job.src = src;
+    job.dest = dest;
     var su = job.src.uri  = _.keys(src.$selected)[0];
     var du = job.dest.uri = _.keys(dest.$selected)[0];
 
@@ -86,6 +90,7 @@ angular.module('stork.transfer', [
       contentTemplate: 'transfer-modal.html'
     });
 
+    console.log(job);
     modal.$scope.job = job;
     modal.$scope.submit = $scope.submit;
   };

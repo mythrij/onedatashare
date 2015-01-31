@@ -22,15 +22,18 @@
                placeholder="Enter a URL">
         <!-- History dropdown menu. -->
         <div class="dropdown" ng-class="{open:history.show}">
-          <ul tabindex="-1" class="dropdown-menu"
-              ng-if="uri.state.changed && (history.list | filter:uri.text).length">
-            <li ng-repeat="h in history.list | filter:uri.text">
+          <ul tabindex="-1" class="dropdown-menu">
+            <li ng-repeat="v in dropdownList">
+              <a ng-click="history.show = false; go(v[2])">
+                <i class="fa" ng-class="v[0]"></i>
+                <span ng-bind="v[1]"></span>
+              </a>
+            </li>
+            <hr style="margin:2px">
+            <li ng-if="uri.text" ng-repeat="h in history.list | filter:uri.text">
               <a ng-click="history.show = false; go(h)" ng-bind="h"></a>
             </li>
-          </ul>
-          <ul tabindex="-1" class="dropdown-menu"
-              ng-if="!uri.state.changed && history.list.length">
-            <li ng-repeat="h in history.list">
+            <li ng-if="!uri.text" ng-repeat="h in history.list">
               <a ng-click="history.show = false; go(h)" ng-bind="h"></a>
             </li>
           </ul>

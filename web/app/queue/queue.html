@@ -30,11 +30,11 @@
                  bs-popover content-template="prog-pop.html"
                  ng-class="{processing: 'progress-striped active'}[j.status]">
               <div role="progressbar" ng-class="color[j.status]" class="progress-bar"
-                   ng-style="{width:(j.status=='processing'&&(j.progress.bytes|percent))||'100%'}"></div>
+                   ng-style="{width:(j.status=='processing'&&(j.bytes|percent))||'100%'}"></div>
               <span class="progress-text">
                 {{j.status|inflector}}
-                <span ng-show="j.status=='processing'&&(j.progress.bytes|percent)">
-                  ({{j.progress.bytes|percent}})
+                <span ng-show="j.status=='processing'&&(j.bytes|percent)">
+                  ({{j.bytes|percent}})
                 </span>
               </span>
             </div>
@@ -43,7 +43,7 @@
           <div class="col-xs-3 visible-xs">
             Speed
           </div>
-          <div class="col-xs-9 col-sm-2 text-center" ng-init="p = j.progress.bytes">
+          <div class="col-xs-9 col-sm-2 text-center" ng-init="p = j.bytes">
             <span ng-hide="!p || p.avg  <= 0">{{p.avg|size:2}}B/s</span>
             <span ng-hide="!p || p.inst <= 0">({{p.inst|size:2}}B/s)</span>
           </div>
@@ -52,9 +52,9 @@
             Endpoints
           </div>
           <div class="col-xs-9 col-sm-4 clearfix endpoints text-center">
-            <span title="{{j.src.uri}}">{{(j.src.uri|URI).host()}}</span>
+            <span>{{j.src.uri}}</span>
             <i class="fa fa-long-arrow-right"></i>
-            <span title="{{j.dest.uri}}">{{(j.dest.uri|URI).host()}}</span>
+            <span>{{j.dest.uri}}</span>
           </div>
 
           <div class="clearfix"></div>
@@ -75,12 +75,12 @@
 
               <dt>Source</dt>
               <dd>
-                <div ng-repeat="u in j.src.uri">{{u}}</div>
+                <div ng-repeat="u in [j.src.uri]">{{u}}</div>
               </dd>
 
               <dt>Destination</dt>
               <dd>
-                <div ng-repeat="u in j.dest.uri">{{u}}</div>
+                <div ng-repeat="u in [j.dest.uri]">{{u}}</div>
               </dd>
 
               <hr>
@@ -169,9 +169,9 @@
   <script type="text/ng-template" id="prog-pop.html">
     <dl class="dl-horizontal">
       <dt>Bytes</dt>
-      <dd ng-if="j.progress.bytes">
-        <span ng-bind="percent(j.progress.bytes)"></span>
-        <span ng-bind="progress(j.progress.bytes)"></span>
+      <dd ng-if="j.bytes">
+        <span ng-bind="percent(j.bytes)"></span>
+        <span ng-bind="progress(j.bytes)"></span>
       </dd>
       <dt>Files</dt>
       <dd ng-if="j.progress.files">

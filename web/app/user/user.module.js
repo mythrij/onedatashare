@@ -75,21 +75,19 @@ angular.module('stork.user', [
   };
 })
 
-.controller('Register', function ($scope, stork, $location, user, $modal) {
+.controller('Register', function ($scope, stork, user, $modal) {
   $scope.register = function (u) {
     return stork.register(u).then(function (d) {
-      user.saveLogin(d);
       $modal({
         title: "Welcome!",
         content: "Thank for you registering with StorkCloud! "+
-                 "You have been logged in automatically.",
+                 "Please check your email for further instructions.",
         show: true
       });
-      $location.path('/');
       delete $scope.user;
     }, function (e) {
       $modal({
-        title: "There was a problem registering",
+        title: "Registration Problem",
         content: e.error,
         show: true
       });

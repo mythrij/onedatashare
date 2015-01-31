@@ -51,10 +51,6 @@ public class HTTPResource extends Resource<HTTPSession, HTTPResource> {
     };
   }
 
-  public Emitter<String> list() {
-    return new HTMLParser(uri());
-  }
-
   /**
    * This can be considered as a specific download task for the
    * request from a {@link HTTPResource}.

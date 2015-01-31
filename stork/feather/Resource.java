@@ -175,9 +175,7 @@ public class Resource<S extends Session<S,R>, R extends Resource<S,R>> {
    * @throws UnsupportedOperationException if metadata retrieval is not
    * supported.
    */
-  public Bell<Stat> stat() {
-    throw new UnsupportedOperationException();
-  }
+  public Bell<Stat> stat() { throw unsupported("stat"); }
 
   /**
    * Get a listing of names of sub-{@code Resource}s under this {@code
@@ -186,9 +184,7 @@ public class Resource<S extends Session<S,R>, R extends Resource<S,R>> {
    * @return An {@code Emitter} that emits {@code Resource} names.
    * @throws UnsupportedOperationException if listing is not supported.
    */
-  public Emitter<String> list() {
-    throw new UnsupportedOperationException();
-  }
+  public Emitter<String> list() { throw unsupported("list"); }
 
   /**
    * Create this resource as a directory on the storage system. If the resource
@@ -201,9 +197,7 @@ public class Resource<S extends Session<S,R>, R extends Resource<S,R>> {
    * @throws UnsupportedOperationException if creating directories is not
    * supported.
    */
-  public Bell<R> mkdir() {
-    throw new UnsupportedOperationException();
-  }
+  public Bell<R> mkdir() { throw unsupported("mkdir"); }
 
   /**
    * Delete the {@code Resource} from the storage system. If the resource
@@ -214,9 +208,7 @@ public class Resource<S extends Session<S,R>, R extends Resource<S,R>> {
    * @throws Exception (via bell) if the resource could not be fully removed.
    * @throws UnsupportedOperationException if removal is not supported.
    */
-  public Bell<R> delete() {
-    throw new UnsupportedOperationException();
-  }
+  public Bell<R> delete() { throw unsupported("delete"); }
 
   /**
    * Return a {@code Sink} that will drain data for this {@code Resource}. Any
@@ -229,9 +221,7 @@ public class Resource<S extends Session<S,R>, R extends Resource<S,R>> {
    * @throws UnsupportedOperationException if this {@code Resource} does not
    * support writing.
    */
-  public Sink<R> sink() {
-    throw new UnsupportedOperationException();
-  }
+  public Sink<R> sink() { throw unsupported("sink"); }
 
   /**
    * Return a {@code Tap} that will emit data from this {@code Resource}. Any
@@ -244,8 +234,11 @@ public class Resource<S extends Session<S,R>, R extends Resource<S,R>> {
    * @throws UnsupportedOperationException if this {@code Resource} does not
    * support reading.
    */
-  public Tap<R> tap() {
-    throw new UnsupportedOperationException();
+  public Tap<R> tap() { throw unsupported("tap"); }
+
+  private UnsupportedOperationException unsupported(String op) {
+    throw new UnsupportedOperationException(
+      "The "+op+" operation is unsupported.");
   }
 
   /**

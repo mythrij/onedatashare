@@ -20,6 +20,9 @@ public abstract class Transfer<S extends Resource, D extends Resource> {
   public final S source;
   public final D destination;
 
+  /** Periodically updated information about the ongoing transfer. */
+  public final TransferInfo info = new TransferInfo();
+
   private Time timer;
   private Progress progress = new Progress();
   private Throughput throughput = new Throughput();
@@ -163,6 +166,7 @@ public abstract class Transfer<S extends Resource, D extends Resource> {
   protected final Transfer<S,D> addProgress(long size) {
     progress.add(size);
     throughput.update(size);
+    info.update(timer, progress, throughput);
     return this;
   }
 

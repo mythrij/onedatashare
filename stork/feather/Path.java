@@ -135,6 +135,8 @@ public abstract class Path {
 
   // Return a path based on an escaped path string.
   private static Path create(Path parent, String path) {
+    if (path == null)
+      return ROOT;
     String[] s = path.split("/+");
     if (s.length == 0)
       return (parent == null) ? ROOT : parent;
