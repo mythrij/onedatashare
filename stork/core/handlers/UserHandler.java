@@ -64,6 +64,13 @@ public class UserHandler extends Handler<UserRequest> {
       }
     }
 
+    else if (req.action.equals("password")) {
+      req.assertLoggedIn();
+      req.assertMayChangeState();
+      req.marshalInto(new PasswordChange()).run();
+      req.ring("Success");
+    }
+
     else {
       throw new RuntimeException("Invalid action.");
     }
@@ -128,5 +135,24 @@ class UserValidator extends Request {
       return false;
     User realUser = server.findUser(user);
     return realUser.validate(token);
+  }
+}
+
+/** Change the user's password. */
+class PasswordChange extends Request {
+  public String oldPassword;
+  public String newPassword;
+
+  public void run() {
+    // Check the old password.
+    User.Cookie cookie = new User.Cookie(server);
+    cookie.email = user().email;
+    cookie.password = oldPassword;
+    User user = cookie.login();
+
+    if (user == null || user != user())
+      throw new PermissionDenied();
+
+    user().setPassword(newPassword);
   }
 }

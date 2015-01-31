@@ -1,5 +1,5 @@
-<form role="form" class="signup-form ajax-form" ng-submit="register(user)"
-      ng-controller="Register">
+<form role="form" class="signup-form ajax-form"
+      ng-submit="promise = register(user)" ng-controller="Register">
   <div class="form-group">
     <label for="signup-email" class="sr-only">Email</label>
     <input id="signup-email" ng-model="user.email" type="email"
@@ -25,6 +25,8 @@
     By signing up, you agree to our <a href="#/terms">terms of service</a>
     and <a href="#/privacy">privacy policy</a>.
   </span>
+
+  <div cg-busy="promise"></div>
 </form>
 
 <script type="text/ng-template" id="register-confirm.html">

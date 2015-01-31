@@ -22,6 +22,7 @@ angular.module('stork', [
       requireLogin: true
     }).when('/user', {
       title: 'User Settings',
+      controller: 'User',
       templateUrl: 'app/user/user.html',
       requireLogin: true
     }).when('/oauth/:uuid', {
@@ -118,6 +119,12 @@ angular.module('stork', [
         uri: uri
       });
       return this.$get('user', {action: 'history'});
+    },
+    getUser: function (info) {
+      return this.$post('user', info);
+    },
+    postUser: function (info) {
+      return this.$post('user', info);
     },
     ls: function (ep, d) {
       if (typeof ep === 'string')
