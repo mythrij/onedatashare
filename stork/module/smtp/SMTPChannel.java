@@ -20,16 +20,15 @@ public class SMTPChannel {
   ChannelFuture channelFuture;
 
   SMTPChannel(final Bell bell) {
-    Bootstrap b = new Bootstrap(); 
-    b.group(workerGroup); 
-    b.channel(NioSocketChannel.class); 
-    b.option(ChannelOption.SO_KEEPALIVE, true); 
+    Bootstrap b = new Bootstrap();
+    b.group(workerGroup);
+    b.channel(NioSocketChannel.class);
+    b.option(ChannelOption.SO_KEEPALIVE, true);
     b.handler(new ChannelInitializer<SocketChannel>() {
       public void initChannel(SocketChannel ch) throws Exception {
         ch.pipeline().addLast(new LineBasedFrameDecoder(1000) {
           public void channelRead(ChannelHandlerContext ctx, Object msg) {
             String str = ((ByteBuf)msg).toString(CharsetUtil.UTF_8);
-            System.out.println("Got: "+str);
             if (!replies.isEmpty())
               replies.pop().ring(str);
           }
@@ -78,7 +77,6 @@ public class SMTPChannel {
 
     last.new Promise() {
       public void done() {
-        System.out.println("sending command..."+command);
         byte[] bytes = (command+"\r\n").getBytes();
         channelFuture.channel().writeAndFlush(Unpooled.wrappedBuffer(bytes));
       }
@@ -95,7 +93,6 @@ public class SMTPChannel {
 
     return last.new Promise() {
       public void done() {
-        System.out.println("sending line..."+line);
         byte[] bytes = (line+"\r\n").getBytes();
         channelFuture.channel().writeAndFlush(Unpooled.wrappedBuffer(bytes));
       }

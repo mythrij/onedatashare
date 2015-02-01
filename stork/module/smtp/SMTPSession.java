@@ -18,9 +18,8 @@ public class SMTPSession extends Session<SMTPSession,SMTPResource> {
   }
 
   protected Bell<SMTPSession> initialize() {
-    System.out.println("In initialize");
     Bell bell = new Bell();
-    channel = new SMTPChannel(bell); 
+    channel = new SMTPChannel(bell);
     channel.sendCommand("HELO buffalo.edu");
     channel.sendCommand("MAIL FROM:<jerryant@buffalo.edu>");
     channel.sendCommand("RCPT TO:<jerryant@buffalo.edu>");
@@ -36,7 +35,6 @@ public class SMTPSession extends Session<SMTPSession,SMTPResource> {
   }
 
   public SMTPResource select(Path path) {
-    System.out.println("in select:"+path);
     return new SMTPResource(this,path);
   }
 }

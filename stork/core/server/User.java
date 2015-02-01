@@ -19,12 +19,19 @@ public abstract class User {
   public String email;
   public String hash;
   public String salt;
-  public boolean validated = true;
+
+  /** Set to true once the user has validated registration. */
+  public boolean validated = false;
+  /** The validation token we're expecting. */
+  private String validationToken;
 
   public LinkedList<URI> history = new LinkedList<URI>();
   public Map<UUID,StorkCred> credentials = new HashMap<UUID,StorkCred>();
 
   private ArrayList<UUID> jobs = new ArrayList<UUID>();
+
+  /** Used to hold session connections for reuse. */
+  public transient SessionCache sessions = new SessionCache();
 
   /** Basic user login cookie. */
   public static class Cookie {
@@ -208,5 +215,52 @@ public abstract class User {
     for (Map.Entry<UUID,StorkCred> e : credentials.entrySet())
       map.put(e.getKey(), e.getValue().getInfo());
     return map;
+  }
+
+  /** Validate a user given a token. */
+  public synchronized boolean validate(String token) {
+    if (validated)
+      return true;
+    if (token == null || validationToken == null)
+      return false;
+    if (!token.equals(validationToken))
+      return false;
+    validationToken = null;
+    return validated = true;
+  }
+
+  /** Get or create a validation token for this user. */
+  public synchronized String validationToken() {
+    if (validated)
+      throw new RuntimeException("User is already validated.");
+    if (validationToken == null)
+      validationToken = salt(12);
+    return validationToken;
+  }
+
+  /** Call this to send the user a validation mail. */
+  public synchronized Bell<?> sendValidationMail() {
+    String base = "https://storkcloud.org/api/stork/user";
+    final String url = String.format(
+      base+"?action=validate&user=%s&token=%s",
+      normalizedEmail(), validationToken());
+    return new Mail() {{
+      from = Config.global.email;
+      to = User.this.email;
+      subject = "Complete your registration with StorkCloud";
+      body =
+        "Thank you for registering with StorkCloud!\n\n"+
+        "Please go here to complete your registration:\n\n"+url;
+    }}.send();
+  }
+
+  /**
+   * This is thrown when a user is trying to perform an action but is not
+   * validated.
+   */
+  public static class NotValidatedException extends RuntimeException {
+    public NotValidatedException() {
+      super("This account has not been validated.");
+    }
   }
 }

@@ -51,9 +51,6 @@ public abstract class StorkCred<O> extends Credential<O> {
     StorkCred cred = ((StorkCred) o);
     if (!type.equals(cred.type))
       return false;
-    System.out.println("Equals: "+
-      Arrays.toString(hashables())+" = "+
-      Arrays.toString(cred.hashables()));
     return Arrays.equals(hashables(), cred.hashables());
   }
 

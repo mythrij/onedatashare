@@ -69,8 +69,8 @@ public class FTPSession extends Session<FTPSession, FTPResource> {
         }};
       } else if (credential instanceof StorkUserinfo) {
         StorkUserinfo cred = (StorkUserinfo) credential;
-        user = cred.username;
-        pass = cred.password;
+        user = cred.username();
+        pass = cred.password();
         channel.authorize(user, pass).promise(this);
       } else {
         // Unsupported credential. Try anonymous auth.

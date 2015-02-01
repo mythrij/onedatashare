@@ -88,7 +88,7 @@ angular.module('stork.transfer.queue', [])
         function (m) {
           j.status = 'removed';
         }, function (e) {
-          alert("failure!");
+          alert("Failed to remove job: "+e.error);
         }
       );
   };

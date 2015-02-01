@@ -6,7 +6,7 @@ import stork.feather.*;
 import stork.util.*;
 
 public class SessionCache {
-  Map<Session,Session> map = new HashMap<Session, Session>();
+  private Map<Session,Session> map = new HashMap<Session, Session>();
 
   public synchronized Resource take(Resource resource) {
     Session session = take(resource.session);

@@ -13,22 +13,6 @@ public class SMTPModule extends Module<SMTPResource> {
   }
 
   public SMTPResource select(URI uri, Credential credential) {
-    return new SMTPSession(uri).root(); 
-  }
-
-  public static void main(String[] argv) {
-    SMTPSession smtpSession = new SMTPSession(URI.EMPTY);
-    Resource smtpResource = smtpSession.root();
-    Resource src = new FTPModule().select(argv[1]);
-    Transfer tf = src.transferTo(smtpResource);
-    tf.start();
-    tf.onStop().promise(new Bell() {
-      protected void done() {
-        System.out.println("Transfer complete");
-      }
-      protected void fail(Throwable t) {
-        t.printStackTrace();
-      }
-    });
+    return new SMTPSession(uri).root();
   }
 }

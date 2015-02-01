@@ -105,6 +105,8 @@ public abstract class Request extends Bell<Object> implements Runnable {
       return;
     if (user() == null || user().isAnonymous())
       throw new PermissionDenied();
+    if (!user().validated)
+      throw new User.NotValidatedException();
   }
 
   public void assertMayChangeState() {

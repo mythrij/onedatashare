@@ -28,6 +28,7 @@ angular.module('stork.credentials', [])
   $scope.saveCredential = function (cred) {
     $scope.end.credential = cred;
     $scope.$hide();
+    $scope.refresh();
   };
 
   $scope.changeSelection = function (s) {

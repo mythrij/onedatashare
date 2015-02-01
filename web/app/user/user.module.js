@@ -29,6 +29,13 @@ angular.module('stork.user', [
     if (!$rootScope.$user)
       $location.path(redirectTo||'/');
   };
+  this.setPassword = function (op, np) {
+    return stork.postUser({
+      action: "password",
+      oldPassword: op,
+      newPassword: np
+    });
+  };
 
   // If there's a cookie, attempt to log in.
   var u = {
@@ -73,4 +80,50 @@ angular.module('stork.user', [
       show: true
     });
   };
+
+  $scope.changePassword = function (op, np1, np2) {
+    if (np1 != np2) {
+      $modal({
+        title: "Mismatched password",
+        content: "The passwords do not match.",
+        show: true
+      });
+      return false;
+    }
+
+    return user.setPassword(op, np1).then(function (d) {
+      $modal({
+        title: "Success!",
+        content: "Password successfully changed! Please log in again.",
+        show: true
+      });
+      user.forgetLogin();
+    }, function (e) {
+      $modal({
+        title: "Error",
+        content: e.error,
+        show: true
+      });
+    });
+  };
+})
+
+.controller('Register', function ($scope, stork, user, $modal) {
+  $scope.register = function (u) {
+    return stork.register(u).then(function (d) {
+      $modal({
+        title: "Welcome!",
+        content: "Thank for you registering with StorkCloud! "+
+                 "Please check your email for further instructions.",
+        show: true
+      });
+      delete $scope.user;
+    }, function (e) {
+      $modal({
+        title: "Registration Problem",
+        content: e.error,
+        show: true
+      });
+    })
+  }
 });

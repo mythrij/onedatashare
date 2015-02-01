@@ -84,7 +84,6 @@ public class DumpStateThread extends Thread {
 
       if (!temp_file.renameTo(state_file))
         throw new RuntimeException("Could not rename temp dump file.");
-      Log.info("Finished dumping server state.");
     } catch (Exception e) {
       Log.warning("Couldn't save state: "+
           state_file+": "+e.getMessage());

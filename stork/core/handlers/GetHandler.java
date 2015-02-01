@@ -8,7 +8,7 @@ public class GetHandler extends Handler<EndpointRequest> {
   public void handle(final EndpointRequest req) {
     req.assertLoggedIn();
 
-    final Resource resource = req.server.sessions.take(req.resolve());
+    final Resource resource = req.user().sessions.take(req.resolve());
     Transfer t = resource.transferTo(req.resource);
     t.start();
     t.onStop().new Promise() {
@@ -17,7 +17,7 @@ public class GetHandler extends Handler<EndpointRequest> {
       } public void fail(Throwable t) {
         req.ring(t);
       } public void always() {
-        server.sessions.put(resource.session);
+        req.user().sessions.put(resource.session);
       }
     };
   }

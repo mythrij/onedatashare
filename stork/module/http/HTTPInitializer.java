@@ -21,7 +21,7 @@ public class HTTPInitializer extends ChannelInitializer<SocketChannel> {
 
   private boolean ssl;
   private HTTPBuilder builder;
-  
+
   public HTTPInitializer (String scheme, HTTPBuilder builder) throws HTTPException {
     ssl = false;
     if (scheme == null) {
@@ -29,19 +29,18 @@ public class HTTPInitializer extends ChannelInitializer<SocketChannel> {
     } else if (scheme.equalsIgnoreCase("https")) {
       ssl = true;
     }
-    
+
     this.builder = builder;
   }
-  
+
   /**
    * Adds pipelines to channel.
    * 
    *  @param ch channel to be operated on
    */
-  @Override
   protected void initChannel(SocketChannel ch) throws Exception {
     ChannelPipeline pipe = ch.pipeline();
-    
+
     if (ssl) {
       // HTTPs connection
       SSLEngine sslEng = getSsl(null);
@@ -60,10 +59,10 @@ public class HTTPInitializer extends ChannelInitializer<SocketChannel> {
     String protocol = (proto == null) ? "TLS" : proto;
     SSLContext context = SSLContext.getInstance(protocol);
     try {
-		context.init(null, null, null);
-	} catch (KeyManagementException e) {
-		System.err.println(e.getMessage());
-	}
+      context.init(null, null, null);
+    } catch (KeyManagementException e) {
+      System.err.println(e.getMessage());
+    }
 
     return context.createSSLEngine();
   }

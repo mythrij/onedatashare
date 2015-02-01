@@ -22,6 +22,7 @@ angular.module('stork', [
       requireLogin: true
     }).when('/user', {
       title: 'User Settings',
+      controller: 'User',
       templateUrl: 'app/user/user.html',
       requireLogin: true
     }).when('/oauth/:uuid', {
@@ -29,7 +30,17 @@ angular.module('stork', [
       controller: 'OAuth',
       templateUrl: 'app/credentials/oauth.html',
       requireLogin: true
-    }).when('/terms', {
+    })
+    
+    .when('/validate', {
+      title: 'Validation',
+      templateUrl: 'app/user/validate.html',
+    }).when('/validateError', {
+      title: 'Error',
+      templateUrl: 'app/user/validateError.html',
+    })
+    
+    .when('/terms', {
       title: 'Terms of Service',
       templateUrl: 'app/legal/terms.html'
     }).when('/privacy', {
@@ -109,6 +120,12 @@ angular.module('stork', [
       });
       return this.$get('user', {action: 'history'});
     },
+    getUser: function (info) {
+      return this.$post('user', info);
+    },
+    postUser: function (info) {
+      return this.$post('user', info);
+    },
     ls: function (ep, d) {
       if (typeof ep === 'string')
         ep = { uri: ep };
@@ -177,16 +194,4 @@ angular.module('stork', [
       $document[0].title = 'StorkCloud - '+current.$$route.title;
     }
   );
-})
-
-.controller('RegisterCtrl', function ($scope, stork, $location, user, $modal) {
-  $scope.register = function (u) {
-    return stork.register(u).then(function (d) {
-      user.saveLogin(d);
-      $location.path('/');
-      delete $scope.user;
-    }, function (e) {
-      alert(e);
-    })
-  }
 });

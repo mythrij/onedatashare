@@ -59,22 +59,25 @@ angular.module('stork.transfer', [
 
   $scope.canTransfer = function (srcName, destName, contents) {
     var src = endpoints.get(srcName);
-    var dest = endpoints.get(srcName);
+    var dest = endpoints.get(destName);
     if (!src || !dest || !src.uri || !dest.uri)
       return false;
     if (_.size(src.$selected) < 1 || _.size(dest.$selected) != 1)
+      return false;
+    if (_.values(src.$selected)[0].dir && !_.values(dest.$selected)[0].dir)
       return false;
     return true;
   };
 
   $scope.transfer = function (srcName, destName, contents) {
     var src = endpoints.get(srcName);
-    var dest = endpoints.get(srcName);
+    var dest = endpoints.get(destName);
 
-    var job = $scope.job;
+    var job = angular.copy($scope.job);
+    job.src = src;
+    job.dest = dest;
     var su = job.src.uri  = _.keys(src.$selected)[0];
     var du = job.dest.uri = _.keys(dest.$selected)[0];
-    console.log($scope.job);
 
     // If src is a file and dest a directory, add file name.
     if (src.$selected[su].file && dest.$selected[du].dir) {
@@ -87,6 +90,7 @@ angular.module('stork.transfer', [
       contentTemplate: 'transfer-modal.html'
     });
 
+    console.log(job);
     modal.$scope.job = job;
     modal.$scope.submit = $scope.submit;
   };

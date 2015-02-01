@@ -1,52 +1,34 @@
 package stork.scheduler;
 
-import java.util.LinkedList;
+import java.util.*;
 
+import stork.core.*;
+
+/** A simple first in first out scheduler. */
 public class FIFOScheduler extends Scheduler {
+  private List<Job> queue = new LinkedList<Job>();
+  private int running;
+  private Config config = Config.global;
 
-  private LinkedList<Job> _scheduledJobs;
-
-  private int _runningJobs;
-
-  public FIFOScheduler() {
-    _scheduledJobs = new LinkedList<Job>();
-
-    _runningJobs = 0;
-  }
-
-  protected void schedule(Job job) {
-    // start the job
-    if (canRunJob()) {
+  protected synchronized void schedule(Job job) {
+    if (config.max_jobs == 0 || running < config.max_jobs)
       runJob(job);
-      incrementRunningJobs();
-    } else {
-      _scheduledJobs.add(job);
-    }
+    else
+      queue.add(job);
   }
 
-  private boolean canRunJob() {
-    if (server().config.max_jobs == 0) {
-      return true;
-    } else if (getRunningJobs() < server().config.max_jobs) {
-      return true;
-    } else {
-      return false;
-    }
-  }
-
-  private void runJob(final Job job) {
+  /** Starts the job and registers callbacks. */
+  private synchronized void runJob(final Job job) {
+    running++;
     job.start().new Promise() {
-      protected void done() throws Throwable {
-        if (!_scheduledJobs.isEmpty()) {
-          runJob(_scheduledJobs.poll());
-        } else {
-          decrementRunningJobs();
-        }
-      }
+      protected void always() { jobTerminated(); }
     };
   }
-  
-  synchronized private int getRunningJobs(){ return _runningJobs; }
-  synchronized private void incrementRunningJobs(){ _runningJobs++; };
-  synchronized private void decrementRunningJobs(){ _runningJobs--; };
+
+  /** Called when a job has completed or failed to start. */
+  private synchronized void jobTerminated() {
+    running--;
+    if (!queue.isEmpty())
+      runJob(queue.remove(0));
+  }
 }

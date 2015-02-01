@@ -127,6 +127,7 @@ uninstall:
 buildtest: distclean
 	$(MAKE) help
 	$(MAKE)
+	$(MAKE) test
 	$(MAKE) clean
 	$(MAKE) distclean
 

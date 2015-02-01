@@ -18,7 +18,6 @@ public class InfoHandler extends Handler<InfoRequest> {
     req.ring(new Object() {
       String version = stork.core.Main.version();
       Set<String> commands = req.server.handlers.keySet();
-      Config config = req.server.config;
     });
   }
 
