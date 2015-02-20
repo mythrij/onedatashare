@@ -126,7 +126,7 @@ public class HTTPMessageHandler extends ChannelHandlerAdapter {
 
       if (content instanceof LastHttpContent) {
         if (status == Status.Content) {
-          tap.finish();
+          tap.finish(null);
         }
         if (builder.isKeepAlive()) {
           if (builder.onCloseBell.isDone()) {
@@ -188,7 +188,7 @@ public class HTTPMessageHandler extends ChannelHandlerAdapter {
    */
   public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
     // Close the connection when an exception is raised.
-    tap.finish();
+    tap.finish(cause);
     if (cause instanceof ReadTimeoutException) {
       ctx.fireChannelInactive();
     } else {

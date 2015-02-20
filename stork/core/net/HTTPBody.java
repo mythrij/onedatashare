@@ -68,7 +68,7 @@ public class HTTPBody extends Resource<HTTPRequest,HTTPBody> {
     }
 
     public Bell drain(Slice s) { return super.drain(s); }
-    public void finish() { super.finish(); }
+    public void finish(Throwable t) { super.finish(t); }
   };
 
   /**
@@ -98,7 +98,7 @@ public class HTTPBody extends Resource<HTTPRequest,HTTPBody> {
       return session.toNetty(new DefaultHttpContent(buf));
     }
 
-    public void finish() {
+    public void finish(Throwable t) {
       session.finishResponse();
     }
   };

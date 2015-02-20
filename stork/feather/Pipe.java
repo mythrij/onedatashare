@@ -8,9 +8,24 @@ import java.util.*;
  * Tap}.
  */
 public class Pipe {
+  /** Upstream and downstream pipe elements. */
   private Pipe upstream, downstream;
-  private boolean finished = false;
-  private Bell lastDrain = Bell.rungBell();
+  /** Will ring when this pipe has been started. */
+  private Bell startBell;
+  /** Will ring when this pipe has finished. */
+  private final Bell finishBell = new Bell() {
+    public void always() {
+      drainBell.new Promise() {
+        public void done() {
+          downstream().finish();
+        } public void fail(Throwable t) {
+          downstream().finish(t);
+        }
+      };
+    }
+  };
+  /** Synchronizes drains. First ring should be by start(). */
+  private Bell drainBell = new Bell();
 
   /** The orientation of a {@code Pipe} in a pipeline. */
   public static enum Orientation {
@@ -125,13 +140,20 @@ public class Pipe {
    * immediately.
    */
   protected synchronized Bell start() throws Exception {
+    if (startBell == null) {
+      startBell = safeStart();
+      startBell.promise(drainBell);
+    }
+    return startBell.detach();
+  }
+
+  // Safe wrapper around downstream.start().
+  private Bell safeStart() {
     try {
       Bell bell = downstream().start();
-      if (bell == null)
-        bell = Bell.rungBell();
-      return bell;
+      return (bell != null) ? bell.detach() : Bell.rungBell();
     } catch (Exception e) {
-      return new Bell(e);
+      return Bell.wrap(e);
     }
   }
 
@@ -144,64 +166,46 @@ public class Pipe {
    *
    * @param slice a {@code Slice} being drained through the pipeline.
    * @return A {@code Bell} that rings when the pipeline is ready for more
-   * data, or {@code null} if more data is ready to be drained immediately. If
-   * the returned {@code Bell} fails, the upstream {@code Pipe} should cease
-   * the draining of {@code Slice}s.
-   * @throws IllegalStateException if this method is called when the pipeline
-   * has not been initialized.
+   * data. If the returned {@code Bell} fails, the upstream {@code Pipe} should
+   * cease the draining of {@code Slice}s.
+   * @throws IllegalStateException if this method is called after {@link
+   * #finish()} has been called or before the pipeline has been configured.
    * @throws Exception if {@code Pipe} is unable to drain {@code slice} for
    * some reason known immediately. The default implementation will never
    * throw.
    */
-  protected synchronized Bell drain(Slice slice) throws Exception {
-    if (!finished) try {
-      Bell bell = downstream().drain(slice);
-      if (bell == null)
-        bell = Bell.rungBell();
-      return lastDrain = bell;
-    } catch (Exception e) {
-      return lastDrain = new Bell(e);
-    } throw new RuntimeException("The pipeline is finished.");
+  protected synchronized Bell drain(final Slice slice) throws Exception {
+    if (finishBell.isDone())
+      throw new IllegalStateException("Pipeline has finished.");
+    final Bell next = new Bell();
+    drainBell.new Promise() {
+      public void done() {
+        safeDrain(slice).promise(next);
+      } public void fail(Throwable t) {
+        finish(t);
+      }
+    };
+    drainBell = next;
+    return next.detach();
   }
 
-  /**
-   * Called when an upstream {@code Pipe} encounters an {@code Throwable} while
-   * draining. By default, this propagates the {@code Throwable} downstream for
-   * handling by the {@code Sink}.
-   *
-   * @param error a {@code Throwable} indicating what error occurred.
-   * @return A {@code Bell} that rings when the pipeline is ready for more
-   * data, or {@code null} if more data is ready to be drained immediately.
-   * @throws IllegalStateException if this method is called when the pipeline
-   * has not been initialized.
-   */
-  protected synchronized Bell drain(Throwable error) {
-    if (!finished) try {
-      Bell bell = downstream().drain(error);
-      if (bell == null)
-        bell = Bell.rungBell();
-      return lastDrain = bell;
+  // Safe wrapper around downstream.drain().
+  private Bell safeDrain(Slice slice) {
+    try {
+      Bell bell = downstream().drain(slice);
+      return (bell != null) ? bell.detach() : Bell.rungBell();
     } catch (Exception e) {
-      return lastDrain = new Bell(e);
-    } throw new RuntimeException("The pipeline is finished.");
+      return Bell.wrap(e);
+    }
   }
 
   /**
    * Finalize the flow of data through this {@code Pipe}. Calling this
-   * indicates the successful completion of the data transfer. Once called, no
-   * more {@code Slice}s will be drained through this {@code Pipe}. It will not
-   * propagate the call until the last {@code Slice} has been drained.
+   * indicates the successful completion of the data transfer. It is equivalent
+   * to doing {@code finish(null)}.
    */
-  protected synchronized void finish() {
-    if (!finished) {
-      if (lastDrain == null) {
-        downstream().finish();
-      } else lastDrain.new Promise() {
-        public void always() { downstream().finish(); }
-      };
-      lastDrain = null;
-      finished = true;
-    }
+  protected final void finish() {
+    finish(null);
   }
 
   /**
@@ -210,18 +214,14 @@ public class Pipe {
    * no more {@code Slice}s will be drained through this {@code Pipe}. It will
    * not propagate the call until the last {@code Slice} has been drained.
    *
-   * @param error a {@code Throwable} indicating what error occurred.
+   * @param error a {@code Throwable} indicating what error occurred, or {@code
+   * null} if the transfer finished successfully.
    */
   protected synchronized void finish(final Throwable error) {
-    if (!finished) {
-      if (lastDrain == null) {
-        downstream().finish(error);
-      } else lastDrain.new Promise() {
-        public void always() { downstream().finish(error); }
-      };
-      lastDrain = null;
-      finished = true;
-    }
+    if (error == null)
+      finishBell.ring();
+    else
+      finishBell.ring(error);
   }
 
   /**

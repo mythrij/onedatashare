@@ -92,7 +92,7 @@ public final class Pipes {
         return null;
       }
 
-      public void finish() {
+      public void finish(Throwable t) {
         ByteBuf[] array = list.toArray(new ByteBuf[0]);
         ByteBuf buf = Unpooled.wrappedBuffer(array);
         try {
@@ -120,7 +120,7 @@ public final class Pipes {
       return null;
     }
 
-    public void finish() {
+    public void finish(Throwable t) {
       ByteBuf[] array = list.toArray(new ByteBuf[0]);
       ByteBuf buf = Unpooled.wrappedBuffer(array);
       bell.ring(new Slice(buf));

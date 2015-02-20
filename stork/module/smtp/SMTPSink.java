@@ -39,7 +39,7 @@ public class SMTPSink extends Sink<SMTPResource>{
   }
 
   //footers
-  protected void finish() {
+  protected void finish(Throwable t) {
     channel().disableBase64();
     channel().send("\n--separate--");
   }
