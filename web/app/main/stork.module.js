@@ -59,8 +59,8 @@ angular.module('stork', [
   };
   var ge = function (r) {
     var data = r.data ? r.data : {
-      type: "ConnectionRefused",
-      error: "Could not connect to Stork."
+      type: "TimeoutException",
+      error: "Connection timed out."
     };
     return $q.reject(data);
   };
@@ -78,14 +78,14 @@ angular.module('stork', [
         method: 'POST',
         url: this.$uri(name),
         data: data,
-        timeout: 5000
+        timeout: 10000
       }).then(gr, ge);
     },
     $get: function (name, data) {
       return $http({
         method: 'GET',
         url: this.$uri(name, data),
-        timeout: 5000
+        timeout: 10000
       }).then(gr, ge);
     },
     $download: function (ep) {
