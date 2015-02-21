@@ -129,7 +129,7 @@ public class DbxResource extends Resource<DbxSession, DbxResource> {
       }.start();
     }
 
-    protected void finish() {
+    protected void finish(Throwable t) {
       try {
         upload.finish();
       } catch (Exception e) {

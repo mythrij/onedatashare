@@ -61,7 +61,7 @@ class HexDumpSink extends Sink<HexDumpResource> {
     return null;
   }
 
-  public void finish() {
+  public void finish(Throwable t) {
     destination().out.println("End of dump: "+destination().path);
     destination().out.println("Total bytes: "+total);
     destination().out.println("Throughput:  "+HexDumpResource.throughput);

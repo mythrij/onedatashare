@@ -140,11 +140,11 @@ extends Transfer<S,D> {
       } protected Bell drain(Slice slice) throws Exception {
         addProgress(slice.length());
         return super.drain(slice);
-      } protected void finish() {
-        super.finish();
+      } protected void finish(Throwable t) {
+        super.finish(t);
+        if (t != null)
+          stop(t);
         transferEnded(path);
-      } protected void finish(Exception e) {
-        stop(e);
       }
     }).attach(destination.select(path).sink()).tap().start();
   }

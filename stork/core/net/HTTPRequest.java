@@ -57,7 +57,7 @@ public abstract class HTTPRequest extends Session<HTTPRequest,HTTPBody> {
   /** Called when the request is finished. */
   public void finishRequest() {
     if (tap != null)
-      tap.finish();
+      tap.finish(null);
   }
 
   /** Send an error to the requestor. */
@@ -92,6 +92,6 @@ public abstract class HTTPRequest extends Session<HTTPRequest,HTTPBody> {
 
   /** Close the transfer. */
   public void cleanup() {
-    if (tap != null) tap.finish();
+    if (tap != null) tap.finish(null);
   }
 }

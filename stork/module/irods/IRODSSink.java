@@ -28,21 +28,19 @@ public class IRODSSink extends Sink<IRODSResource>{
       }
     }.startOn(destination().initialize());
   }
-  
+
   public Bell drain(final Slice slice) {
     return new ThreadBell(executor) {
       public Object run() throws Exception {
         stream.streamBytesToFile(slice.asBytes(), slice.length());
         return null;
-      } 
+      }
     }.startOn(destination().initialize());
   }
-  
-  protected void finish() {
+
+  protected void finish(Throwable t) {
     if (stream != null) executor.execute(new Runnable() {
       public void run() { stream.close(); }
     });
-  } protected void finish(Throwable t) {
-    finish();
-  }  
+  }
 }

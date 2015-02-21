@@ -197,12 +197,12 @@ class LocalTap extends Tap<LocalResource> {
     };
   }
 
-  protected void finish() {
+  protected void finish(Throwable t) {
     try {
       raf.close();
       channel.close();
     } catch (Exception e) { }
-    super.finish();
+    super.finish(t);
   }
 }
 
@@ -246,7 +246,7 @@ class LocalSink extends Sink<LocalResource> {
     }.start();
   }
 
-  protected void finish() {
+  protected void finish(Throwable t) {
     try {
       raf.close();
       channel.close();

@@ -113,7 +113,7 @@ public class HTTPResource extends Resource<HTTPSession, HTTPResource> {
       return super.drain(slice);
     }
 
-    public void finish() { super.finish(); }
+    public void finish(Throwable t) { super.finish(t); }
 
     /** 
      * Tells whether this {@code HTTPTap} instance has acquired

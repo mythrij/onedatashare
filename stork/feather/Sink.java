@@ -56,5 +56,5 @@ public abstract class Sink<D extends Resource> extends Pipe {
    */
   protected abstract Bell drain(Slice slice) throws Exception;
 
-  protected abstract void finish();
+  protected abstract void finish(Throwable t);
 }
