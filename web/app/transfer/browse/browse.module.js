@@ -261,10 +261,12 @@ angular.module('stork.transfer.browse', [
     return _.keys($scope.end.$selected);
   };
 
-  /* Get a list of things to show in the dropdown box. */
+  /* Default examples to show in the dropdown box. */
   $scope.dropdownList = [
     ["fa-dropbox", "Dropbox", "dropbox:///"],
-    ["fa-globe", "Mozilla FTP", "ftp://ftp.mozilla.org/"]
+    ["fa-globe", "Mozilla FTP", "ftp://ftp.mozilla.org/"],
+    ["fa-globe", "SDSC Gordon (GridFTP)", "gsiftp://oasis-dm.sdsc.xsede.org/"],
+    ["fa-envelope", "E-mail", "mailto:stork@example.com"]
   ];
 
   $scope.openOAuth = function (url) {
