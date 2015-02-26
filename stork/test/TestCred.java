@@ -5,7 +5,7 @@ import static org.junit.Assert.*;
 
 import stork.cred.*;
 
-/** Tests for Feather. */
+/** Tests for Cred. */
 public class TestCred {
   @Test
   public void testOAuthEquality() {

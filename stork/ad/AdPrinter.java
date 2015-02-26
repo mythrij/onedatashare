@@ -138,12 +138,15 @@ public class AdPrinter {
       default  : sb.append(c);
     }
     return sb.append(STL).toString();
-  } 
+  }
 
   // Convert an object into a parsable representation.
   protected String stringify(AdObject ao) {
-    if (ao.isString()) {
+    if (ao.isString())
       return escapeString(ao.asString());
-    } return ao.asString(); 
+    // Represent special numbers like Infinity as 0.
+    if (ao.isSpecialNumber())
+      return "0";
+    return ao.asString();
   }
 }
