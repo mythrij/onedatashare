@@ -92,8 +92,9 @@ public class HTTPResource extends Resource<HTTPSession, HTTPResource> {
                 builder.tryResetConnection(HTTPTap.this);
               }
             } else {
-              onStartBell.ring(new HTTPException("Http session " +
+              onStartBell.ring(new HTTPException("HTTP session " +
                     builder.getHost() + " has been closed."));
+              session.close();
             }
           }
 

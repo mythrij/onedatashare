@@ -1,5 +1,7 @@
 package stork.test;
 
+import java.io.*;
+
 import org.junit.Test;
 import static org.junit.Assert.*;
 
@@ -80,5 +82,18 @@ public class TestFeather {
     assertEquals("First queued emit failed.", a.sync(), "one");
     assertEquals("Second queued emit failed.", b.sync(), "two");
     assertEquals("Third queued emit failed.", c.sync(), "three");
+  }
+
+  @Test(timeout = 3000)
+  public void testTapAsInputStream() throws Exception {
+    String expect = "This is the expected string.";
+    String got;
+    Tap tap = Pipes.tapFromString(expect);
+    BufferedReader br = new BufferedReader(
+      new InputStreamReader(Pipes.asInputStream(tap)));
+    tap.start();
+    got = br.readLine();
+
+    assertEquals("Read bad string: "+got, got, expect);
   }
 }
