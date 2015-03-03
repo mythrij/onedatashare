@@ -143,7 +143,7 @@ public class HTTPBuilder {
             HTTPChannel channel = (HTTPChannel) this.get();
             HTTPBuilder.this.channel = channel;
             channel.addChannelTask(localTap);
-            channel.writeAndFlush(prepareGet(localTap.getPath()));
+            channel.writeAndFlush(prepareGet(localTap.getPath().toString()));
           } catch (ExecutionException e) {
             System.err.println(e.getMessage());
             HTTPBuilder.this.channel.clear();
@@ -242,7 +242,7 @@ public class HTTPBuilder {
    * @param path specific file path under this host
    * @return Message to be sent
    */
-  protected HttpRequest prepareGet(Path path) {
+  protected HttpRequest prepareGet(String path) {
     return prepareRequest("GET", path);
   }
 
@@ -252,7 +252,7 @@ public class HTTPBuilder {
    * @param path specific file path under this host
    * @return Message to be sent
    */
-  protected HttpRequest prepareHead(Path path) {
+  protected HttpRequest prepareHead(String path) {
     return prepareRequest("HEAD", path);
   }
 
@@ -262,9 +262,9 @@ public class HTTPBuilder {
    * @param path specific file path under this host
    * @return Message to be sent
    */
-  protected HttpRequest prepareRequest(String method, Path path) {
+  protected HttpRequest prepareRequest(String method, String path) {
     HttpRequest request = new DefaultFullHttpRequest( 
-        HttpVersion.HTTP_1_1, HttpMethod.valueOf(method), "" + path);
+        HttpVersion.HTTP_1_1, HttpMethod.valueOf(method), path);
     request.headers().set(HttpHeaders.Names.HOST, this.uri.host());
     request.headers().set(HttpHeaders.Names.USER_AGENT, "Stork");
 
@@ -273,7 +273,7 @@ public class HTTPBuilder {
 
   // Tests whether the connection supports keep-alive.
   private void testConnection() {
-    HttpRequest request = prepareGet(uri.path());
+    HttpRequest request = prepareGet(uri.path().toString());
     onTestBell = new Bell<Void>() {
       protected void done() {
         channel.config().setKeepAlive(isKeepAlive);

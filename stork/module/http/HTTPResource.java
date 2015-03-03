@@ -11,7 +11,7 @@ import stork.feather.*;
 public class HTTPResource extends Resource<HTTPSession, HTTPResource> {
 
   // Rung when the first resource response header is received
-  private Bell<Stat> statBell = new Bell<Stat> ();
+  private Bell<Stat> statBell = new Bell<Stat>();
 
   /**
    * Constructs a {@code resource} with HTTP connection request.
@@ -40,13 +40,26 @@ public class HTTPResource extends Resource<HTTPSession, HTTPResource> {
           HTTPChannel ch = builder.getChannel();
 
           ch.addChannelTask(new HTTPTap());  // FIXME hacky
-          ch.writeAndFlush(builder.prepareHead(path));
+          ch.writeAndFlush(builder.prepareHead(path.toString()));
         } else {
           statBell.ring(new HTTPException("Http session " +
                 builder.getHost() + " has been closed."));
         }
 
         return statBell;
+      }
+    }.new AsBell<Stat>() {
+      // Fetch the page to do listing if necessary.
+      public Bell<Stat> convert(final Stat stat) {
+        if (!stat.dir)
+          return Bell.wrap(stat);
+        Bell<Set<Stat>> listBell =
+          new HTTPListParser(uri(), tap()).getListing();
+        return listBell.new As<Stat>() {
+          public Stat convert(Set<Stat> set) {
+            return stat.setFiles(set);
+          }
+        };
       }
     };
   }
@@ -59,7 +72,7 @@ public class HTTPResource extends Resource<HTTPSession, HTTPResource> {
 
     protected Bell<Void> onStartBell, sinkReadyBell;
     private HTTPBuilder builder;
-    private Path resourcePath;
+    private String resourcePath;
 
     /**
      * Constructs a {@code tap} associated with a {@code resource}
@@ -69,7 +82,7 @@ public class HTTPResource extends Resource<HTTPSession, HTTPResource> {
       super(HTTPResource.this);
       this.builder = HTTPResource.this.session.builder;
       onStartBell = new Bell<Void> ();
-      setPath(path);
+      setPath(path.toString());
     }
 
     public Bell<?> start(final Bell bell) {
@@ -134,12 +147,12 @@ public class HTTPResource extends Resource<HTTPSession, HTTPResource> {
      * 
      * @param path new {@link Path} instance to be changed to
      */
-    protected void setPath(Path path) {
+    protected void setPath(String path) {
       resourcePath = path;
     }
 
     /*** Gets reconfigured {@code path}. */
-    protected Path getPath() {
+    protected String getPath() {
       return resourcePath;
     }
   }
