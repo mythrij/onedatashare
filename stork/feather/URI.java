@@ -720,10 +720,23 @@ public class URI {
    * overlap between this URI and {@code base}, this URI is returned. TODO
    *
    * @param base the base URI to relativize this URI to.
-   * @return A URI based on this one, relative to {@code base},
+   * @return A URI based on this one, relative to {@code base}.
    */
   public URI relativeTo(URI base) {
     return this;
+  }
+
+  /**
+   * Resolve the given URI against this URI.
+   *
+   * @param uri the URI to resolve against this URI.
+   * @return A URI resolved against this one.
+   */
+  public URI resolve(URI uri) {
+    if (uri.isAbsolute())
+      return uri;
+    URIBuilder t = new URIBuilder();
+    throw new Error("Not implemented");
   }
 
   /**

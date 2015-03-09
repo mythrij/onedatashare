@@ -15,9 +15,7 @@ import stork.feather.util.*;
 public class HTTPListParser {
   private final InputStream is;
   private final URI base;
-  private Bell<Set<Stat>> listBell;
-  /** Names of files directly under base. */
-  private Set<Stat> stats = new HashSet<Stat>();
+  private Bell<List<Stat>> listBell;
 
   /** Extract a listing from {@code source}. This starts {@code source}. */
   public HTTPListParser(URI base, Tap source) {
@@ -27,39 +25,54 @@ public class HTTPListParser {
   }
 
   /** Parse and return the listing. */
-  public synchronized Bell<Set<Stat>> getListing() {
-    if (listBell == null) listBell = new ThreadBell<Set<Stat>>() {
-      public Set<Stat> run() throws Exception {
+  public synchronized Bell<List<Stat>> getListing() {
+    if (listBell == null) listBell = new ThreadBell<Set<String>>() {
+      public Set<String> run() throws Exception {
         Document doc = Jsoup.parse(is, "UTF-8", base.toString());
+        Set<String> names = new HashSet<String>();
 
         for (Element e : doc.select("a[href]")) {
-          addName(e.attr("href"));
+          addName(names, e.attr("href"));
         } for (Element e : doc.select("[src]")) {
-          addName(e.attr("src"));
+          addName(names, e.attr("src"));
         } for (Element e : doc.select("link[href]")) {
-          addName(e.attr("href"));
+          addName(names, e.attr("href"));
+        }
+        return names;
+      }
+    }.start().new As<List<Stat>>() {
+      public List<Stat> convert(Set<String> names) {
+        List<Stat> stats = new LinkedList<Stat>();
+        for (String name : names) {
+          Stat stat = createStat(name);
+          if (stat != null)
+            stats.add(stat);
         }
         return stats;
       }
-    }.start();
+    };
     return listBell.detach();
   }
 
   /** Add a relative path. */
-  private void addName(String name) {
+  private void addName(Set<String> names, String name) {
+    if (name.startsWith("#"))
+      return;
     URI uri = URI.create(name);
     if (uri.isAbsolute())
       return;
-    Path path = base.path().appendLiteral(name);
+    Path path = uri.path();
     if (!path.isRoot() && path.up().equals(base.path()))
-      stats.add(createStat(path.name()));
+      names.add(path.name());
   }
 
   /** Create a Stat from a name. */
-  private Stat createStat(String name) {
+  private static Stat createStat(String name) {
     boolean dir = name.endsWith("/");
     if (dir)
       name = name.replaceAll("/+$", "");
+    if (name.isEmpty())
+      return null;
     Stat stat = new Stat(name);
     stat.dir = dir;
     stat.file = !dir;

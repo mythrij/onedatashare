@@ -53,10 +53,10 @@ public class HTTPResource extends Resource<HTTPSession, HTTPResource> {
       public Bell<Stat> convert(final Stat stat) {
         if (!stat.dir)
           return Bell.wrap(stat);
-        Bell<Set<Stat>> listBell =
+        Bell<List<Stat>> listBell =
           new HTTPListParser(uri(), tap()).getListing();
         return listBell.new As<Stat>() {
-          public Stat convert(Set<Stat> set) {
+          public Stat convert(List<Stat> set) {
             return stat.setFiles(set);
           }
         };
