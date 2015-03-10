@@ -80,25 +80,13 @@ public class DbxResource extends Resource<DbxSession, DbxResource> {
       return new ThreadBell() {
         public Object run() throws Exception {
           session.client.getFile(
-            source().path.toString(), null, new Drainer());
+            source().path.toString(), null, asOutputStream());
           finish();
           return null;
         } public void fail(Throwable t) {
           finish();
         }
       }.startOn(initialize().and(bell));
-    }
-
-    private class Drainer extends java.io.OutputStream {
-      public void write(int b) {
-        write(new byte[] {(byte)b});
-      } public void write(byte[] bytes) {
-        write(bytes, 0, bytes.length);
-      } public void write(byte[] bytes, int off, int len) {
-        if (off != 0 || len != bytes.length)
-          bytes = Arrays.copyOfRange(bytes, off, len-off);
-        drain(new Slice(bytes));
-      }
     }
   }
 

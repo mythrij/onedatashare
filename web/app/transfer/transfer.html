@@ -168,16 +168,16 @@
           </option>
         </optgroup>
         <optgroup class="new-credential" label="New credential">
-          <option value="userpass">Username/Password</option>
-          <option value="gss">MyProxy</option>
+          <option value="new:userinfo">Username/Password</option>
+          <option value="new:gss">MyProxy</option>
         </optgroup>
       </select>
 
       <div class="modal-body" ng-switch="selected">
-        <div ng-switch-when="userpass">
-          <div ng-include="'new-userpass-cred.html'"></div>
+        <div ng-switch-when="new:userinfo">
+          <div ng-include="'new-userinfo-cred.html'"></div>
         </div>
-        <div ng-switch-when="gss">
+        <div ng-switch-when="new:gss">
           <div ng-include="'new-myproxy-cred.html'"></div>
         </div>
       </div>
@@ -200,7 +200,7 @@
 </script>
 
 <!-- Create new credential username/password credential. -->
-<script type="text/ng-template" id="new-userpass-cred.html">
+<script type="text/ng-template" id="new-userinfo-cred.html">
   <div class="form-group col-md-6">
     <label>Username</label>
     <input type="text" class="form-control" ng-model="cred.username" required>

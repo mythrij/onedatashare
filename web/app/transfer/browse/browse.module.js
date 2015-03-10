@@ -265,8 +265,7 @@ angular.module('stork.transfer.browse', [
   $scope.dropdownList = [
     ["fa-dropbox", "Dropbox", "dropbox:///"],
     ["fa-globe", "Mozilla FTP", "ftp://ftp.mozilla.org/"],
-    ["fa-globe", "SDSC Gordon (GridFTP)", "gsiftp://oasis-dm.sdsc.xsede.org/"],
-    ["fa-envelope", "E-mail", "mailto:stork@example.com"]
+    ["fa-globe", "SDSC Gordon (GridFTP)", "gsiftp://oasis-dm.sdsc.xsede.org/"]
   ];
 
   $scope.openOAuth = function (url) {

@@ -270,8 +270,9 @@ public class URI {
    * and password. If there is no user-info segment, the returned array
    * contains two {@code null}s.
    *
-   * @return An array of two strings containing the split and decoded user-info
-   * segment, or {@code null} if any of the components were not specified.
+   * @return A {@code String[2]} containing the username and password (in that
+   * order). If either components was not specified in the URI, the
+   * corresponding member of the returned array will be {@code null}.
    */
   public String[] userPass() {
     String cs = userInfo();

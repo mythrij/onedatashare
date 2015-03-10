@@ -32,13 +32,12 @@ angular.module('stork.credentials', [])
   };
 
   $scope.changeSelection = function (s) {
-    if (!s) {
+    if (!s)
       $scope.cred = undefined;
-    } else if (s == 'gss') {
-      $scope.cred = {type: s};
-    } else {
+    else if (s.indexOf("new:") == 0)
+      $scope.cred = {type: s.slice(4)};
+    else
       $scope.cred = {uuid: s};
-    }
   };
 })
 
