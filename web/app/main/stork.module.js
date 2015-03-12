@@ -9,43 +9,43 @@ angular.module('stork', [
     /* This is where you can add routes and change page titles. */
     $routeProvider.when('/', {
       title: 'Home',
-      templateUrl: 'app/home/home.html'
+      templateUrl: '/app/home/home.html'
     }).when('/transfer', {
       title: 'Transfer',
-      templateUrl: 'app/transfer/transfer.html',
+      templateUrl: '/app/transfer/transfer.html',
       controller: 'Transfer',
       requireLogin: true
     }).when('/queue', {
       title: 'Queue',
-      templateUrl: 'app/queue/queue.html',
+      templateUrl: '/app/queue/queue.html',
       controller: 'Transfer',
       requireLogin: true
     }).when('/user', {
       title: 'User Settings',
       controller: 'User',
-      templateUrl: 'app/user/user.html',
+      templateUrl: '/app/user/user.html',
       requireLogin: true
     }).when('/oauth/:uuid', {
       title: 'OAuth Redirect',
       controller: 'OAuth',
-      templateUrl: 'app/credentials/oauth.html',
+      templateUrl: '/app/credentials/oauth.html',
       requireLogin: true
     })
     
     .when('/validate', {
       title: 'Validation',
-      templateUrl: 'app/user/validate.html',
+      templateUrl: '/app/user/validate.html',
     }).when('/validateError', {
       title: 'Error',
-      templateUrl: 'app/user/validateError.html',
+      templateUrl: '/app/user/validateError.html',
     })
     
     .when('/terms', {
       title: 'Terms of Service',
-      templateUrl: 'app/legal/terms.html'
+      templateUrl: '/app/legal/terms.html'
     }).when('/privacy', {
       title: 'Privacy Policy',
-      templateUrl: 'app/legal/privacy.html'
+      templateUrl: '/app/legal/privacy.html'
     }).otherwise({
       redirectTo: '/'
     });
@@ -176,6 +176,10 @@ angular.module('stork', [
     container: 'body',
     trigger: 'focus hover'
   });
+})
+
+.config(function ($locationProvider) {
+  $locationProvider.html5Mode(true);
 })
 
 .value('cgBusyDefaults',{

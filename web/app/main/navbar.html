@@ -5,7 +5,7 @@
         <i class="collapsed fa fa-reorder"></i>
       </button>
 
-      <a class="navbar-brand" href="#/">
+      <a class="navbar-brand" href="/#/">
         StorkCloud
       </a>
 
@@ -20,13 +20,13 @@
     <div class="navbar-collapse collapse">
       <ul class="nav navbar-nav logged-in" ng-cloak>
         <li bs-route="/transfer">
-          <a href="#/transfer">
+          <a href="/#/transfer">
             <i class="fa fa-exchange"></i>
             <span>Transfer</span>
           </a>
         </li>
         <li bs-route="/queue">
-          <a href="#/queue">
+          <a href="/#/queue">
             <i class="fa fa-list-ol"></i>
             <span>Queue</span>
           </a>
@@ -35,7 +35,7 @@
 
       <ul ng-controller="User" class="nav navbar-nav navbar-right">
         <li class="hidden-xs" bs-route="/user">
-          <a id="user-button" class="logged-in" href="#/user" ng-cloak>
+          <a id="user-button" class="logged-in" href="/#/user" ng-cloak>
             <i class="fa fa-user"></i>
             <span ng-bind="$user.email"></span>
           </a>
@@ -45,7 +45,7 @@
             <i class="fa fa-sign-in"></i>
             <span>Log in</span>
           </a>
-          <a class="logged-in" ng-click="logout()" href="#/" ng-cloak>
+          <a class="logged-in" ng-click="logout()" href="/#/" ng-cloak>
             <i class="fa fa-sign-out"></i>
             <span>Log out</span>
           </a>

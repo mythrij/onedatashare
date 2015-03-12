@@ -43,6 +43,11 @@ angular.module('stork.credentials', [])
 
 .controller('OAuth', function ($routeParams, $window) {
   var uuid = $routeParams.uuid;
+
+  // Did someone come here manually? Take them home.
+  if (!$window.opener || !$window.opener.oAuthCallback)
+    $window.location = '/';
+
   $window.opener.oAuthCallback(uuid);
   $window.close();
 });

@@ -127,6 +127,9 @@ public class HTTPServer {
     Log.info("Serving static web files from "+root+" directory at "+uri);
 
     return new Route(uri, "GET") {
+      // The name of the index file.
+      private String index = "index.html";
+
       public void handle(HTTPRequest request) {
         trySend(request, request.uri.path());
       }
@@ -136,18 +139,26 @@ public class HTTPServer {
 
         file.stat().new Promise() {
           public void done(Stat s) {
-            if (s.dir && !path.name().equals("index.html")) {
-              trySend(request, path.append("index.html"));
+            if (s.dir && !path.name().equals(index)) {
+              trySend(request, path.append(index));
             } else if (s.file) {
               HTTPBody body = request.root();
               Tap tap = file.tap();
               tap.attach(body.sink());
               tap.start();
             } else {
+              // Directory was requested but no index could be found.
               request.sendError(404);
             }
           } public void fail(Throwable t) {
-            request.sendError(404);
+            if (!path.name().equals(index)) {
+              // File doesn't exist, but might be a path the Angular router can
+              // handle, so serve the index and let Angular determine if it's a
+              // valid route or not. Don't do this for the index!
+              trySend(request, Path.ROOT.append(index));
+            } else {
+              request.sendError(404);
+            }
           }
         };
       }
@@ -252,7 +263,6 @@ public class HTTPServer {
     }
 
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable t) {
-      t.printStackTrace();
       HTTPException he = (t instanceof HTTPException) ?
         (HTTPException) t : new HTTPException(INTERNAL_SERVER_ERROR);
       ctx.writeAndFlush(he.toHttpMessage());

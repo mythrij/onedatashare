@@ -57,7 +57,7 @@ public class OAuthHandler extends Handler<OAuthRequest> {
     String uuid = req.user().addCredential(cred);
     server.dumpState();
 
-    throw new Redirect("/#/oauth/"+uuid);
+    throw new Redirect("/oauth/"+uuid);
   }
 
   /** Create a new OAuthSession of a given type. */
