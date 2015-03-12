@@ -73,13 +73,22 @@ angular.module('stork.transfer.browse', [
       uri = new URI(uri).normalize();
     else
       uri = uri.clone().normalize();
+
+    var readable = uri.readable();
+
+    // Make sure the input box matches the URI we're dealing with.
+    if (readable != $scope.uri.text) {
+      $scope.uri.text = readable;
+      uri = new URI(readable).normalize();
+    }
+
     $scope.uri.parsed = uri;
-    $scope.uri.text = uri.readable();
+    $scope.uri.text = readable;
     if ($scope.uri.state)
       $scope.uri.state.changed = false;
     else
       $scope.uri.state = {};
-    $scope.end.uri = uri.toString();
+    $scope.end.uri = readable;
 
     // Clean up after previous calls.
     if ($scope.history)
@@ -88,12 +97,12 @@ angular.module('stork.transfer.browse', [
     delete $scope.state.disconnected;
     $scope.state.loading = true;
 
-    history.fetch(uri.toString());
+    history.fetch(readable);
 
     $scope.fetch(uri).then(function (list) {
       delete $scope.state.loading;
       $scope.root = list;
-      $scope.root.name = uri.readable();
+      $scope.root.name = readable;
       $scope.open = true;
       $scope.unselectAll();
     }, function (error) {
@@ -182,7 +191,7 @@ angular.module('stork.transfer.browse', [
   // Download the selected file.
   $scope.download = function (uris) {
     if (uris == undefined || uris.length == 0)
-      return alert('You must select a file.')
+      return alert('You must select a file.');
     else if (uris.length > 1)
       return alert('You can only download one file at a time.');
 
@@ -258,6 +267,8 @@ angular.module('stork.transfer.browse', [
   };
 
   $scope.selectedUris = function () {
+    if (!$scope.end.$selected)
+      return [];
     return _.keys($scope.end.$selected);
   };
 
