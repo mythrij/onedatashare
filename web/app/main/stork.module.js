@@ -164,6 +164,9 @@ angular.module('stork', [
       return this.$get('cred', {
         action: 'list'
       });
+    },
+    share: function (ep) {
+      return this.$post('share', ep);
     }
   };
 })

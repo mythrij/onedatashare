@@ -81,6 +81,12 @@
         </button>
       </div>
       <div class="btn-group">
+        <button class="btn btn-default" title="Share"
+                ng-click="share(selectedUris())">
+          <i class="fa fa-link"></i>
+        </button>
+      </div>
+      <div class="btn-group">
         <button class="btn btn-default" title="Authenticate"
                 ng-class="end.credential && 'btn-info'" ng-click="credModal()">
           <i class="fa fa-key"></i>

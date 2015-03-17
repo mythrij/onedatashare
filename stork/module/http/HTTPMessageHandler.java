@@ -218,8 +218,6 @@ public class HTTPMessageHandler extends ChannelHandlerAdapter {
     String type = response.headers().get("Content-Type");
     Date time = null;
 
-    System.out.println(type);
-
     try {
       time = HttpHeaders.getDate(response);
     } catch (ParseException e) {

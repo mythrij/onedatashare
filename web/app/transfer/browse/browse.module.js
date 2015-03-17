@@ -50,7 +50,7 @@ angular.module('stork.transfer.browse', [
 
 .controller('Browse', function (
   $scope, $q, $modal, $window, $attrs,
-  stork, user, history, endpoints)
+  stork, user, history, endpoints, $location)
 {
   // Restore a saved endpoint. side should already be in scope.
   $scope.end = endpoints.get($attrs.side);
@@ -149,8 +149,9 @@ angular.module('stork.transfer.browse', [
   $scope.mkdir = function () {
     $modal({
       title: 'Create Directory',
-      contentTemplate: 'new-folder.html'
-    }).$scope = $scope;
+      contentTemplate: 'new-folder.html',
+      scope: $scope
+    });
 
     result.then(function (pn) {
       var u = new URI(pn[0]).segment(pn[1]);
@@ -200,6 +201,29 @@ angular.module('stork.transfer.browse', [
       credential: $scope.end.credential
     };
     stork.get(end);
+  };
+
+  // Share the selected file.
+  $scope.share = function (uris) {
+    if (uris == undefined || uris.length == 0)
+      return alert('You must select a file.');
+    else if (uris.length > 1)
+      return alert('You must select exactly one file.');
+    stork.share({
+      uri: uris[0],
+      credential: $scope.end.credential
+    }).then(function (r) {
+      var link = "https://storkcloud.org/api/stork/get?uuid="+r.uuid;
+      var scope = $scope.$new();
+      scope.link = link;
+      $modal({
+        title: 'Share link',
+        contentTemplate: 'show-share-link.html',
+        scope: angular.extend(scope)
+      });
+    }, function (e) {
+      alert('Could not create share: '+e.error);
+    });
   };
 
   // Return the scope corresponding to the parent directory.

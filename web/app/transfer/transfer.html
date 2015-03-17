@@ -239,10 +239,8 @@
 <script type="text/ng-template" id="password-warning.html">
   <span class="text-muted">
     Note: We will receive the above username and password pair as cleartext.
-    You authorize us to store this information and use to log in to endpoints
-    on your behalf, strictly at your request. Though we do our best to keep
-    this information confidential, this authentication method is inherently
-    insecure. If possible, you should use another method.
+    You authorize us to store this information and use it to authorize with
+    endpoints on your behalf, strictly at your request.
   </span>
 
   <div class="checkbox text-center" ng-init="cred.$agreed = false">
@@ -250,5 +248,21 @@
       <input type="checkbox" ng-model="cred.$agreed">
       Click here to verify having read the above statement.
     </label>
+  </div>
+</script>
+
+<!-- Show the link for a shared resource. -->
+<script type="text/ng-template" id="show-share-link.html">
+  <div class="modal-body">
+    <div>
+      Share this URL to allow others access to the selected file:
+    </div>
+    <input type="text" class="form-control" ng-model="link">
+  </div>
+  <div class="clearfix"></div>
+  <div class="text-center modal-footer">
+    <button ng-click="$hide()" type="button" class="btn btn-primary">
+      OK
+    </button>
   </div>
 </script>
