@@ -1,11 +1,13 @@
 package stork.core.handlers;
 
+import java.util.*;
+
 import stork.core.server.*;
 import stork.feather.*;
 
 /** Handles retrieving files. */
-public class GetHandler extends Handler<EndpointRequest> {
-  public void handle(final EndpointRequest req) {
+public class GetHandler extends Handler<SharedEndpointRequest> {
+  public void handle(final SharedEndpointRequest req) {
     req.assertLoggedIn();
 
     final Resource resource = req.user().sessions.take(req.resolve());
@@ -22,3 +24,29 @@ public class GetHandler extends Handler<EndpointRequest> {
     };
   }
 }
+
+/** Request for either an endpoint or a shared endpoint. */
+class SharedEndpointRequest extends EndpointRequest {
+  /** UUID for shared endpoints. */
+  public UUID uuid;
+
+  private EndpointRequest findActualEndpoint(String name) {
+    if (uuid == null)
+      return this;
+    if (name == null)
+      name = "";
+    EndpointRequest req = server().findSharedEndpoint(uuid);
+    if (req == null)
+      throw new RuntimeException("Invalid share ID for "+name+"endpoint.");
+    return req;
+  }
+
+  public EndpointRequest validateAs(String name) {
+    return findActualEndpoint(name).validateAs(name);
+  }
+
+  public Resource<?,?> resolveAs(String name) {
+    return findActualEndpoint(name).resolveAs(name);
+  }
+}
+

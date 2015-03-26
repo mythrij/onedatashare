@@ -1,7 +1,5 @@
 package stork.core.handlers;
 
-import java.util.*;
-
 import stork.core.server.*;
 import stork.feather.*;
 
@@ -11,22 +9,19 @@ public class EndpointRequest extends Request {
   public InnerCredRequest credential;
   public String module;
 
-  /** UUID for shared endpoints. */
-  public UUID uuid;
-
   // Hack to get around marshalling badness.
   private class InnerCredRequest extends CredRequest {
     public User user() { return EndpointRequest.this.user(); }
   }
 
   /** Get the {@code Resource} identified by this request. */
-  public Resource<?,?> resolve() { return resolveAs(null); }
+  public Resource resolve() { return resolveAs(null); }
 
   /**
    * Get the {@code Resource} identified by this request using {@code name} in
    * error messages.
    */
-  public Resource<?,?> resolveAs(String name) {
+  public Resource resolveAs(String name) {
     return validateAndResolve(name).resolve();
   }
 
@@ -44,14 +39,6 @@ public class EndpointRequest extends Request {
   private RealEndpoint validateAndResolve(String name) {
     name = (name == null) ? "" : name+" ";
     RealEndpoint result = new RealEndpoint();
-
-    // Handle shared endpoints.
-    if (uuid != null) {
-      EndpointRequest req = server().findSharedEndpoint(uuid);
-      if (req == null)
-        throw new RuntimeException("Invalid share ID for "+name+"endpoint.");
-      return req.validateAndResolve(name);
-    }
 
     if (uri != null)
       result.uri = URI.create(uri);  // Takes care of syntax errors.

@@ -11,8 +11,10 @@ public class ShareHandler extends Handler<ShareRequest> {
     req.assertLoggedIn();
     req.assertMayChangeState();
 
+    Resource<?,?> resource = req.resolve();
+
     // Make sure the resource exists and is a file.
-    req.resolve().stat().new As<UUID>() {
+    resource.stat().new As<UUID>() {
       public UUID convert(Stat stat) {
         if (!stat.file)
           throw new RuntimeException("Resource must be a file.");
