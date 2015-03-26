@@ -1,8 +1,10 @@
 package stork.feather.util;
 
-import java.util.*;
+import java.io.*;
 import java.nio.*;
 import java.nio.charset.*;
+import java.util.*;
+import java.util.concurrent.*;
 
 import io.netty.buffer.*;
 import io.netty.util.*;
@@ -132,5 +134,114 @@ public final class Pipes {
    */
   public static AggregatorSink aggregatorSink() {
     return new AggregatorSink(Resources.anonymous());
+  }
+
+  /**
+   * View {@code pipe} as an {@code InputStream}. This will attach to {@code
+   * pipe}, but will not start it.
+   */
+  public static InputStream asInputStream(Pipe pipe) {
+    return new PipeInputStream(pipe);
+  }
+}
+
+/**
+ * View a Tap as an InputStream.
+ */
+class PipeInputStream extends InputStream {
+  /** Queue of buffers received. */
+  private LinkedBlockingDeque<ByteBuffer> buffers =
+    new LinkedBlockingDeque<ByteBuffer>();
+  /** Ring on read. */
+  private Bell readBell = new Bell();
+  /** True when tap has finished. */
+  private boolean done;
+  /** Non-null if tap finished with error. */
+  private IOException error;
+  /** The current reader. */
+  private Thread reader;
+
+  /** Create a PipeInputStream from pipe. */
+  public PipeInputStream(Pipe pipe) {
+    pipe.attach(new Sink(Resources.anonymous()) {
+      public Bell start() {
+        return readBell.detach();
+      } public Bell drain(Slice slice) {
+        return handleDrain(slice);
+      } public void finish(Throwable t) {
+        handleFinish(t);
+      }
+    });
+  }
+
+  private synchronized void handleFinish(Throwable t) {
+    if (t != null)
+      error = new IOException(t);
+    done = true;
+    if (reader != null)
+      reader.interrupt();
+  }
+
+  /**
+   * Save the slice and hold until it has been read out.
+   */
+  private synchronized Bell handleDrain(Slice slice) {
+    ByteBuffer buf = slice.asByteBuffer();
+    if (buf.remaining() > 0)
+      buffers.add(slice.asByteBuffer());
+    return readBell.detach();
+  }
+
+  public int read() throws IOException {
+    byte[] b = new byte[1];
+    if (read(b, 0, 1) <= 0)
+      return -1;
+    return b[0];
+  }
+
+  /**
+   * Read from the tap. This allows bytes to flow from the tap, filling the
+   * given byte array with data until the read request has been satisfied or
+   * the tap finishes.
+   */
+  public int read(byte[] b, int off, int len) throws IOException {
+    if (isDone())
+      return -1;
+    synchronized (this) {
+      readBell.ring();  // Allow the tap to flow.
+      if (reader != null)
+        throw new IllegalStateException("Already reading.");
+      reader = Thread.currentThread();
+    }
+    int total = 0;
+
+    // Keep taking buffers and filling b until done.
+    while (!isDone() && total < len) try {
+      ByteBuffer buf = buffers.take();
+      int size = Math.min(len-total, buf.remaining());
+      buf.get(b, off+total, size);
+      total += size;
+      if (buf.hasRemaining())
+        buffers.addFirst(buf);
+    } catch (InterruptedException e) {
+      break;
+    }
+
+    synchronized (this) {
+      readBell = new Bell();
+      reader = null;
+    }
+    return total;
+  }
+
+  /**
+   * Return true if there are no buffered bytes and the tap is done. If the tap
+   * is done, but finished with an error, throw the error wrapped in an
+   * IOException.
+   */
+  private synchronized boolean isDone() throws IOException {
+    if (error != null)
+      throw error;
+    return done && buffers.isEmpty();
   }
 }

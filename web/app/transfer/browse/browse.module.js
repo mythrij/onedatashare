@@ -50,7 +50,7 @@ angular.module('stork.transfer.browse', [
 
 .controller('Browse', function (
   $scope, $q, $modal, $window, $attrs,
-  stork, user, history, endpoints)
+  stork, user, history, endpoints, $location)
 {
   // Restore a saved endpoint. side should already be in scope.
   $scope.end = endpoints.get($attrs.side);
@@ -73,13 +73,22 @@ angular.module('stork.transfer.browse', [
       uri = new URI(uri).normalize();
     else
       uri = uri.clone().normalize();
+
+    var readable = uri.readable();
+
+    // Make sure the input box matches the URI we're dealing with.
+    if (readable != $scope.uri.text) {
+      $scope.uri.text = readable;
+      uri = new URI(readable).normalize();
+    }
+
     $scope.uri.parsed = uri;
-    $scope.uri.text = uri.readable();
+    $scope.uri.text = readable;
     if ($scope.uri.state)
       $scope.uri.state.changed = false;
     else
       $scope.uri.state = {};
-    $scope.end.uri = uri.toString();
+    $scope.end.uri = readable;
 
     // Clean up after previous calls.
     if ($scope.history)
@@ -88,12 +97,12 @@ angular.module('stork.transfer.browse', [
     delete $scope.state.disconnected;
     $scope.state.loading = true;
 
-    history.fetch(uri.toString());
+    history.fetch(readable);
 
     $scope.fetch(uri).then(function (list) {
       delete $scope.state.loading;
       $scope.root = list;
-      $scope.root.name = uri.readable();
+      $scope.root.name = readable;
       $scope.open = true;
       $scope.unselectAll();
     }, function (error) {
@@ -140,8 +149,9 @@ angular.module('stork.transfer.browse', [
   $scope.mkdir = function () {
     $modal({
       title: 'Create Directory',
-      contentTemplate: 'new-folder.html'
-    }).$scope = $scope;
+      contentTemplate: 'new-folder.html',
+      scope: $scope
+    });
 
     result.then(function (pn) {
       var u = new URI(pn[0]).segment(pn[1]);
@@ -182,7 +192,7 @@ angular.module('stork.transfer.browse', [
   // Download the selected file.
   $scope.download = function (uris) {
     if (uris == undefined || uris.length == 0)
-      return alert('You must select a file.')
+      return alert('You must select a file.');
     else if (uris.length > 1)
       return alert('You can only download one file at a time.');
 
@@ -191,6 +201,29 @@ angular.module('stork.transfer.browse', [
       credential: $scope.end.credential
     };
     stork.get(end);
+  };
+
+  // Share the selected file.
+  $scope.share = function (uris) {
+    if (uris == undefined || uris.length == 0)
+      return alert('You must select a file.');
+    else if (uris.length > 1)
+      return alert('You must select exactly one file.');
+    stork.share({
+      uri: uris[0],
+      credential: $scope.end.credential
+    }).then(function (r) {
+      var link = "https://storkcloud.org/api/stork/get?uuid="+r.uuid;
+      var scope = $scope.$new();
+      scope.link = link;
+      $modal({
+        title: 'Share link',
+        contentTemplate: 'show-share-link.html',
+        scope: angular.extend(scope)
+      });
+    }, function (e) {
+      alert('Could not create share: '+e.error);
+    });
   };
 
   // Return the scope corresponding to the parent directory.
@@ -258,13 +291,16 @@ angular.module('stork.transfer.browse', [
   };
 
   $scope.selectedUris = function () {
+    if (!$scope.end.$selected)
+      return [];
     return _.keys($scope.end.$selected);
   };
 
-  /* Get a list of things to show in the dropdown box. */
+  /* Default examples to show in the dropdown box. */
   $scope.dropdownList = [
     ["fa-dropbox", "Dropbox", "dropbox:///"],
-    ["fa-globe", "Mozilla FTP", "ftp://ftp.mozilla.org/"]
+    ["fa-globe", "Mozilla FTP", "ftp://ftp.mozilla.org/"],
+    ["fa-globe", "SDSC Gordon (GridFTP)", "gsiftp://oasis-dm.sdsc.xsede.org/"]
   ];
 
   $scope.openOAuth = function (url) {

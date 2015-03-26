@@ -16,8 +16,11 @@ import stork.util.*;
  * transfer credential manager, login credentials, and user info.
  */
 public abstract class User {
+  /** User's email. */
   public String email;
+  /** Hashed password. */
   public String hash;
+  /** Salt used for hash. */
   public String salt;
 
   /** Set to true once the user has validated registration. */
@@ -25,9 +28,11 @@ public abstract class User {
   /** The validation token we're expecting. */
   private String validationToken;
 
+  /** Previously visited URIs. */
   public LinkedList<URI> history = new LinkedList<URI>();
+  /** Stored credentials. */
   public Map<UUID,StorkCred> credentials = new HashMap<UUID,StorkCred>();
-
+  /** Job UUIDs with indices corresponding to job IDs. */
   private ArrayList<UUID> jobs = new ArrayList<UUID>();
 
   /** Used to hold session connections for reuse. */

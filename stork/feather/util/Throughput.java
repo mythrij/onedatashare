@@ -7,8 +7,6 @@ import static stork.feather.util.Time.*;
  * utility methods for formatting throughput.
  */
 public class Throughput {
-  public static final Throughput global = new Throughput();
-
   private long t = now();  // Time of last sample.
   private double q;        // Time quantum (in ms).
   private double th = 0;   // Running throughput estimate.
@@ -34,13 +32,16 @@ public class Throughput {
     double d = now-t;
     t = now;
     th = (d > q) ? amount/q : th*(1-d/q) + amount/q;
+    if (Double.isInfinite(th) || Double.isNaN(th))
+      th = 0;
   }
 
   /** Get the throughput in units per second. */
   public synchronized double value() {
     if (q <= 0) return th;
     double d = now()-t;
-    return (d > q) ? 0 : th*(1-d/q)*1000;
+    double v = (d > q) ? 0 : th*(1-d/q)*1000;
+    return (Double.isInfinite(v) || Double.isNaN(v)) ? 0 : v;
   }
 
   /** Format {@code throughput} in a human-readable way. */

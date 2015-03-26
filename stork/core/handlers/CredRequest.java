@@ -27,6 +27,8 @@ public class CredRequest extends Request {
   public StorkCred resolve() {
     if (uuid != null) {
       return user().credentials.get(uuid);
+    } else if ("userinfo".equals(type)) {
+      return new StorkUserinfo(username, password);
     } else if (type != null) {
       StorkCred cred = StorkCred.newFromType(type);
       asAd().unmarshal(cred);

@@ -29,6 +29,7 @@ public class Server {
   /** Users registered with the system. */
   public Map<String,ServerUser> users = new HashMap<String,ServerUser>();
 
+  /** A user that knows it belongs to this server. */
   private class ServerUser extends User {
     public ServerUser() { super(); }
     public ServerUser(String email, String password) {
@@ -37,6 +38,17 @@ public class Server {
     public Server server() { return Server.this; }
   }
 
+  /** An EndpointRequest that knows its server and user. */
+  private class SharedEndpoint extends EndpointRequest {
+    private String email;
+
+    public SharedEndpoint(String email) { this.email = email; }
+
+    public Server server() { return Server.this; }
+    public User user() { return findUser(email); }
+  }
+
+  /** This server's scheduler. */
   public ServerScheduler<Job> scheduler = new ServerScheduler<Job>();
 
   // The need for a type parameter here is a hack to get around
@@ -45,16 +57,25 @@ public class Server {
     public Server server() { return Server.this; }
   }
 
+  /** Shared endpoints. */
+  private Map<UUID,SharedEndpoint> shares =
+    new HashMap<UUID,SharedEndpoint>();
+
+  /** The module table, determined at startup. */
   public transient ModuleTable modules = new ModuleTable();
 
+  /** Thread which dumps server state occasionally. */
   private transient DumpStateThread dumpStateThread;
 
+  /** Mapping of handler names to handlers. */
   public transient Map<String, Class<? extends Handler>> handlers =
     new HashMap<String, Class<? extends Handler>>();
 
+  /** Queue of incoming requests. */
   private transient LinkedBlockingQueue<Request> requests =
     new LinkedBlockingQueue<Request>();
 
+  /** The anonymous user. */
   public ServerUser anonymous = new ServerUser();
 
   /** Get the handler for a command. */
@@ -95,9 +116,19 @@ public class Server {
     } return request;
   }
 
-  /** Find a {@link User} by email. */
+  /**
+   * Find a {@link User} by email. If {@code null} is given, returns {@code
+   * anonymous}.
+   */
   public ServerUser findUser(String email) {
+    if (email == null)
+      return anonymous;
     return users.get(email);
+  }
+
+  /** Find a shared endpoint. */
+  public EndpointRequest findSharedEndpoint(UUID uuid) {
+    return shares.get(uuid);
   }
 
   /** Schedule a job. */
@@ -111,6 +142,17 @@ public class Server {
     return scheduler.get(uuid);
   }
 
+  /** Create a shared endpoint. */
+  public UUID createSharedEndpoint(User user, EndpointRequest ep) {
+    SharedEndpoint share = new SharedEndpoint(user.email);
+    Ad.marshal(ep).unmarshal(share);
+    UUID uuid = UUID.randomUUID();
+    synchronized (this) {
+      shares.put(uuid, share);
+    }
+    return uuid;
+  }
+
   /** Create a new {@link User}. */
   public ServerUser createUser(UserRegistration request) {
     ServerUser user = new ServerUser(request.email, request.password);
@@ -119,7 +161,7 @@ public class Server {
   }
 
   /** Add a {@code User} to the {@code users} map. */
-  public void saveUser(User user) {
+  public synchronized void saveUser(User user) {
     users.put(user.email, (ServerUser) user);
   }
 
@@ -156,18 +198,19 @@ public class Server {
     if (config.state_file != null)
       loadServerState(config.state_file);
 
-    handlers.put("q", QHandler.class);
-    handlers.put("ls", ListHandler.class);
-    handlers.put("mkdir", MkdirHandler.class);
+    handlers.put("cancel", CancelHandler.class);
+    handlers.put("cred",   CredHandler.class);
     handlers.put("delete", DeleteHandler.class);
+    handlers.put("get",    GetHandler.class);
+    handlers.put("info",   InfoHandler.class);
+    handlers.put("ls",     ListHandler.class);
+    handlers.put("mkdir",  MkdirHandler.class);
+    handlers.put("oauth",  OAuthHandler.class);
+    handlers.put("share",  ShareHandler.class);
+    handlers.put("q",      QHandler.class);
     handlers.put("status", QHandler.class);
     handlers.put("submit", SubmitHandler.class);
-    handlers.put("cancel", CancelHandler.class);
-    handlers.put("info", InfoHandler.class);
-    handlers.put("user", UserHandler.class);
-    handlers.put("cred", CredHandler.class);
-    handlers.put("get", GetHandler.class);
-    handlers.put("oauth", OAuthHandler.class);
+    handlers.put("user",   UserHandler.class);
 
     modules.populate();
     scheduler.start();

@@ -45,11 +45,22 @@ public class URI {
 
   //private static Intern<URI> intern = new Intern<URI>();
 
-  // Used to quickly determine if a character is reserved.
+  /** Used to quickly determine if a character is reserved. */
   private static final BitSet RESERVED = new BitSet(128);
   static {
     for (char c : " !#$%&'()*+,/:;=?@[]{}".toCharArray())
       RESERVED.set(c);
+  }
+
+  /** Java URI to resolve against to handle missing schemes. */
+  private static final java.net.URI noSchemeBaseURI;
+  static {
+    try {
+      noSchemeBaseURI = new java.net.URI(null, null, null);
+    } catch (Exception e) {
+      // Let's hope this never happens.
+      throw new Error("java.net.URI is broken");
+    }
   }
 
   /** The canonical empty URI. */
@@ -67,7 +78,7 @@ public class URI {
 
   private URI(String uri) {
     // For now, delegate to java.net.URI...
-    java.net.URI u = java.net.URI.create(uri);
+    java.net.URI u = noSchemeBaseURI.resolve(uri);
 
     scheme   = u.getScheme();
     userinfo = u.getUserInfo();
@@ -259,8 +270,9 @@ public class URI {
    * and password. If there is no user-info segment, the returned array
    * contains two {@code null}s.
    *
-   * @return An array of two strings containing the split and decoded user-info
-   * segment, or {@code null} if any of the components were not specified.
+   * @return A {@code String[2]} containing the username and password (in that
+   * order). If either components was not specified in the URI, the
+   * corresponding member of the returned array will be {@code null}.
    */
   public String[] userPass() {
     String cs = userInfo();
@@ -440,10 +452,11 @@ public class URI {
   /**
    * Get the path segment of the URI, if it is a URL.
    *
-   * @return The path segment of this URI, or {@code null} if none is
-   * specified.
+   * @return The path segment of this URI. This will never be {@code null}.
    */
-  public Path path() { return path; }
+  public Path path() {
+    return path != null ? path : Path.ROOT;
+  }
 
   /**
    * Return a URI based on this one with the given path segment.
@@ -655,7 +668,7 @@ public class URI {
   }
 
   /**
-   * Return a URI containing only the endpoint components of this URI. This is an alias
+   * Return a URI containing only the endpoint components of this URI.
    *
    * @return A URI based on this one with only the endpoint components, or
    * {@code null} if there are no endpoint components.
@@ -684,12 +697,22 @@ public class URI {
   }
 
   /**
-   * Return whether or not the URI is absolute. That is, whether or not the URI
-   * contains a scheme name.
+   * Return whether or not the URI is absolute. An absolute URI has no scheme
+   * component.
    *
    * @return {@code true} if this URI is absolute; {@code false} otherwise.
    */
   public final boolean isAbsolute() {
+    return scheme() != null;
+  }
+
+  /**
+   * Return whether or not the URI is relative. A relative URI has a scheme
+   * component.
+   *
+   * @return {@code true} if this URI is relative; {@code false} otherwise.
+   */
+  public final boolean isRelative() {
     return scheme() == null;
   }
 
@@ -698,10 +721,23 @@ public class URI {
    * overlap between this URI and {@code base}, this URI is returned. TODO
    *
    * @param base the base URI to relativize this URI to.
-   * @return A URI based on this one, relative to {@code base},
+   * @return A URI based on this one, relative to {@code base}.
    */
   public URI relativeTo(URI base) {
     return this;
+  }
+
+  /**
+   * Resolve the given URI against this URI.
+   *
+   * @param uri the URI to resolve against this URI.
+   * @return A URI resolved against this one.
+   */
+  public URI resolve(URI uri) {
+    if (uri.isAbsolute())
+      return uri;
+    URIBuilder t = new URIBuilder();
+    throw new Error("Not implemented");
   }
 
   /**

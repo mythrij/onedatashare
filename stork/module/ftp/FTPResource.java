@@ -4,6 +4,7 @@ import io.netty.buffer.*;
 
 import stork.cred.*;
 import stork.feather.*;
+import stork.feather.errors.*;
 import stork.module.*;
 import stork.scheduler.*;
 import stork.util.*;
@@ -150,12 +151,13 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
         Stat base = new Stat(name());
         final Bell<Stat> tb = this;
         final FTPListParser parser = new FTPListParser(base, hint) {
-          // The parser should ring this bell if it's successful.
           public void done(Stat stat) {
             fixStat(Bell.wrap(stat)).promise(tb);
-          } public void fail() {
-            // TODO: Check for permanent errors.
-            tryCommand(cmd.next());
+          } public void fail(Throwable t) {
+            if (t instanceof NotFound)
+              tb.ring(t);
+            else
+              tryCommand(cmd.next());
           }
         };
 
@@ -175,26 +177,38 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
             public void handle(FTPChannel.Reply r) {
               parser.write(r.message().getBytes());
             } public void done(FTPChannel.Reply r) {
-              if (r.code/100 > 2) {
+              if (r.isComplete() && r.message().isEmpty()) {
+                // Some servers reply with 200 on missing file...
+                parser.ring(new NotFound());
+              } else if (r.code/100 > 2) {
                 parser.ring(r.asError());
               } else {
                 parser.write(r.message().getBytes());
                 parser.finish();
               }
+            } public void fail(Throwable t) {
+              parser.ring(t);
             }
           };
 
         // Otherwise we're doing a data channel listing.
         else channel.new DataChannel('A') {
+          // Need to detect an empty listing response.
+          boolean gotNothing = true;
           {
+            start();
             onClose().new Promise() {
               public void always() {
+                if (gotNothing)
+                  parser.ring(new NotFound());
+                parser.finish();
               }
             };
           }
           public Bell init() {
-            return channel.new Command(cmd, makePath()).expectComplete();
+            return new Command(cmd, makePath()).expectComplete();
           } public void receive(Slice slice) {
+            gotNothing = false;
             parser.write(slice.asBytes());
           }
         };
@@ -270,7 +284,7 @@ class FTPTap extends Tap<FTPResource> {
           public Bell init() {
             String path = source().makePath();
             return new Command("RETR", path).expectComplete();
-          } public void receive(Slice slice) {  
+          } public void receive(Slice slice) {
             pauseUntil(drain(slice));
           }
         };

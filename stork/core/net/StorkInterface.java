@@ -73,7 +73,6 @@ public abstract class StorkInterface {
    * @return An ad representing {@code throwable}.
    */
   public static Ad errorToAd(final Throwable throwable) {
-    throwable.printStackTrace();
     if (throwable == null) {
       return errorToAd(new NullPointerException());
     } return Ad.marshal(new Object() {

@@ -122,6 +122,22 @@ public class AdObject implements Comparable<AdObject> {
     return object instanceof String;
   }
 
+  public boolean isNumber() {
+    return object instanceof Number;
+  }
+
+  /**
+   * Determine if a {@code Number} is {@code NaN} or {@code ±Infinity}.
+   */
+  public boolean isSpecialNumber() {
+    if (isNumber()) {
+      if (object instanceof Double)
+        return Double.isNaN(asDouble()) || Double.isInfinite(asDouble());
+      if (object instanceof Float)
+        return Float.isNaN(asFloat()) || Float.isInfinite(asFloat());
+    } return false;
+  }
+
   public Object asObject() {
     return object;
   }

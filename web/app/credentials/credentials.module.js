@@ -32,18 +32,22 @@ angular.module('stork.credentials', [])
   };
 
   $scope.changeSelection = function (s) {
-    if (!s) {
+    if (!s)
       $scope.cred = undefined;
-    } else if (s == 'gss') {
-      $scope.cred = {type: s};
-    } else {
+    else if (s.indexOf("new:") == 0)
+      $scope.cred = {type: s.slice(4)};
+    else
       $scope.cred = {uuid: s};
-    }
   };
 })
 
 .controller('OAuth', function ($routeParams, $window) {
   var uuid = $routeParams.uuid;
+
+  // Did someone come here manually? Take them home.
+  if (!$window.opener || !$window.opener.oAuthCallback)
+    $window.location = '/';
+
   $window.opener.oAuthCallback(uuid);
   $window.close();
 });

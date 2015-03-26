@@ -1,25 +1,17 @@
 package stork.module.http;
 
-import java.text.ParseException;
-import java.util.Date;
+import java.text.*;
+import java.util.*;
 
-import stork.feather.Bell;
-import stork.feather.Slice;
-import stork.feather.Stat;
-import stork.feather.URI;
+import io.netty.buffer.*;
+import io.netty.channel.*;
+import io.netty.handler.codec.http.*;
+import io.netty.handler.timeout.*;
+import io.netty.util.concurrent.*;
+
+import stork.feather.*;
+import stork.feather.errors.*;
 import stork.module.http.HTTPResource.HTTPTap;
-import io.netty.buffer.ByteBuf;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelHandlerAdapter;
-import io.netty.handler.codec.http.HttpContent;
-import io.netty.handler.codec.http.HttpHeaders;
-import io.netty.handler.codec.http.HttpRequest;
-import io.netty.handler.codec.http.HttpResponse;
-import io.netty.handler.codec.http.HttpResponseStatus;
-import io.netty.handler.codec.http.LastHttpContent;
-import io.netty.handler.timeout.ReadTimeoutException;
-import io.netty.util.concurrent.GenericFutureListener;
 
 /**
  * Message handler receiving status.
@@ -200,35 +192,22 @@ public class HTTPMessageHandler extends ChannelHandlerAdapter {
   // Handles various abnormal response codes.
   private void caseHandler(HttpResponse response, HTTPChannel channel) {
     HttpResponseStatus status = response.getStatus();
-    try {
-      if (HTTPResponseCode.isMoved(status)) {
-        this.status = Status.NotFound;
-        // Redirect to new location
-        String newLocation =
-          response.headers().get(HttpHeaders.Names.LOCATION);
-        newLocation = newLocation.startsWith("/") ?
-          newLocation.substring(1) : newLocation;
-        URI uri;
-        if (!newLocation.contains(":")) {
-          uri = URI.create(tap.source().uri() + "/" + newLocation);
-        } else {
-          uri = URI.create(newLocation);
-        }
-        tap.setPath(uri.path());
-        if (builder.isKeepAlive()) {
-          channel.addChannelTask(tap);
-          channel.writeAndFlush(builder.prepareGet(tap.getPath()));
-        } else {
-          builder.tryResetConnection(tap);
-        }
-        throw new HTTPException(
-            tap.getPath() + " " + status.toString());
-      } else if (HTTPResponseCode.isNotFound(status)) {
-        throw new HTTPException(
-            tap.source().uri() + " " + status.toString());
+    if (HTTPResponseCode.isMoved(status)) {
+      this.status = Status.NotFound;
+      // Redirect to new location
+      String newLocation =
+        response.headers().get(HttpHeaders.Names.LOCATION);
+      String suffix = newLocation.endsWith("/") ? "/" : "";
+      URI uri = URI.create(newLocation);
+      tap.setPath(uri.path()+suffix);
+      if (builder.isKeepAlive()) {
+        channel.addChannelTask(tap);
+        channel.writeAndFlush(builder.prepareGet(tap.getPath().toString()));
+      } else {
+        builder.tryResetConnection(tap);
       }
-    } catch (HTTPException e) {
-      System.err.println(e.getMessage());
+    } else if (HTTPResponseCode.isNotFound(status)) {
+      throw new NotFound();
     }
   }
 
@@ -238,8 +217,6 @@ public class HTTPMessageHandler extends ChannelHandlerAdapter {
     String length = response.headers().get("Content-Length");;
     String type = response.headers().get("Content-Type");
     Date time = null;
-
-    System.out.println(type);
 
     try {
       time = HttpHeaders.getDate(response);

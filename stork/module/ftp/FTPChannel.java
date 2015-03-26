@@ -654,6 +654,10 @@ public class FTPChannel {
   class FeatureSet {
     private Map<String,Bell> features;
 
+    // This promises all bells produced by this object. It can be canceled to
+    // cancel all remaining bells.
+    private final Bell finalBell = new Bell();
+
     // Asynchronously check if a command is supported.
     private synchronized void init() {
       if (features != null)
@@ -682,33 +686,29 @@ public class FTPChannel {
         }
       };
       //new Command("FEAT");  // TODO
+
+      // Once all the commands have finished, fail the remaining bells.
       new Command(null) {
-        public void done() { finalizeChecks(); }
+        public void done() { finalBell.cancel(); }
       };
     }
 
-    public synchronized Bell supports(String cmd) {
+    private synchronized Bell bellFor(String cmd) {
       init();
       Bell bell = features.get(cmd);
-      if (bell == null)
+      if (bell == null) {
         features.put(cmd, bell = new Bell());
+        finalBell.promise(bell);
+      }
       return bell;
     }
 
-    private synchronized void addFeature(String cmd) {
-      init();
-      Bell bell = features.get(cmd);
-      if (bell == null)
-        features.put(cmd, bell = new Bell());
-      bell.ring();
+    public synchronized Bell supports(String cmd) {
+      return bellFor(cmd);
     }
 
-    // Ring this when no more commands will be issued to check support. It will
-    // resolve all unsupported commands with false and update the state to
-    // reflect the command list has been finalized.
-    private synchronized void finalizeChecks() {
-      for (Bell b : features.values())
-        b.ring(new RuntimeException());
+    private synchronized void addFeature(String cmd) {
+      bellFor(cmd).ring();
     }
   }
 

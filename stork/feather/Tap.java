@@ -79,4 +79,23 @@ public abstract class Tap<S extends Resource> extends Pipe {
       return new Bell(e);
     }
   }
+
+  /**
+   * Return an {@code OutputStream} that will call {@code drain()} when bytes
+   * are written. This is intended to help integrate blocking code based on
+   * {@code java.io} with Feather.
+   */
+  protected java.io.OutputStream asOutputStream() {
+    return new java.io.OutputStream() {
+      public void write(int b) {
+        write(new byte[] {(byte)b});
+      } public void write(byte[] bytes) {
+        write(bytes, 0, bytes.length);
+      } public void write(byte[] bytes, int off, int len) {
+        if (off != 0 || len != bytes.length)
+          bytes = java.util.Arrays.copyOfRange(bytes, off, len-off);
+        drain(new Slice(bytes)).sync();
+      }
+    };
+  }
 }

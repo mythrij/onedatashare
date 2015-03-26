@@ -132,6 +132,16 @@ public class Slice {
   }
 
   /**
+   * Return the byte payload encapsulated by this slice as a {@code
+   * ByteBuffer}.
+   *
+   * @return The data as a NIO {@link ByteBuffer}.
+   */
+  public final ByteBuffer asByteBuffer() {
+    return buffer.nioBuffer();
+  }
+
+  /**
    * Return the data wrapped by the slice as a byte array. This buffer may be
    * the backing array of the {@code Slice}, and therefore should not be
    * altered by the caller.
