@@ -139,6 +139,7 @@ public class HTTPResource extends Resource<HTTPSession, HTTPResource> {
 
     /** Sets state info and rings its {@code state Bell}. */
     protected void setStat(Stat stat) {
+      stat.name = path.name();
       statBell.ring(stat);
     }
 
