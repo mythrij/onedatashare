@@ -35,18 +35,19 @@ public class DbxResource extends Resource<DbxSession, DbxResource> {
         if (dbe == null)
           throw new NotFound();
 
-        Stat st = entryToStat(dbe);
+        Stat stat = entryToStat(dbe);
+        stat.name = path.name();
 
-        if (st.dir) {
+        if (stat.dir) {
           DbxEntry.WithChildren dbd =
             session.client.getMetadataWithChildren(path.toString());
           List<Stat> sub = new LinkedList<Stat>();
           for (DbxEntry child : dbd.children)
             sub.add(entryToStat(child));
-          st.setFiles(sub);
+          stat.setFiles(sub);
         }
 
-        return st;
+        return stat;
       }
     }.startOn(initialize());
   }

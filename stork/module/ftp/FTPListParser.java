@@ -8,7 +8,6 @@ import java.io.*;
 import io.netty.buffer.*;
 
 import stork.feather.*;
-import stork.feather.util.*;
 import stork.module.*;
 import stork.util.*;
 
@@ -23,12 +22,11 @@ import stork.util.*;
  * listing results.
  */
 public class FTPListParser extends Bell<Stat> {
-  // TODO: Check out <http://cr.yp.to/ftpparse/ftpparse.c>.
-  String data = null;
-  int list_type;
-  StringBuilder sb = new StringBuilder();
-  Stat root = new Stat();
-  List<Stat> files = new LinkedList<Stat>();
+  private String data = null;
+  private int list_type;
+  private StringBuilder sb = new StringBuilder();
+  protected Stat root;
+  private List<Stat> files = new LinkedList<Stat>();
 
   // Create a parser with an optional known type suggestion.
   public FTPListParser() {
@@ -59,15 +57,13 @@ public class FTPListParser extends Bell<Stat> {
 
   // Parse a single line.
   public void parseLine(String line) {
-    Stat ft = parseEntry(line);
-    if (ft == null || ft.name == null)
+    Stat stat = parseEntry(line);
+    if (stat == null || stat.name == null)
       return;
-    ft.name = Intern.string(ft.name);
-    ft.perm = Intern.string(ft.perm);
-    if (ft.name.equals("."))
-      root.copy(ft);
-    else if (!ignoreName(ft.name))
-      files.add(ft);
+    if (stat.name.equals("."))
+      root.copy(stat);
+    else if (!ignoreName(stat.name))
+      files.add(stat);
   }
 
   // Set the name of the root.
@@ -117,10 +113,10 @@ public class FTPListParser extends Bell<Stat> {
     }
   }
 
-  // Parse a line from the listing, return as an ad.
+  // Parse a line from the listing.
   public Stat parseEntry(String line) {
     String[] tokens;
-    Stat ft = new Stat();
+    Stat stat = new Stat();
 
     if (line.isEmpty())
       return null;
@@ -143,24 +139,24 @@ public class FTPListParser extends Bell<Stat> {
         for (String f : facts) if (!f.isEmpty()) {
           switch (f.charAt(0)) {
             case 'm':  // Modification time.
-              ft.time = Long.parseLong(f.substring(1)); break;
+              stat.time = Long.parseLong(f.substring(1)); break;
             case '/':  // It's a directory.
-              ft.dir = true; break;
+              stat.dir = true; break;
             case 'r':  // It's a file.
-              ft.file = true; break;
+              stat.file = true; break;
             case 's':  // Size.
-              ft.size = Long.parseLong(f.substring(1)); break;
+              stat.size = Long.parseLong(f.substring(1)); break;
             case 'u':  // Permissions.
               if (f.charAt(1) == 'p')
-                ft.perm = f.substring(2);
+                stat.perm = f.substring(2);
           }
         }
 
         // Everything else after the tab is the file name.
-        ft.name = name;
+        stat.name = name;
         list_type = 'E';
 
-        return ft;
+        return stat;
       } catch (Exception e) {
         // Bad formatting, skip.
         if (list_type != 0) break;
@@ -190,20 +186,20 @@ public class FTPListParser extends Bell<Stat> {
             continue;
           } if (s[0].equals("type")) {
             if (s[1].equalsIgnoreCase("file"))
-              ft.file = true;
+              stat.file = true;
             else if (s[1].equalsIgnoreCase("dir"))
-              ft.dir = true;
+              stat.dir = true;
             else if (s[1].equalsIgnoreCase("cdir"))
-              ft.dir = true;
+              stat.dir = true;
             else if (s[1].equalsIgnoreCase("pdir"))
-              ft.dir = true;
+              stat.dir = true;
             else  // It's just something weird. Let's call it a file.
-              ft.file = true;
+              stat.file = true;
           } else if (s[0].equals("modify")) {
             DateFormat df = new SimpleDateFormat("yyyyMMDDHHmmss");
-            ft.time = df.parse(s[1]).getTime()/1000;
+            stat.time = df.parse(s[1]).getTime()/1000;
           } else if (s[0].equals("size")) {
-            ft.size = Long.parseLong(s[1]);
+            stat.size = Long.parseLong(s[1]);
           } else if (s[0].equals("unix.mode")) {
             int p = Integer.parseInt(s[1], 8);
             unix = true;
@@ -220,16 +216,16 @@ public class FTPListParser extends Bell<Stat> {
           } else if (s[0].equals("perm") && !unix) {
             perm = s[1];
           } if (perm != null) {
-            if (unix) perm = (ft.dir?'d':'-')+perm;
-            ft.perm = perm;
+            if (unix) perm = (stat.dir?'d':'-')+perm;
+            stat.perm = perm;
           }
         }
 
         // Everything else after the tab is the file name.
-        ft.name = name;
+        stat.name = name;
 
         list_type = 'M';
-        return ft;
+        return stat;
       } catch (Exception e) {
         // Bad formatting, skip.
         if (list_type != 0) break;
@@ -308,18 +304,19 @@ public class FTPListParser extends Bell<Stat> {
             name = tokens[tokens.length-1];
           }
 
-          ft.name = name;
+          if (stat != root && !ignoreName(name))
+            stat.name = name;
           if (time > 0)
-            ft.time = time;
+            stat.time = time;
           if (size > 0 && !dir)
-            ft.size = size;
-          ft.dir = dir;
-          ft.file = !dir;
-          ft.perm = perm;
-          ft.link = link;
+            stat.size = size;
+          stat.dir = dir;
+          stat.file = !dir;
+          stat.perm = perm;
+          stat.link = link;
 
           list_type = 'U';
-          return ft;
+          return stat;
         }
       } catch (Exception e) {
         // Bad formatting, skip.

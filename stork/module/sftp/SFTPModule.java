@@ -128,7 +128,7 @@ class SFTPResource extends Resource<SFTPSession, SFTPResource> {
 
   /** Convert JSch attrs to Feather stat. */
   private Stat attrsToStat(SftpATTRS attrs) {
-    Stat stat = new Stat();
+    Stat stat = new Stat(path.name());
     stat.dir  = attrs.isDir();
     stat.file = !stat.dir;
     if (attrs.isLink())

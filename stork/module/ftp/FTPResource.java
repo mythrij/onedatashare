@@ -148,9 +148,8 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
           return;
 
         char hint = cmd.toString().startsWith("M") ? 'M' : 0;
-        Stat base = new Stat(name());
         final Bell<Stat> tb = this;
-        final FTPListParser parser = new FTPListParser(base, hint) {
+        final FTPListParser parser = new FTPListParser(hint) {
           public void done(Stat stat) {
             fixStat(Bell.wrap(stat)).promise(tb);
           } public void fail(Throwable t) {
@@ -161,7 +160,7 @@ public class FTPResource extends Resource<FTPSession, FTPResource> {
           }
         };
 
-        parser.name(StorkUtil.basename(path.name()));
+        parser.name(path.name());
 
         Log.fine("Trying list command: ", cmd);
 
