@@ -81,7 +81,7 @@ public abstract class Module<R extends Resource> {
    * identify a resource or specifies a scheme not supported by this module.
    */
   public final R select(String uri, Credential credential) {
-    return select(uri, credential);
+    return select(URI.create(uri), credential);
   }
 
   /**

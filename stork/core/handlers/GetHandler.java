@@ -31,8 +31,6 @@ class SharedEndpointRequest extends EndpointRequest {
   public UUID uuid;
 
   private EndpointRequest findActualEndpoint(String name) {
-    if (uuid == null)
-      return this;
     if (name == null)
       name = "";
     EndpointRequest req = server().findSharedEndpoint(uuid);
@@ -42,10 +40,14 @@ class SharedEndpointRequest extends EndpointRequest {
   }
 
   public EndpointRequest validateAs(String name) {
+    if (uuid == null)
+      return super.validateAs(name);
     return findActualEndpoint(name).validateAs(name);
   }
 
   public Resource<?,?> resolveAs(String name) {
+    if (uuid == null)
+      return super.resolveAs(name);
     return findActualEndpoint(name).resolveAs(name);
   }
 }
