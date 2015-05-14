@@ -27,6 +27,7 @@ public class BenchmarkFeather {
     FTPModule ftp = new FTPModule();
     SFTPModule sftp = new SFTPModule();
     Resource src = ftp.select("ftp://didclab-ws2:2121/test/100M/0");
+    Resource dest = ftp.select("ftp://didclab-ws2:2121/test/100M/0");
     final Transfer t = src.transferTo(dest).start();
     new Thread() {
       public void run() {
