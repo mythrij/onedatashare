@@ -3,7 +3,7 @@
 /** Module for monitoring transfers. */
 angular.module('stork.transfer.queue', [])
 
-.controller('Queue', function ($scope, $rootScope, stork, $timeout, $modal) {
+.controller('Queue', function ($scope, $filter, $rootScope, stork, $timeout, $modal) {
   $scope.filters = {
     all: function (j) {
       return true
@@ -33,6 +33,7 @@ angular.module('stork.transfer.queue', [])
   $scope.filter = 'all';
 
   $scope.jobs = { };
+
   $scope.auto = true;
 
   // Pagination
@@ -91,6 +92,14 @@ angular.module('stork.transfer.queue', [])
           alert("Failed to remove job: "+e.error);
         }
       );
+  };
+
+/* ZL: TODO close window for certain job */
+  $scope.showJobs=false;
+  $scope.close = function (i, j) {
+  if (confirm("Are you sure you want to close job " + j.job_id + "?"))
+          //$scope.showJobs=true;
+      $scope.jobs.splice($scope.jobs.indexOf(j),1);
   };
 
   $scope.set_filter = function (f) {

@@ -65,6 +65,10 @@ angular.module('stork.transfer', [
     if (_.size(src.$selected) < 1 || _.size(dest.$selected) != 1)
       return false;
     if (_.values(src.$selected)[0].dir && !_.values(dest.$selected)[0].dir)
+      /*$modal({
+      title: 'ATTENTION',
+      contentTemplate: 'transfer-error.html',
+      });*/
       return false;
     return true;
   };
@@ -95,6 +99,8 @@ angular.module('stork.transfer', [
     modal.$scope.submit = $scope.submit;
   };
 
+  
+
   $scope.submit = function (job, then) {
     return stork.submit(job).then(
       function (d) {
@@ -116,4 +122,11 @@ angular.module('stork.transfer', [
       }
     );
   };
+  
+/* $scope.mk_dir = function (name) {
+   //$modalInstance.close(name);
+  };
+*/
+
+
 })

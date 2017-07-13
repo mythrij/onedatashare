@@ -80,6 +80,11 @@ public class Job {
     return this;
   }
 
+  /* Get file size */
+  /*public int bytes(){//TODO
+    return jo
+  }*/
+
   /** Get the status of the job. */
   public synchronized JobStatus status() { return status; }
 
@@ -193,6 +198,7 @@ public class Job {
    * problem encountered when starting the job).
    */
   public synchronized Bell<Job> start() {
+    attempts++;
     try {
       Log.info("Starting job: ", this);
       return start0();
@@ -228,7 +234,7 @@ public class Job {
         // There was some problem during the transfer. Reschedule if possible.
         Log.warning("Job failed: ", uuid(), " ", t);
         status(failed, t.getMessage());
-        attempts++;
+        /*Delete: attempts++*/
         reschedule();
       }
     };

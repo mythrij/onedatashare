@@ -1,15 +1,15 @@
-<div class="navbar navbar-default navbar-fixed-top" bs-navbar>
-  <div class="container">
-    <div class="navbar-header">
-      <button data-target=".navbar-collapse" data-toggle="collapse" class="navbar-toggle collapsed text-muted">
-        <i class="collapsed fa fa-reorder"></i>
+<div class="navbar navbar-inverse navbar-fixed-top" bs-navbar ng-controller="User" >
+  <div class="container" >
+    <div class="navbar-header" >
+      <button data-target=".navbar-collapse" data-toggle="collapse" class="navbar-toggle collapsed text-muted" >
+        <i class="collapsed fa fa-reorder" ></i>
       </button>
 
-      <a class="navbar-brand" href="/#/">
-        StorkCloud
+      <a class="navbar-brand" href="/#/" ng-click = chageAdBack()>
+        OneDataShare
       </a>
 
-      <a id="user-button" class="btn btn-default navbar-toggle logged-in" href="#/user">
+      <a id="user-button" class="btn btn-default navbar-toggle logged-in" href="#/user" ng-click = chageAdBack()>
         <i class="fa fa-user"></i>
         <span ng-bind="$user.email">
           <em class="text-muted">Loading...</em>
@@ -17,18 +17,27 @@
       </a>
     </div>
 
-    <div class="navbar-collapse collapse">
+    <div class="navbar-collapse collapse" >
       <ul class="nav navbar-nav logged-in" ng-cloak>
         <li bs-route="/transfer">
-          <a href="/#/transfer">
+          <a href="/#/transfer" ng-click="changeAdBack()">
             <i class="fa fa-exchange"></i>
             <span>Transfer</span>
           </a>
         </li>
         <li bs-route="/queue">
-          <a href="/#/queue">
+          <a href="/#/queue" ng-click="changeAdBack()">
             <i class="fa fa-list-ol"></i>
             <span>Queue</span>
+          </a>
+        </li>
+      </ul>
+    
+      <ul class="nav navbar-nav logged-in" ng-cloak>
+        <li bs-route="/admin">
+          <a href="/" ng-click="isAdmin($user)">
+            <i class="fa fa-laptop"></i>
+            <span>Admin</span>
           </a>
         </li>
       </ul>
@@ -41,11 +50,11 @@
           </a>
         </li>
         <li>
-          <a class="logged-out" href="#/" ng-click="login()">
+          <a class="logged-out" href="#/" ng-click="login()" ng-click = chageAdBack()>
             <i class="fa fa-sign-in"></i>
             <span>Log in</span>
           </a>
-          <a class="logged-in" ng-click="logout()" href="/#/" ng-cloak>
+          <a class="logged-in" ng-click="logout()" href="/#/" ng-cloak ng-click = chageAdBack()>
             <i class="fa fa-sign-out"></i>
             <span>Log out</span>
           </a>
@@ -54,3 +63,4 @@
     </div>
   </div>
 </div>
+

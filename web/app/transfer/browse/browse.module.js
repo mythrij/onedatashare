@@ -65,6 +65,18 @@ angular.module('stork.transfer.browse', [
 
   $scope.reset();
 
+  // Example display
+  $scope.exDisplay = function (uri) {
+    uri = new URI(uri).normalize();
+    var readable = uri.readable();
+    $scope.uri.text = readable;
+    if ($scope.history)
+      $scope.history.show = false;
+    delete $scope.root;
+    delete $scope.error;
+    delete $scope.state.disconnected;
+  };
+
   // Set the endpoint URI.
   $scope.go = function (uri) {
     if (!uri)
@@ -147,13 +159,16 @@ angular.module('stork.transfer.browse', [
 
   // Open the mkdir dialog.
   $scope.mkdir = function () {
-    $modal({
+    var modal = $modal({
       title: 'Create Directory',
       contentTemplate: 'new-folder.html',
+      //controller : 'Transfer',
       scope: $scope
     });
 
-    result.then(function (pn) {
+    modal.$scope.uri.parsed = $scope.uri.parsed;
+
+    /*modalInstance.result.then(function (pn) {
       var u = new URI(pn[0]).segment(pn[1]);
       return stork.mkdir(u.href()).then(
         function (m) {
@@ -162,8 +177,24 @@ angular.module('stork.transfer.browse', [
           alert('Could not create folder: '+e.error);
         }
       );
-    });
+    });*/
   };
+
+  $scope.mk_dir = function (name) {
+    var u = $scope.uri.parsed;
+    u = u._string+name+"/";
+    //u = new URI(u);
+    if (!u) return;
+    //u.segment(name);
+    return stork.mkdir(u).then(
+      function (m) {
+        $scope.refresh();
+      }, function (e) {
+           alert('Could not create folder: '+e.error);
+      }
+   );
+ };
+
 
   /* Open cred modal. */
   $scope.credModal = function () {
@@ -253,7 +284,7 @@ angular.module('stork.transfer.browse', [
   $scope.select = function (e) {
     var scope = this;
     var u = this.path();
-
+      // Enable to choose mutiple files.
     if (e.ctrlKey) {
       this.root.selected = !this.root.selected;
       if (this.root.selected)
@@ -265,7 +296,7 @@ angular.module('stork.transfer.browse', [
       $scope.unselectAll();
       this.root.selected = true;
       $scope.end.$selected[u] = this.root;
-    } else {
+    } else if ($scope.selectedUris().length = 1){
       // Only one thing is selected.
       var selected = this.root.selected;
       $scope.unselectAll();
@@ -276,6 +307,16 @@ angular.module('stork.transfer.browse', [
     }
 
     // Unselect text.
+    if (document.selection && document.selection.empty)
+      document.selection.empty();
+    else if (window.getSelection)
+      window.getSelection().removeAllRanges();
+  };
+
+  $scope.dragAndDrop = function (e) {
+    var scope = this;
+    var u = this.path();
+    $scope.end.$selected[u] = this.root;
     if (document.selection && document.selection.empty)
       document.selection.empty();
     else if (window.getSelection)
@@ -296,11 +337,22 @@ angular.module('stork.transfer.browse', [
     return _.keys($scope.end.$selected);
   };
 
-  /* Default examples to show in the dropdown box. */
+  /* Supported protocol to show in the dropdown box.ex.ftp://ftp.mozilla.org/,gsiftp://oasis-dm.sdsc.xsede.org/ */
+  $scope.dropdownDbx = [
+    ["fa-dropbox", "Dropbox", "dropbox://"],
+  ];
+
   $scope.dropdownList = [
-    ["fa-dropbox", "Dropbox", "dropbox:///"],
-    ["fa-globe", "Mozilla FTP", "ftp://ftp.mozilla.org/"],
-    ["fa-globe", "SDSC Gordon (GridFTP)", "gsiftp://oasis-dm.sdsc.xsede.org/"]
+    ["fa-globe", "FTP", "ftp:"], 
+    ["fa-globe", "SDSC Gordon (GridFTP)", "gsiftp:"],
+    ["fa-globe", "HTTP", "http:"],
+    ["fa-globe", "SCP","scp:"],
+  ];
+  /** Default examples to show in the dropdown box. */
+  $scope.dropdownExamples = [
+    ["fa-search","ftp://ftp.mozilla.org/"],
+    ["fa-search","gsiftp://oasis-dm.sdsc.xsede.org/"],
+    ["fa-search","http://google.com/"]
   ];
 
   $scope.openOAuth = function (url) {
@@ -309,10 +361,41 @@ angular.module('stork.transfer.browse', [
       $scope.refresh();
       $scope.$apply();
     };
+    //open a new window to direct to the "url"; syntax: $window.open(url, windowName)
     var child = $window.open(url, 'oAuthWindow');
     return false;
   };
 
   if ($scope.end.uri)
     $scope.go($scope.end.uri);
+
+  $scope.storkDragStart = function (e) {
+    /** or e.target.style.opacity = '.8';*/
+    this.style.opacity='.8';
+    e.dataTransfer.setData('text', e.target.root);
+    ;
+  };
+  $scope.storkDragEnd = function (e) {
+    this.style.opacity='1';
+  };
+  $scope.storkDragOver = function (e) {
+    e.preventDefault();   
+  };
+  $scope.storkDragEnter = function (e) {
+    e.target.style.opacity=".3";
+  };
+  $scope.storkDragLeave = function (e) {
+    e.target.style.opacity="";
+  };
+  $scope.storkDrop = function (e) {
+    e.preventDefault();
+    e.target.style.opacity="";    
+    if($scope.end == endpoints.get('right') && $scope.canTransfer('left','right',false))
+    $scope.transfer('left','right',false);
+    else if($scope.end == endpoints.get('left') && $scope.canTransfer('right','left',false))
+    $scope.transfer('right','left',false);
+    $scope.unselectAll();
+  };
+   
 });
+

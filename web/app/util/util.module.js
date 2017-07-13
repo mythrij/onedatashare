@@ -1,5 +1,10 @@
 'use strict';
 
+var forceAsyncEvents = {
+  'blur': true,
+  'focus': true
+};
+
 /** Various utilities used throughout the application. */
 angular.module('stork.util', [
   'mgcrea.ngStrap.tooltip'
@@ -85,6 +90,18 @@ angular.module('stork.util', [
   };
 })
 
+.filter('yorn', function () {
+  return function (input) {
+    return input ? '\u2713' : '\u2718';
+  };
+})
+
+.filter('lidisplay', function() {
+  return function (input) {
+    return input == 0 ? 'N/A' : input;
+  };
+})
+
 /** Directive to add an active class if the route is selected. */
 .directive('bsRoute', function ($location) {
   return {
@@ -136,4 +153,58 @@ angular.module('stork.util', [
       });
     }
   };
+})
+
+/** MDN Web API Interface */
+/** inherite parent scope here */
+.directive('draggable', function () {
+  return {   
+    /** link to add event listener */
+    link: function (scope, element, attrs) {
+      element[0].addEventListener("dragstart",scope.storkDragStart,false);
+      element[0].addEventListener("dragend",scope.storkDragEnd,false);
+      element[0].addEventListener("dragenter", scope.storkDragEnter, false);
+      element[0].addEventListener("dragleave",scope.storkDragLeave, false);
+    }
+  };
+})
+
+.directive('droppable', function() {
+  return {
+    restrict: 'A',
+    link: function(scope, element, attrs) {
+      element[0].addEventListener("drop",scope.storkDrop,false);
+      element[0].addEventListener("dragover", scope.storkDragOver,false);
+    }    
+  };
+})
+
+.directive('liDrop',  function ($parse, $rootScope) {
+  return {
+     link: function(scope, element, attrs) {
+          var fn =  $parse (attrs.liDrop);
+          element.on('drop', function(event) {
+              var callback = function() {
+                fn(scope, {$event:event});
+              };
+                scope.$apply(callback);
+          });
+      }
+  }
 });
+
+/*!important (for exercise - how to create a directive that can handle event, can bind event handler - here is a function - for events - here is "mousedown", and have $event as an argument)**/
+/*.directive('liM',  function ($parse, $rootScope) {
+  return {
+     link: function(scope, element, attrs) {
+          var fn =  $parse (attrs.liM);
+          element.on('mousedown', function(event) {
+              var callback = function() {
+                fn(scope, {$event:event});
+              };
+                scope.$apply(callback);
+          });
+      }
+  }
+});*/
+

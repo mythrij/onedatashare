@@ -1,3 +1,4 @@
+
 'use strict';
 
 /** The main Stork AngularJS module. Welcome! */
@@ -38,6 +39,27 @@ angular.module('stork', [
     }).when('/validateError', {
       title: 'Error',
       templateUrl: '/app/user/validateError.html',
+    }).when('/resetPassword', { //ZL
+      title: 'Reset Password',
+      controller: 'Account',
+      templateUrl: '/app/user/resetPassword.html',
+      resolve: {
+        identity: function($route, stork){ 
+            return stork.getIdentity($route.current.params.authToken);
+         }
+      }
+    }).when('/redirectError',{
+      title: 'Link invalid now',
+      templateUrl: '/app/user/redirectError.html',
+    }).when('/beginPasswordReset',{
+      title: 'begin password reset',
+      templateUrl: '/app/user/beginPasswordReset.html',
+    }).when('/admin',{
+      title: 'admin',
+      controller: 'Admin',
+      templateUrl: '/app/user/admin.html',
+    }).when('/userLs',{
+      templateUrl: 'app/admin/userLs.html',
     })
     
     .when('/terms', {
@@ -113,6 +135,50 @@ angular.module('stork', [
         action: 'register'
       }, info));
     },
+/** ZL: check if a user is a administrator */
+    isAdmin: function (info) {
+      return this.$post('user', angular.extend({
+        action: 'isAdmin'
+      },info));
+    }, 
+/** ZL: add for find user info */
+    findPassword: function (info) {
+      return this.$post('user', angular.extend({
+         action:'findPassword'
+      },info));
+    },
+/** ZL: add to send password reset email */
+    sendPasswordReset: function (info) {
+      return this.$post('user', angular.extend({
+         action:'sendPasswordReset'
+      },info));
+    },
+/** ZL: add to reset Password */
+    passwordReset: function (info) {
+      return this.$post('user', info);
+    },
+/** ZL: get authToken of the user */
+    getIdentity: function (info) {
+      return this.$post('user', angular.extend({
+         action: 'getIdentity'
+      }, {authToken: info}));
+    },
+    getUsers: function () {
+      return this.$post('user', angular.extend({
+         action:'getUsers'
+      }));
+    },
+/** ZL: get administrators list */
+    getAdministrators: function () {
+      return this.$post('user', angular.extend({
+         action: 'getAdministrators'
+      }));
+    },
+    sendValidationMail: function (info) {
+      return this.$post('user',angular.extend({
+         action: 'sendValidationMail'
+      },info));
+    },
     history: function (uri) {
       if (uri) return this.$post('user', {
         action: 'history',
@@ -171,6 +237,7 @@ angular.module('stork', [
   };
 })
 
+/*delete...*/
 .config(function ($tooltipProvider) {
   /* Configure AngularStrap tooltips. */
   angular.extend($tooltipProvider.defaults, {

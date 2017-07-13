@@ -1,12 +1,12 @@
-<div class="container panel-group">
-  <div class="panel panel-default" bs-collapse>
+<div class="container panel-group headSpace"  >
+  <div class="panel panel-primary" bs-collapse>
     <div class="panel-heading">
       <h4 class="panel-title">
         <a bs-collapse-toggle>Browse and Transfer Files</a>
       </h4>
     </div>
 
-    <div id="stork-ls" class="panel-collapse text-center" bs-collapse-target>
+    <div id="stork-ls" class="panel-collapse text-center " bs-collapse-target >
       <div class="panel-body">
         <!-- Left and right browsing widgets -->
         <div class="col-xs-6" side="left" ng-controller="Browse"
@@ -18,7 +18,7 @@
 
         <div class="large input-group-lg text-center
                     panel panel-heading transfer-controls">
-          <button class="fa fa-arrow-left btn btn-lg btn-default" title="Transfer"
+          <button class="fa fa-arrow-left btn btn-lg btn-primary" title="Transfer"
                   ng-disabled="!canTransfer('right', 'left', false)"
                   ng-click="transfer('right', 'left', false)">
           </button>
@@ -28,7 +28,7 @@
                   ng-click="sync('left', 'right')">
           </button>
           -->
-          <button class="fa fa-arrow-right btn btn-lg btn-default" title="Transfer"
+          <button class="fa fa-arrow-right btn btn-lg btn-primary" title="Transfer"
                   ng-disabled="!canTransfer('left', 'right', false)"
                   ng-click="transfer('left', 'right', false)">
           </button>
@@ -36,7 +36,7 @@
 
         <div class="clearfix" ng-if="debugMode"></div>
 
-        <div class="text-left col-xs-12" ng-if="debugMode">
+        <div class="text-left col-xs-12" ng-if="debugMode" >
           <h4>Raw Job Info</h4>
           <pre>{{job|json}}</pre>
         </div>
@@ -44,7 +44,7 @@
     </div>
   </div>
 
-  <div ng-if="false" class="panel panel-default" bs-collapse data-start-collapsed="true">
+  <div  class="panel panel-primary" bs-collapse data-start-collapsed="true">
     <div class="panel-heading">
       <h4 class="panel-title">
         <a bs-collapse-toggle>Transfer Options</a>
@@ -100,16 +100,17 @@
 </script>
 
 <!-- A node in the file browser tree. -->
-<script type="text/ng-template" id="browse-node.html">
+<script type="text/ng-template" id="browse-node.html" >
   <li bindonce="root" ng-repeat="root in files | orderBy:['-dir','name']"
       bo-class="{ dir: root.dir, file: !root.dir, loading: loading,
                   dot: root.name && root.name.charAt(0) == '.' }"
-      ng-class="{open:open}">
+      ng-class="{open:open}"> 
     <i class="fa text-muted toggle" ng-mousedown="root.dir && toggle()"
        ng-class="{'fa-minus-square-o': open, 'fa-plus-square-o': !open}"></i>
     <div ng-class="{'alert-info': root.selected, 'alert-warning': !!error}"
-         ng-dblclick="toggle()" ng-mousedown="select($event)">
+         ng-dblclick="toggle()" ng-mousedown="select($event)" draggable="true" droppable="true" li-drop="select($event)" >
       <i class="fa" bo-class="{'fa-file': !root.dir}" ng-class="{'fa-folder': (root.dir && !open), 'fa-folder-open': (root.dir && open)}"></i>
+      <span ng-bind-attr="{side}"></span>
       <span bo-bind="root.name"></span>
       <span class="small text-muted" bo-if="!root.dir"
             bo-bind="(root.size | size)+'B'"></span>
@@ -134,7 +135,7 @@
   </li>
 </script>
 
-<!-- Modal dialog to create a new folder. -->
+<!-- Modal dialog to create a new folder. >
 <script type="text/ng-template" id="new-folder.html">
   <div class="modal-body">
     <div class="form-group col-sm-push-3 col-sm-6">
@@ -144,14 +145,15 @@
   </div>
   <div class="clearfix"></div>
   <div class="text-center modal-footer">
-    <button type="submit" class="btn btn-primary">
-      OK
+    <button ng-click="mk_dir(name)" type="submit" class="btn btn-primary">
+      Ok
     </button>
     <button ng-click="$hide()" type="button" class="btn btn-default">
       Cancel
     </button>
   </div>
-</script>
+</script-->
+
 
 <!-- Modal dialog to select a credential. -->
 <script type="text/ng-template" id="select-credential.html">
@@ -266,3 +268,12 @@
     </button>
   </div>
 </script>
+
+<!--!important: <script type="text/ng-template" id="transfer-error.html">
+ <div>Cannot transfer directory to file.</div>
+ <div class="text-center modal-footer">
+    <button ng-click="$hide()" type="button" class="btn btn-primary">
+      OK
+    </button>
+ </div>
+</script>-->

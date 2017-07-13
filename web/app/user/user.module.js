@@ -1,8 +1,8 @@
 'use strict';
 
-/** Everything user-related. */
+/** Everything user-related. ngRoute is installed for use of $routeParams*/
 angular.module('stork.user', [
-  'ngCookies', 'stork'
+  'ngCookies', 'stork','ngRoute'
 ])
 
 .service('user', function (stork, $location, $rootScope, $cookies) {
@@ -36,21 +36,33 @@ angular.module('stork.user', [
       newPassword: np
     });
   };
+  this.passwordReset = function (n, p1) {
+    return stork.passwordReset({
+      action: "passwordReset",
+      authToken: n,
+      newPassword: p1
+    });
+  };
 
   // If there's a cookie, attempt to log in.
   var u = {
     email: $cookies.email,
     hash:  $cookies.hash
   };
-
+  
   if (u.email && u.hash)
     this.login(u);
   else
     this.forgetLogin();
 })
 
-.controller('User', function ($scope, $modal, $location, user) {
+.controller('User', function ($scope, $modal, $location, user, stork, $rootScope) {
   /* If info is given, log the user in. Otherwise show modal. */
+  $rootScope.ad = false;
+  $scope.changeAdBack = function() {
+    $rootScope.ad = false;
+    $scope.$apply();
+  };
   $scope.login = function (info, then) {
     if (!info)
       return $modal({
@@ -69,6 +81,111 @@ angular.module('stork.user', [
     }, function (error) {
       $scope.error = error;
     });
+  };
+
+  /** ZL: check if a user is a administrator */
+  $scope.isAdmin = function (u) {
+    return stork.isAdmin(u).then(function(d) {
+       $rootScope.ad = true;
+       $scope.$apply();
+       $location.path('/admin'); 
+    },function(e) {
+       $modal({
+        title: 'Error',
+        content: "You are not an administrator. ",
+        show: true
+       });
+    });
+  }; 
+
+  /** ZL: for users forgot password, and note that $rootScope can used to pass varibles to the view */ //TODO
+  $scope.findPassword = function (u, then) {
+    if (!u)
+      return $modal({
+      title: 'Find your Stork Account',
+      container: 'body',
+      contentTemplate: '/app/user/beginPasswordReset.html',
+    });
+    return stork.findPassword(u).then(function (d) {
+      if(then)
+       then(d); 
+      $rootScope.account=u;
+      $modal({
+        title: 'Send link to reset your password',
+        contentTemplate: '/app/user/sendPasswordReset.html',
+        show: true
+      });      
+    },function(e) {
+       $modal({
+        title: 'We could not find your accout with that information',
+        content: e.error,
+        show: true
+       });
+      });
+  };
+  
+  /** ZL: similar to findPassword */
+  $scope.findAccount = function (u, then) {
+    if (!u)
+      return $modal({
+      title: 'Find your Stork Account',
+      container: 'body',
+      contentTemplate: '/app/user/beginResendMail.html',
+    });
+    return stork.findPassword(u).then(function (d) {
+      if(then)
+       then(d); 
+      $rootScope.account=u;
+      $modal({
+        title: 'Resend a validation mail',
+        contentTemplate: '/app/user/resendMail.html',
+        show: true
+      });      
+    },function(e) {
+       $modal({
+        title: 'You did not register Stork',
+        content: e.error,
+        show: true
+       });
+      });
+  };
+
+  /** ZL: add for resend validation mail */
+  $scope.sendValidationMail = function (u, then) {
+    return stork.sendValidationMail(u).then(function (d) {
+      if(then) 
+       then(d);
+      $modal({
+        title: 'Check your email',
+        content: "We've sent an email to you to validate your account.",
+        show: true
+      });
+    }, function (e){
+        $modal({
+          title: 'Error',
+          content: e.error,
+          show: true
+        });
+       });
+    };
+
+  /** ZL: send email to users that forgot passwords */
+  $scope.sendPasswordReset = function (u, then) {
+    return stork.sendPasswordReset(u).then(function (d) {
+      if(then)
+       then(d);
+      $modal({
+        title: 'Check your email',
+        content: "We've sent an email to you. Click the link in the email to reset your password.",
+        show: true
+      });
+    },function(e) {
+       $modal({
+        title: 'Error',
+        content: e.error,
+        show: true
+       });
+      });
   };
 
   /* Log the user out. */
@@ -108,8 +225,137 @@ angular.module('stork.user', [
   };
 })
 
-.controller('Register', function ($scope, stork, user, $modal) {
+.directive('adminBoolean', function(){
+  return{
+    
+  };
+})
+
+/** ZL: for confirm password, not used for now */
+.directive('storkPasswordConfirm',function(){
+  return{
+    require: "ngModel",
+    scope: {
+        password: "=storkPasswordConfirm"
+    },
+    link: function(scope, element, attributes, ctrl){
+      ctrl.$parsers.unshift(function(modelValue){
+        ctrl.$setValidity('storkPasswordConfirm',modelValue == scope.password);
+      });
+    }
+  };
+})
+
+/**ZL: get url parameters using $routeParams */
+.controller('Account',function($scope, $routeParams, $rootScope, $modal, $location, user, stork){
+  $rootScope.authToken = $routeParams.authToken;
+  /** ZL: reset password */
+  $scope.resetPassword = function (u, p1, p2) {
+    if (p1 != p2) {
+      $modal({
+        title: "Mismatched password",
+        content: "The passwords do not match.",
+        show: true
+      });
+      return false;
+    }
+    return user.passwordReset(u, p1).then(function (d) {
+      $location.path('#/');
+      $modal({
+        title: "Success!",
+        content: "Password successfully changed! Please log in again.",
+        show: true
+      });
+      user.forgetLogin();
+    }, function (e) {
+      $modal({
+        title: "Error",
+        content: e.error,
+        show: true
+      });
+    });
+  };
+})
+
+.controller('Admin', function ($scope, $modal, $location, user, stork, $rootScope, $timeout) {
+ //TODO: correct this to be real time
+ $scope.date = new Date();
+ $scope.users = { };
+ $scope.administrators = { };
+ $scope.auto = true;
+
+ $scope.getUsers = function () {
+   return stork.getUsers().then(
+      
+      function (users) {
+         for(var i in users) {
+            $scope.users[i] = users[i]; /** get the user list and refer each user to $scope.*/
+          /* var u = users[i];
+           var i = u.email+' ';
+           if(!i) continue;
+           if(!$scope.users) $scope.users = {};
+           if($scope.users[i])
+              angular.extend($scope.users[i], u);
+           else $scope.users[i] = u;*/
+         }
+      }
+   );
+ };
+
+ $scope.getAdministrators = function () {
+   return stork.getAdministrators().then(
+      function (administrators) {
+        for(var i in administrators) {
+           $scope.administrators[i] = administrators[i];
+        }
+      }
+   );
+ };
+
+ $scope.autoRefresh = function () {
+   if ($scope.auto) {
+      $scope.getUsers().then(function () {
+         $rootScope.autoTimer = $timeout ($scope.autoRefresh, 1000)
+      }, function () {
+         $scope.auto = false;
+      });
+   } 
+ };
+ 
+ $scope.color = {
+   true:  'progress-bar-success',
+   false: 'progress-bar-warning'
+ }
+   // Pagination
+  $scope.perPage = 5;
+  $scope.page = 1;
+
+  $scope.pager = function (len) {
+    var s = $scope.page-2;
+    if (s <= 0)
+      s = 1;
+    var e = s+5;
+    if (e > len/$scope.perPage)
+      e = len/$scope.perPage+1;
+    return _.range(s, e+1);
+  };
+  $scope.setPage = function (p) {
+    $scope.page = p;
+  };
+
+})
+
+.controller('Register', function ($scope, $modal, user, stork) {
+/**ZL: if passwords do not match, report error*/
   $scope.register = function (u) {
+    if(u.password != u.passwordConfirm) {
+      $modal({
+        title: "Error",
+        content: "Password do not match.",
+        show: true
+      });
+      return false;
+    }
     return stork.register(u).then(function (d) {
       $modal({
         title: "Welcome!",
@@ -127,3 +373,4 @@ angular.module('stork.user', [
     })
   }
 });
+

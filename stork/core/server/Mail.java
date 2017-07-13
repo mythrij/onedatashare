@@ -26,6 +26,17 @@ public class Mail {
 
   /** Send the message. */
   public void run() {
+    /** ZL: create receipients list */
+    String[] mails = to.split("\\s+");
+    InternetAddress[] mailList = new InternetAddress[mails.length];
+    try{
+      int i=0;
+      for(String mail: mails){
+       mailList[i++] = new InternetAddress(mail);
+      }
+    } catch (Exception e) {
+       //TODO: hopefully no exception here
+    }
     String smtp = Config.global.smtp_server;
     if (smtp == null)
       throw new Error("SMTP is not configured.");
@@ -37,7 +48,8 @@ public class Mail {
     try {
       MimeMessage msg = new MimeMessage(session);
       msg.setFrom(new InternetAddress(from));
-      msg.addRecipient(Message.RecipientType.TO, new InternetAddress(to));
+      /**ZL: able to be sent to multiple receipients */
+      msg.addRecipients(Message.RecipientType.TO, mailList);
       msg.setSubject(subject);
       msg.setText(body);
 

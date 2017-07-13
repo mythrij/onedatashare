@@ -191,6 +191,7 @@ tr.min-cell {
 }
 
 .footer {
+  text-align: center;
   height: 3.1em;
   bottom: 0;
 } .footer > div {
@@ -242,7 +243,7 @@ tr.min-cell {
   margin-top: -100%;
 }
 
-#stork-queue .endpoints {
+/*#stork-queue .endpoints {
   padding-left: 0;
   overflow-x: auto;
   overflow-y: hidden;
@@ -250,7 +251,7 @@ tr.min-cell {
   white-space: nowrap;
 } #stork-queue .endpoints i {
   padding: 0 0.5em;
-}
+}*/
 
 .transfer-wrapper {
   margin: auto;
@@ -316,3 +317,153 @@ body.logged-out .logged-in {
   -webkit-transition: none;
   transition: none;
 }
+
+/* resize navbar header in extra small screen*/
+.navbar .logged-in, .navbar-header button {
+  font-size: 1em;
+}
+
+@media all and (max-width: 568px) {
+  .navbar-header .logged-in, .navbar-header button {
+     font-size: 0.6em;
+  }
+}
+.search > div {
+  position: relative;
+}.search button, .search input {
+  height: 3em;
+  overflow-x: auto;
+  overflow-y: auto;
+}.search button {
+  background: transparent;
+}.search .buttons {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+}.search {
+  width: 30%;
+  float: right;
+  padding-right: 7em;
+}
+
+.adminBar {
+  background: #333333;
+  margin-top: 0;
+  height: 100%;
+  position: absolute;
+  width: 12em;
+}.adminFont a {
+  color: #AAAAAA;
+}.adminBar li a:hover {
+  border-radius: 0.3em 0.3em 0.3em 0.3em ;
+  background-color: #FFFF19;
+  padding-left: 2em;
+}.adminBar li a:focus {
+  border-radius: 0.3em 0.3em 0.3em 0.3em ;
+  background: #3333FF;
+  padding-left: 2em;
+}.adminFont h4 {
+  color: #C0C0C0;
+}.adminBar button {
+  background: transparent;
+}.adminBar form {
+  padding-left: 1em;
+  width: 80%;
+}.adminBar li a {
+  display: block;
+  width: 13em;
+  padding: 0.8em;
+}.navbar .nav > .active > a,
+ .navbar .nav > .active > a:hover,
+ .navbar .nav > .active > a:focus {
+  border-radius: 0.3em 0.3em 0.3em 0.3em ;
+  padding-left: 2em;
+}
+
+@media screen and (max-width: 10000px) and (min-width: 4000px) {
+ .adminBar li a {
+   width: 70em;
+  }
+ .adminBar {
+   width: 70em;
+  }
+}
+
+@media screen and (max-width: 6000px) and (min-width: 4000px) {
+ .adminBar li a {
+   width: 53em;
+  }
+ .adminBar {
+   width: 53em;
+  }
+}
+
+@media screen and (max-width: 4000px) and (min-width: 3000px) {
+ .adminBar li a {
+   width: 36em;
+  }
+ .adminBar {
+   width: 36em;
+  }
+}
+
+@media screen and (max-width: 3000px) and (min-width: 2300px) {
+ .adminBar li a {
+   width: 26em;
+  }
+ .adminBar {
+   width: 26em;
+  }
+}
+
+@media screen and (max-width: 2300px) and (min-width: 1920px) {
+ .adminBar li a {
+   width: 23em;
+  }
+ .adminBar {
+   width: 23em;
+  }
+}
+
+@media screen and (max-width: 1920px) and (min-width: 1800px) {
+ .adminBar li a {
+   width: 22em;
+  }
+ .adminBar {
+   width: 22em;
+  }
+}
+
+@media screen and (max-width: 1800px) and (min-width: 770px) {
+ .adminBar li a {
+   width: 15em;
+  }
+ .adminBar {
+   width: 15em;
+  }
+}
+
+/** overwritten default navbar */
+.navbar {
+  padding: 15px 0;
+}.headSpace {
+  padding: 25px 0;
+}
+
+.panel-body .menu {
+  font-weight: bold;
+  padding: 0.2em;
+}
+
+.space {
+ padding: 10px;
+}
+
+.whitespace {
+  white-space: nowrap;
+}
+
+
+
+

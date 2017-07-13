@@ -4,6 +4,10 @@ import java.io.*;
 import java.util.*;
 import java.util.concurrent.*;
 
+import javax.mail.*;
+import javax.mail.internet.*;
+import javax.activation.*;
+
 import stork.ad.*;
 import stork.core.*;
 import stork.core.handlers.*;
@@ -29,6 +33,15 @@ public class Server {
   /** Users registered with the system. */
   public Map<String,ServerUser> users = new HashMap<String,ServerUser>();
 
+  /** Administrators: no duplications */
+  public Set<String> administrators = new HashSet<String>(); 
+
+  /** ZL: for sending mails to multiple receipients */
+  public String mailList = "";
+   
+  /** ZL: Users wants to reset their passwords, one user, one token. */
+  public Map<String, String> authTokens = new HashMap<String, String>();
+ 
   /** A user that knows it belongs to this server. */
   private class ServerUser extends User {
     public ServerUser() { super(); }
@@ -163,6 +176,16 @@ public class Server {
   /** Add a {@code User} to the {@code users} map. */
   public synchronized void saveUser(User user) {
     users.put(user.email, (ServerUser) user);
+  }
+
+  /** ZL: Add admin to administrators */
+  public synchronized void addToAdministrator(String email) {
+    administrators.add(email);
+  }
+
+  /** ZL: Cache a token for a user to password reset*/
+  public synchronized void cacheToken(String authToken, String email){
+    authTokens.put(authToken, email);
   }
 
   /** Load server state from a file. */

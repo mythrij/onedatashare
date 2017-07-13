@@ -4,12 +4,19 @@ import java.net.IDN;
 import java.security.*;
 import java.util.*;
 
+import javax.mail.*;
+import javax.mail.internet.*;
+import javax.activation.*;
+
 import stork.ad.*;
 import stork.core.*;
 import stork.cred.*;
 import stork.feather.*;
 import stork.scheduler.*;
 import stork.util.*;
+import stork.core.server.Server;
+
+import static stork.feather.util.Time.now;
 
 /**
  * A registered Stork user. Each user has their own view of the job queue,
@@ -27,6 +34,10 @@ public abstract class User {
   public boolean validated = false;
   /** The validation token we're expecting. */
   private String validationToken;
+  /** Token for reset password. */
+  public String authToken;
+  /** Time registered */
+  public long registerMoment;
 
   /** Previously visited URIs. */
   public LinkedList<URI> history = new LinkedList<URI>();
@@ -43,6 +54,7 @@ public abstract class User {
     public String email;
     public String hash;
     public String password;
+    public String authToken;
     private transient Server server;
 
     protected Cookie() { }
@@ -54,6 +66,10 @@ public abstract class User {
 
     /** Attempt to log in with the given information. */
     public User login() {
+      if (email != null && authToken != null) {
+        User user = server().users.get(User.normalizeEmail(email));
+        return user;
+      } 
       if (email == null || (email = email.trim()).isEmpty())
         throw new RuntimeException("No email address provided.");
       if (hash == null && (password == null || password.isEmpty()))
@@ -207,6 +223,23 @@ public abstract class User {
     }
   }
 
+  /** ZL: TODO: token generator */
+  public static String tokenGenerator(String email, String time, String salt) {
+    try {
+      String saltpass = email+'\n'+time+'\n'+salt;
+      MessageDigest md = MessageDigest.getInstance("SHA-256");
+      byte[] digest = saltpass.getBytes("UTF-8");
+
+      // Run the digest for three rounds.
+      for (int i = 0; i < 3; i++)
+        digest = md.digest(digest);
+
+      return StorkUtil.formatBytes(digest, "%02x");
+    } catch (Exception e) {
+      throw new RuntimeException("Couldn't generate a token for reset password.");
+    }
+  }
+
   /** Add a credential for this user, returning a UUID. */
   public synchronized String addCredential(StorkCred cred) {
     UUID uuid = UUID.randomUUID();
@@ -243,9 +276,20 @@ public abstract class User {
     return validationToken;
   }
 
+  /** ZL: for reset password */
+  public synchronized String authToken() {
+    if (authToken == null) {
+      registerMoment = now();
+      authToken = tokenGenerator(email, String.valueOf(registerMoment), salt(10));
+    }
+    return authToken;
+  }
+
   /** Call this to send the user a validation mail. */
   public synchronized Bell<?> sendValidationMail() {
     String base = "https://storkcloud.org/api/stork/user";
+    //String token = validationToken();
+   //server().cacheToken(token, )
     final String url = String.format(
       base+"?action=validate&user=%s&token=%s",
       normalizedEmail(), validationToken());
@@ -257,6 +301,52 @@ public abstract class User {
         "Thank you for registering with StorkCloud!\n\n"+
         "Please go here to complete your registration:\n\n"+url;
     }}.send();
+  }
+
+  public synchronized String exist(){
+    if (User.this.email == null) throw new RuntimeException("no user exist");
+    return User.this.email;
+  }
+   
+  /** ZL: TODO: call to send user mail to reset password. */
+  public synchronized Bell<?> sendResetPasswordMail() {
+    String base = "https://storkcloud.org/api/stork/user";
+    String authToken = authToken();
+    server().cacheToken(authToken, normalizedEmail());
+    final String url = String.format(
+      base+"?action=resetPassword&user=%s&authToken=%s",
+      normalizedEmail(), authToken);
+    return new Mail() {{
+      from = Config.global.email;
+      to = User.this.email;
+      subject = "Reset your stork password";
+      body =
+        "Hi\n\n"+
+        "Welcome to reset your password.\n\n"+
+        "Please click: "+url+"\n\n"+
+        "Sincerely,\n"+
+        "Stork";
+    }}.send();
+  }
+
+  /** ZL: creating a big string composed of multiple receipients */
+  public synchronized Bell<?> sendAdminMail() {
+     int i=0;
+     server().mailList="";
+     for(String mail: server().administrators){
+       server().mailList += mail + " ";
+       stork.util.Log.info("mailList is creating: ",server().mailList);
+     }
+     return new Mail() {{
+      from = Config.global.email;
+      to = server().mailList; 
+      subject = "New user registered stork";
+      body = 
+         "Hi Admin,\n\n"+
+         User.this.email+" become a user of stork.\n\n"+
+         "Sincerely,\n"+
+         "Stork";          
+     }}.send();
   }
 
   /**
