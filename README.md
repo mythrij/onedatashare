@@ -1,23 +1,23 @@
-[![Build Status](https://travis-ci.org/didclab/stork.svg)]
-  (https://travis-ci.org/didclab/stork)
+[![Build Status](https://travis-ci.org/didclab/onedatashare.svg)]
+  (https://travis-ci.org/didclab/onedatashare)
 
 Introduction
 ============
 
-Stork is a data transfer scheduler that manages and optimizes the movement of
-data across arbitrary endpoints in a protocol-agnostic manner. Stork also
+OneDataShare is a cloud-hosted data transfer tool that manages and optimizes the movement of
+data across arbitrary endpoints in a protocol-agnostic manner. OneDataShare also
 provides APIs for browsing and managing data on remote endpoints, as well as
 both command line and browser clients for interacting with the system.
 
-Clients submit jobs to a Stork server and the Stork server performs the
-transfer when resources permit. The Stork server responds to any failures that
+Clients submit jobs to a OneDataShare server and the OneDataShare server performs the
+transfer when resources permit. The OneDataShare server responds to any failures that
 may occur during transfer automatically, handling them in an appropriate way
 when possible and informing the user if a job cannot be completed.
 
 Building
 ========
 
-Building Stork requires a Java SE 7 compatible runtime (JRE) and development
+Building OneDataShare requires a Java SE 7 compatible runtime (JRE) and development
 kit (JDK) to be installed.
 
 Building is as simple as running `make`.
@@ -27,7 +27,7 @@ Additional build targets can be viewed by running `make help`.
 Configuring
 ===========
 
-The Stork configuration file (stork.conf) can be used to change settings for
+The OneDataShare configuration file (stork.conf) can be used to change settings for
 the server and client tools. The search order for the configuration file is as
 follows:
 
