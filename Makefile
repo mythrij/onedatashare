@@ -41,7 +41,7 @@ rdirs=$1 $(patsubst %/.,%,$(wildcard $(addsuffix /.,$(call rwildcard,$1,*))))
 # Used to join space-delimited lists with a string.
 empty:=
 space:=$(empty) $(empty)
-classpathify=$(subst $(space) ,:,$1)
+classpathify=$(subst $(space),:,$(strip $1))
 
 JAVASRCS=$(call rwildcard,$(PROJECT),*.java)
 JAVASRCS:=$(patsubst %/package-info.java,,$(JAVASRCS))

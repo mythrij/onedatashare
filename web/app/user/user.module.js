@@ -61,7 +61,9 @@ angular.module('stork.user', [
   $rootScope.ad = false;
   $scope.changeAdBack = function() {
     $rootScope.ad = false;
-    $scope.$apply();
+    /*Issue 6 changes starts here - Ahmad*/
+    //$scope.$apply();
+    /*Issue 6 changes ends here - Ahmad*/
   };
   $scope.login = function (info, then) {
     if (!info)

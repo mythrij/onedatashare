@@ -193,11 +193,30 @@ angular.module('stork', [
       return this.$post('user', info);
     },
     ls: function (ep, d) {
-      if (typeof ep === 'string')
-        ep = { uri: ep };
-      return this.$post('ls', angular.extend(angular.copy(ep), {
+      
+      /*Issue 5 changes starts here - Dhruva*/
+      if(typeof ep.credential === 'undefined'){
+        if(ep.uri.startsWith('dropbox'))
+          var data = {options: ["oauth"], type: "AuthenticationRequired", error: "Authentication is required."};
+        else if(ep.uri.startsWith('ftp'))
+          var data = {options: ["userinfo"], type: "AuthenticationRequired", error: "Authentication is required."};
+        else
+          var data = {options: ["gss"], type: "AuthenticationRequired", error: "Authentication is required."};
+        return $q.reject(data);
+      }
+      /*Issue 5 changes ends here - Dhruva*/
+      else {
+        if (typeof ep === 'string')
+          ep = { uri: ep };
+        var x = this.$post('ls', angular.extend(angular.copy(ep), {
         depth: d||0
-      }));
+        }));
+        
+        return x;
+		/*this.$post('ls', angular.extend(angular.copy(ep), {
+        depth: d||0
+		}));*/
+      }
     },
     cancel: function (id) {
       return this.$post('cancel', {

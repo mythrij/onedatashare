@@ -396,6 +396,14 @@ angular.module('stork.transfer.browse', [
     $scope.transfer('right','left',false);
     $scope.unselectAll();
   };
+
+  /*Issue 10 changes starts here - Ahmad*/
+  $scope.logoutDbx = function () {
+    //console.log($scope.end);
+    $scope.end.credential = undefined;
+    $scope.refresh();
+  }
+  /*Issue 10 changes ends here - Ahmad*/
    
 });
 
