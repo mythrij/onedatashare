@@ -44,6 +44,9 @@ public class Config {
   /** Dropbox configuration. */
   public stork.staging.DbxOAuthSession.DropboxConfig dropbox;
 
+  // Google Drive Configuration
+  public stork.staging.GoogleDriveOAuthSession.GoogleDriveConfig googledrive;
+
   // Check default paths until we find a readable file. Null if none found.
   private static String defaultConfig() {
     for (String path : defaultPaths)

@@ -25,6 +25,7 @@ public class ModuleTable {
     register(new stork.module.irods.IRODSModule());
     register(new stork.module.http.HTTPModule());
     register(new stork.module.dropbox.DbxModule());
+    register(new stork.module.googleDrive.GoogleDriveModule());
     register(new stork.module.sftp.SFTPModule());
 
     // FIXME: External modules disabled for now...

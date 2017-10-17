@@ -338,6 +338,11 @@ angular.module('stork.transfer.browse', [
   };
 
   /* Supported protocol to show in the dropdown box.ex.ftp://ftp.mozilla.org/,gsiftp://oasis-dm.sdsc.xsede.org/ */
+  
+  $scope.dropdownGoogleDrive = [
+    ["fa-google", "Google Drive", "gdrive://"],
+  ];
+
   $scope.dropdownDbx = [
     ["fa-dropbox", "Dropbox", "dropbox://"],
   ];
@@ -363,7 +368,7 @@ angular.module('stork.transfer.browse', [
     };
     //open a new window to direct to the "url"; syntax: $window.open(url, windowName)
     var child = $window.open(url, 'oAuthWindow');
-    return false;
+      return false;
   };
 
   if ($scope.end.uri)
