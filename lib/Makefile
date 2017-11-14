@@ -13,7 +13,7 @@ JGLOBUS=myproxy-2.1.0.jar gss-2.1.0.jar ssl-proxies-2.1.0.jar \
 # Add libraries here to cause them to be fetched.
 all: netty-all-5.0.0.Alpha1.jar jargon-core-3.3.1.1.jar \
 	junit-4.12-beta-1.jar $(JGLOBUS) jsch-0.1.51.jar \
-	jsoup-1.8.1.jar dropbox-core-sdk-3.0.4.jar javax.mail-1.5.2.jar
+	jsoup-1.8.1.jar javax.mail-1.5.2.jar
 
 # Add libraries below to specify their download location and dependencies.
 netty-all-5.0.0.Alpha1.jar: commons-logging-1.2.jar log4j-1.2.17.jar
