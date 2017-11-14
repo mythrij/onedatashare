@@ -1,20 +1,14 @@
 package stork.module.dropbox;
 
-import java.util.*;
-import java.io.*;
-
-import com.dropbox.core.*;
+import com.dropbox.core.DbxRequestConfig;
+import com.dropbox.core.v2.*;
 
 import stork.cred.*;
 import stork.feather.*;
 import stork.feather.errors.*;
-import stork.feather.util.*;
 
 public class DbxSession extends Session<DbxSession, DbxResource> {
-  private static DbxWebAuth auth;
-  private static String authUrl;
-
-  DbxClient client;
+  DbxClientV2 client;
 
   public DbxSession(URI uri, Credential cred) {
     super(uri, cred);
@@ -29,8 +23,8 @@ public class DbxSession extends Session<DbxSession, DbxResource> {
     if (credential instanceof StorkOAuthCred) {
       StorkOAuthCred oauth = (StorkOAuthCred) credential;
       DbxRequestConfig config =
-        new DbxRequestConfig("StorkCloud", Locale.getDefault().toString());
-      client = new DbxClient(config, oauth.data());
+        DbxRequestConfig.newBuilder("StorkCloud").build();
+      client = new DbxClientV2(config, oauth.data());
       return Bell.wrap(this);
     }
 
