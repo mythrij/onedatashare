@@ -368,7 +368,7 @@ angular.module('stork.transfer.browse', [
     };
     //open a new window to direct to the "url"; syntax: $window.open(url, windowName)
     var child = $window.open(url, 'oAuthWindow');
-      return false;
+    return false;
   };
 
   if ($scope.end.uri)

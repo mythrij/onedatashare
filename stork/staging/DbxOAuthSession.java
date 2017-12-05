@@ -3,7 +3,7 @@ package stork.staging;
 import java.util.*;
 
 /** Include dropbox sdk. */
-import com.dropbox.core.*; 
+import com.dropbox.core.*;
 
 import stork.core.*;
 import stork.cred.*;
@@ -13,11 +13,11 @@ public class DbxOAuthSession extends OAuthSession {
   /** The URI to go to to finish authentication. */
   final static String finishURI;
   /** Dropbox secret keys. Set from config entries. */
-  final static DbxAppInfo secrets;
+  private final static DbxAppInfo secrets;
 
   public static class DropboxConfig {
     public String key, secret, redirect;
-  };
+  }
 
   // Get Dropbox secrets from global config.
   static {
@@ -35,8 +35,7 @@ public class DbxOAuthSession extends OAuthSession {
   private DbxWebAuth auth;
   /** Used by Dropbox SDK. Should be set to user's locale, not ours. */
   private DbxRequestConfig config =
-    new DbxRequestConfig("StorkCloud", Locale.getDefault().toString());
-
+          DbxRequestConfig.newBuilder("StorkCloud").build();
   /**
    * Used by Dropbox SDK to store the session key. The "key" member is part of
    * the OAuthSession base class.
@@ -54,8 +53,11 @@ public class DbxOAuthSession extends OAuthSession {
     } if (auth != null) {
       throw new IllegalStateException("Don't call this twice.");
     } try {
-      auth = new DbxWebAuth(config, secrets, finishURI, sessionStore);
-      return auth.start();
+      // Create a new DbxWebAuth object using the StorkCloud DbxRequestConfig config and
+      // secrets
+      auth = new DbxWebAuth(config, secrets);
+      // Authorize the DbxWebAuth auth as well as redirect the user to the finishURI, done this way to appease OAuth 2.0
+      return auth.authorize(DbxWebAuth.Request.newBuilder().withRedirectUri(finishURI, sessionStore).build());
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
@@ -64,13 +66,13 @@ public class DbxOAuthSession extends OAuthSession {
   /** Finish the handshake. */
   public synchronized StorkOAuthCred finish(String token) {
     // Do this to appease the Dropbox SDK.
-    Map<String,String[]> map = new HashMap<String,String[]>();
+    Map<String,String[]> map = new HashMap();
     map.put("state", new String[] {this.key});
     map.put("code", new String[] {token});
 
     try {
-      DbxAuthFinish finish = auth.finish(map);
-      StorkOAuthCred cred = new StorkOAuthCred(finish.accessToken);
+      DbxAuthFinish finish = auth.finishFromRedirect(finishURI, sessionStore, map);
+      StorkOAuthCred cred = new StorkOAuthCred(finish.getAccessToken());
       cred.name = "Dropbox";
       return cred;
     } catch (Exception e) {
