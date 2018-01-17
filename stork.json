@@ -210,135 +210,10 @@
     "vanditsa@buffalo.edu": {
       "salt": "7282c9dbd900e5bfc9befd0003e42e19d8e9186ed5e55a10",
       "credentials": {
-        "8df7730c-0ccf-492f-ad18-23fce10b8bf5": {
+        "1b1fba64-0b30-45e8-b4fc-40ebe5263718": {
           "name": "googledrive",
           "type": "oauth",
-          "token": "ya29.GmDnBCeStGbVXd7njCrvPtAYuT4HLE9sgVqYlN6plHoTyyYhQOF6Edp65Kn2M6-Z6b5gQZIfgck7AIjXC8hgEq2pcGZi67WJV3jcf3muH5mCBImo1A3CHg1ZDwjuYpzVL9M"
-        },
-        "f3e27fb3-48e7-4438-a38d-a6706e51a260": {
-          "name": "googledrive",
-          "type": "oauth",
-          "token": "4/ysJ9C4zYxypjOjnZxMo9CYLMOLlezZ8DDwKW7qfpFDM"
-        },
-        "0a064161-8fc5-4bf8-864b-450c1ac92411": {
-          "name": "googledrive",
-          "type": "oauth",
-          "token": "4/QFhxSp5lLEoZu4mJ_iszm3ZOekJj0zx8moOhI1Mifs4"
-        },
-        "5dfd2156-4030-4bca-8afa-ac1992855ffd": {
-          "name": "Dropbox",
-          "type": "oauth",
-          "token": "zrVQfP1O_mUAAAAAAAAEF6m9AV3Lc_k4j5VI77bYKnDpPPSOv_TinZaP7g1ajkUJ"
-        },
-        "ad64370d-0b73-4ea6-8b88-8644348d2230": {
-          "name": "googledrive",
-          "type": "oauth",
-          "token": "4/HuhTLhJN3vsHcQqu1Cy2KN5U1NvVdaDA4iZOlxGBaho"
-        },
-        "51da4198-d77a-4dea-8f7f-14053d69c74f": {
-          "name": "googledrive",
-          "type": "oauth",
-          "token": "4/fkVoIdjyYQaMMlKFRw-KA62qbdRZXZeFdzDCjbwJrPk"
-        },
-        "8c5c76fc-9866-49eb-9e50-c197da56c6f2": {
-          "name": "googledrive",
-          "type": "oauth",
-          "token": "ya29.GmEYBTnmZz8BpCnrejla6LXAsw7-q6ZMb0nPaxg0qkcMpkD17IRN5BUAQaSEP5VdBR7md2t_ddfSeLzCDFFbeMFqCAI6xFag1su88rte-Y3LmIAY2ViSQlMW8GdSiyXATku_"
-        },
-        "d7f6bbd1-abe4-4511-93b8-efd8c381ffa3": {
-          "name": "googledrive",
-          "type": "oauth",
-          "token": "4/6n3gNHwrCaCKh34eZkdGumGeOORjjhgIApVITx_hRCI"
-        },
-        "07c5add6-6472-461f-9681-e2ebed6158a7": {
-          "name": "googledrive",
-          "type": "oauth",
-          "token": "4/EQaR1xQDIxABzqT7qljiDGxHID_1CmrN4UHSByVFEqU"
-        },
-        "0f5f71be-f188-4743-a284-aeb39cca94c5": {
-          "name": "googledrive",
-          "type": "oauth",
-          "token": "4/7vs_WUg_MdW0EylEJm1hTFYelygGXlc2hFZmA3rmbXo"
-        },
-        "eff70d61-5790-4559-8d32-b0539a94e57e": {
-          "name": "googledrive",
-          "type": "oauth",
-          "token": "ya29.GmDnBHkUWIKrloI4vyThyjAq6DyD8d403oKZqX5MesBvIB52-4mXmP_i1DiDKilETPzFHIOdkOONtDI_nH92PWwenh9sbzjOlpEjzfp-PmUCsD0UrWz4qCu_E9316E4gXpg"
-        },
-        "4144c5f1-be3a-449d-8df1-d2f56e9a21d6": {
-          "name": "googledrive",
-          "type": "oauth",
-          "token": "ya29.GmEYBUAitucFByjYzkR49-1LEzycaoOvmQnqoIyTk7kZbOkWkFHCckkaDBPlPeO6kaL7dSj5O9R559ZJ3wJ_kOySsgtRpb9EVQx3A7vk0VNusXj-dbZuGYfKyxXeJVawoOMe"
-        },
-        "b0e35167-8bbf-4dd0-8a3e-113885477bb1": {
-          "name": "googledrive",
-          "type": "oauth",
-          "token": "ya29.GmDnBL-Kk5xX0wndafepOtEQHmMYNauTTrlWngsKddCkRPtgcD822h2cqyDBjD5oCGU5-8Xg6qao_A6A13iFRXLw7DhYLYU8qU8slFUpBkQU7WDMm9X336zurC4AyUYvObc"
-        },
-        "ff3dd2e3-6092-4220-a881-525270fc6b1f": {
-          "name": "googledrive",
-          "type": "oauth",
-          "token": "ya29.GmDnBLn_WAIn5E0EAZjEIxUc7-5R1ZoVsg8219M7MdKfmg9R3N1gfqA_g5TxeBFcBGBL2NjyF3C3rXfQhJ5Xx6nwey8Qbu0Mh4dS7yOjisLYRMgupAvJH3Ihbk0B6q4AmPw"
-        },
-        "2917a57d-617d-48ea-846a-78a6743def13": {
-          "name": "googledrive",
-          "type": "oauth",
-          "token": "4/KYh42XbvMdpkhjOEoB5z6--gIKBpV5qFNmJzjzQ3p7E"
-        },
-        "92aa5a21-16a6-417f-a5a9-5b1ee63b00ff": {
-          "name": "googledrive",
-          "type": "oauth",
-          "token": "4/jVLn9srH6IuwiSU2d0vLVqlLZG4cET7AVgujaM12N_8"
-        },
-        "2eb1343a-58eb-48f8-ace8-0c155c493bc9": {
-          "name": "googledrive",
-          "type": "oauth",
-          "token": "4/mRPSmk_9Uqnfvi5GiZPKdr32iQLouQBAQ7pm8EXbe_I"
-        },
-        "535a0cf3-b11b-4f10-aa92-f5fc5f0065aa": {
-          "name": "googledrive",
-          "type": "oauth",
-          "token": "ya29.Gl0LBcz-7oKCNNU22JK_94oEoYlYFxnHSa0LVsBKmrRc0QPFeWLinDBSkRciFX--4-bur9xjguJL6b25n3kZ10Hua5QlsIHCSaMUJFzIFOfhmnkyvGuiAsAE00lQGeY"
-        },
-        "6d70cc6e-90b5-45d4-81a1-9a5dc259ab7d": {
-          "name": "googledrive",
-          "type": "oauth",
-          "token": "ya29.GmEYBZWm-6cGkd6dGeARZ6fwlfqrfBEDU7pISDSD0cW_w-Zno_s270miAa09Xf5qGcm5YY3OWeNDD8OLJn2jRgE7_e5OTS77Ut3vtw1eQK0OMmI3HuT1ItRvT8amWO3YkIi8"
-        },
-        "58b012c5-d1b0-4d66-8191-cce237a0b99b": {
-          "name": "googledrive",
-          "type": "oauth",
-          "token": "ya29.Gl0YBbEtwHGNXWSEbDcAMfkfAdykXpaSIdisnM4HmJUK3J5zHq-JbeAwiKUnYbnGHFcCsgNBmHnDAEy0pMK6-toK9n5dIkvDBhd5jRrpP9vqgPSeHwXtttz91Oh1xYE"
-        },
-        "b03a380e-5633-438b-81f1-7b2006e42516": {
-          "name": "googledrive",
-          "type": "oauth",
-          "token": "ya29.GlvnBHGU0kLNh2EU2d6mwE4SeBb0iXOaOdid-X6_8FOXFr-ub7CyZPd7UOldGGIcxlSos_kuPvfhynQZC2iomCIhkODG0MAhmzHvk4PsY32jqD5YDFVmMxfirtRR"
-        },
-        "0ca92484-72b2-4ddf-a87a-94bee35f1ded": {
-          "name": "googledrive",
-          "type": "oauth",
-          "token": "4/eFlAP1Zw8TIXVqU3JKsVWbMWp6EYudPWBIVhOavgn34"
-        },
-        "3178b239-d522-4ac1-b6c8-8ce09d0f87b2": {
-          "name": "googledrive",
-          "type": "oauth",
-          "token": "4/MncSNYLMc52vU9qOD9WEfGc_Ot0zj2cGXQp2EOHClf8"
-        },
-        "c83a0fbd-6c29-4679-9eb3-f086b24f3b1a": {
-          "name": "googledrive",
-          "type": "oauth",
-          "token": "4/NOMSGYaya9k3RO_niEYqJtBV-SXWXRVRD9kOwa6KGdQ"
-        },
-        "4407e70d-647d-4c56-a4ac-28d07970fb93": {
-          "name": "googledrive",
-          "type": "oauth",
-          "token": "4/z_4p8FRpYrD-aC3mtstrh3gHRgmiX6QUgWVKLRdRHmI"
-        },
-        "3617ee43-220b-49eb-b6c6-3fe6699ce3f6": {
-          "name": "googledrive",
-          "type": "oauth",
-          "token": "ya29.GmEYBbd01C7iI4SAM5ifiD591ssPveKn22u9IGnoYMrWxBBpN6oeBwO0e9go67pWjWux0dA7cvdPwOth-R-sajGv2Mg50R1wIJE9Awq8kaPWGxymPLtwNliPDN1JlSpuGIe_"
+          "token": "ya29.GmE_BXWA6m0TD7Hqzsoiotgu_-jhBPhKx-sc-PeJUzc5Jt_DDDCWkBDt3zAswGgYLOo9gC2BshzOfHCpELmlqEvtI00x2Nn69CJoqJT4OyrE3HSlmRI_bhV8cQXahBq3Qg7F"
         }
       },
       "jobs": [
@@ -349,13 +224,12 @@
         "d991e705-6d30-43fa-b83f-107c1a73ca58"
       ],
       "history": [
-        "gdrive:/",
         "dropbox:/",
-        "google-drive:/",
+        "gdrive:/",
+        "http://google.com/services",
+        "http://google.com/",
         "gsiftp://oasis-dm.sdsc.xsede.org/",
         "ftp://ftp.mozilla.org/",
-        "http://google.com/",
-        "http://google.com/services",
         "scp:/",
         "gsiftp:/"
       ],

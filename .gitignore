@@ -1,3 +1,4 @@
+classes
 *.class
 *.war
 *.ear
@@ -8,3 +9,8 @@ doc
 build
 .project
 .classpath
+stork.conf
+stork.json
+*.iml
+*.idea
+api_credentials.conf

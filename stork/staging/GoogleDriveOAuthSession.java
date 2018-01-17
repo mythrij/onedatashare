@@ -39,10 +39,7 @@ public class GoogleDriveOAuthSession extends OAuthSession {
     }
 
     public synchronized String start(){
-        String url = "https://accounts.google.com/o/oauth2/v2/auth?scope=https://www.googleapis.com/auth/drive.metadata.readonly&" +
-                "state=25429880102-chquojcll8k4l3hdto2g4olgb315nj0a.apps.googleusercontent.com&" +
-                "redirect_uri=http://localhost:8080/api/stork/oauth&response_type=code&" +
-                "client_id=25429880102-chquojcll8k4l3hdto2g4olgb315nj0a.apps.googleusercontent.com";
+        String url = "";
         return url;
     }
 
