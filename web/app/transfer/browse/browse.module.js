@@ -338,6 +338,11 @@ angular.module('stork.transfer.browse', [
   };
 
   /* Supported protocol to show in the dropdown box.ex.ftp://ftp.mozilla.org/,gsiftp://oasis-dm.sdsc.xsede.org/ */
+  
+  $scope.dropdownGoogleDrive = [
+    ["fa-google", "Google Drive", "googledrive://"],
+  ];
+
   $scope.dropdownDbx = [
     ["fa-dropbox", "Dropbox", "dropbox://"],
   ];

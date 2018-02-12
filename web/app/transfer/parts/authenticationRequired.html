@@ -9,6 +9,11 @@
       <i class="large fa fa-dropbox"></i>
       Authenticate with Dropbox
     </a>
+    <a ng-switch-when="googledrive" class="btn btn-lg btn-info"
+       ng-click="openOAuth('/api/stork/oauth?type=googledrive')">
+      <i class="large fa fa-google"></i>
+      Authenticate with Google
+    </a>
     <a ng-switch-when="gss" class="btn btn-lg btn-info"
        ng-click="end.credential = {type: 'gss'}; credModal()">
       <i class="large fa fa-key"></i>

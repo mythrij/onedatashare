@@ -8,3 +8,5 @@ doc
 build
 .project
 .classpath
+.idea
+classes/

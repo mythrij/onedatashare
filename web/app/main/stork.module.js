@@ -198,6 +198,8 @@ angular.module('stork', [
       if(typeof ep.credential === 'undefined'){
         if(ep.uri.startsWith('dropbox'))
           var data = {options: ["oauth"], type: "AuthenticationRequired", error: "Authentication is required."};
+        else if(ep.uri.startsWith('googledrive'))
+            var data = {options: ["googledrive"], type: "AuthenticationRequired", error: "Authentication is required."};
         else if(ep.uri.startsWith('ftp'))
           var data = {options: ["userinfo"], type: "AuthenticationRequired", error: "Authentication is required."};
         else

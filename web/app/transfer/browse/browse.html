@@ -29,6 +29,12 @@
                 <span ng-bind="v[1]"></span>
               </a>
             </li>
+            <li ng-repeat="v in dropdownGoogleDrive">
+              <a ng-click="history.show = false; go(v[2])">
+                <i class="fa" ng-class="v[0]"></i>
+                <span ng-bind="v[1]"></span>
+              </a>
+            </li>
             <li ng-repeat="v in dropdownList">
               <a ng-click="history.show = false; exDisplay(v[2])">
                 <i class="fa" ng-class="v[0]"></i>

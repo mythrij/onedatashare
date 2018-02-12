@@ -169,10 +169,16 @@
             {{c.name || 'Unnamed ('+c.type+')'}}
           </option>
         </optgroup>
-        <optgroup class="new-credential" label="New credential">
+
+         <!--Issue 14 changes starts here - Mythri > 
+
+        <!--<optgroup class="new-credential" label="New credential">
           <option value="new:userinfo">Username/Password</option>
           <option value="new:gss">MyProxy</option>
-        </optgroup>
+        </optgroup>-->
+        
+        <!--Issue 14 changes ends here - Mythri-->
+
       </select>
 
       <div class="modal-body" ng-switch="selected">
