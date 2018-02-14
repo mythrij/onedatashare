@@ -51,9 +51,7 @@ public class GoogleDriveResource extends Resource<GoogleDriveSession, GoogleDriv
     return new ThreadBell<Stat>() {
       public Stat run() throws Exception {
 
-//        ListFolderResult data = null;
         Drive.Files.List result = null;
-
         Stat stat = new Stat();
         stat.name = path.name();
         stat.dir = true;
@@ -106,26 +104,6 @@ public class GoogleDriveResource extends Resource<GoogleDriveSession, GoogleDriv
           }
           while (result.getPageToken() != null);
         }
-//        if (data == null)
-//          stat = mDataToStat(mData);
-//        else {
-//          stat = mDataToStat(data.getEntries().iterator().next());
-//        }
-//        stat.name = path.name();
-
-//        if (stat.dir) {
-//          ListFolderResult dbd;
-//          if(stat.name == "/") {
-//            dbd = session.client.files().listFolder("");
-//          }
-//          else{
-//            dbd = session.client.files().listFolder(path.toString());
-//          }
-//          List<Stat> sub = new LinkedList<>();
-//          for (Metadata child : dbd.getEntries())
-//            sub.add(mDataToStat(child));
-//          stat.setFiles(sub);
-//        }
         return stat;
       }
     }.startOn(initialize());
@@ -135,7 +113,6 @@ public class GoogleDriveResource extends Resource<GoogleDriveSession, GoogleDriv
     Stat stat = new Stat(file.getName());
 
     try {
-      System.out.println(file.getName());
       stat.file = true;
       stat.id = file.getId();
       stat.time = file.getModifiedTime().getValue()/1000;

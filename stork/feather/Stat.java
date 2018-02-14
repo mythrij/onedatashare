@@ -11,6 +11,8 @@ import stork.feather.util.*;
  * absolutely correct.
  */
 public class Stat {
+  /** The id of the resource (Used in Google Drive SDK for now) */
+  public String id;
   /** The name of the resource. */
   public String  name;
   /** The size of the resource in bytes. */
